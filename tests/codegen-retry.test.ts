@@ -23,6 +23,7 @@ const profile: DatasetProfile = {
 };
 
 const generated = (attempt: number) => ({
+  headline: "Sales came to 143,787 dollars.",
   code: `print("VERA_RESULT:${attempt}")`,
   explanation: `attempt ${attempt}`,
   columnsUsed: [],

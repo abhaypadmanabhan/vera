@@ -153,7 +153,9 @@ export const realAnalyst: Analyst = {
         verdict: "verified",
         value: result.execution.value as number | string,
         unit: null,
-        claim: result.code.explanation,
+        // Plain-English headline for the hero slide. The technical one-liner
+        // (column names, date formats) belongs on the code slide, not here.
+        claim: result.headline || result.code.explanation,
         code: result.code,
         execution: result.execution,
         grounding: verdict.grounding,

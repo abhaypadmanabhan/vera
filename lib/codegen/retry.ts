@@ -77,6 +77,8 @@ async function withinBudget<T>(
 export interface RetryOutcome {
   execution: ExecutionResult;
   code: GeneratedCode;
+  /** Plain-English one-liner for the hero slide, free of code jargon. */
+  headline: string;
   /** Columns the model said it used — checked against the real schema downstream. */
   columnsUsed: string[];
   attempts: number;
@@ -256,6 +258,7 @@ export async function* runCodegenWithRetries(
       return {
         execution,
         code: lastCode,
+        headline: output.headline,
         columnsUsed: output.columnsUsed,
         attempts: attempt,
       };

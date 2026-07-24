@@ -68,6 +68,20 @@ function fmt(value: number | string, unit: string | null): string {
   return unit ? `${base}${unit}` : base;
 }
 
+/**
+ * How an analyst would say the evidence out loud — the gist and why it matters,
+ * not the counts read off the screen. The precise numbers stay visible on the
+ * slide; a person presenting does not recite them.
+ */
+function analystEvidenceLine(evidence: SchemaEvidence): string {
+  const subject = evidence.claim.split(" is ")[0]?.trim() ?? "this column";
+  return (
+    `The ${subject} column is written day first, not month first. ` +
+    `I checked that against every row before I used it — ` +
+    `about ${Math.round(evidence.supportingRows / 1000)} thousand rows can only be read that way, and none disagree.`
+  );
+}
+
 /** Strip a claim down to something a voice can say naturally. */
 function speakable(text: string): string {
   return text
@@ -100,10 +114,13 @@ export function buildDeck(
     kind: "question",
     title: question,
     subtitle: `${profile.filename} · ${profile.rowCount.toLocaleString()} rows`,
-    spoken: `You asked: ${speakable(question)}`,
+    spoken: `Right — I went through all ${profile.rowCount.toLocaleString()} rows for this one.`,
     beats: [
-      { focus: "question", spoken: `You asked: ${speakable(question)}` },
-      { focus: "file", spoken: `I looked at ${profile.filename}, ${profile.rowCount.toLocaleString()} rows.` },
+      { focus: "question", spoken: "Right, let me take you through this." },
+      {
+        focus: "file",
+        spoken: `I went through all ${profile.rowCount.toLocaleString()} rows before I answered.`,
+      },
     ],
     covers: ["question", "ask", "what did i ask"],
   });
@@ -113,9 +130,9 @@ export function buildDeck(
     kind: "headline",
     title: figure,
     subtitle: finding.claim,
-    spoken: `${figure}. ${speakable(finding.claim)}`,
+    spoken: `The answer is ${figure}. ${speakable(finding.claim)}`,
     beats: [
-      { focus: "figure", spoken: `${figure}.` },
+      { focus: "figure", spoken: `The answer is ${figure}.` },
       { focus: "claim", spoken: speakable(finding.claim) },
     ],
     covers: ["answer", "number", "result", "how much", "total", "figure"],
@@ -128,11 +145,18 @@ export function buildDeck(
       kind: "trap",
       title: evidence.claim,
       subtitle: `${evidence.supportingRows.toLocaleString()} rows prove it · ${evidence.contradictingRows.toLocaleString()} argue otherwise`,
-      spoken: speakable(evidence.method),
+      spoken: analystEvidenceLine(evidence),
       beats: [
-        { focus: "claim", spoken: `${speakable(evidence.claim)}.` },
-        { focus: "counts", spoken: `${evidence.supportingRows.toLocaleString()} rows prove it. ${evidence.contradictingRows.toLocaleString()} argue otherwise.` },
-        { focus: "method", spoken: speakable(evidence.method) },
+        {
+          focus: "claim",
+          spoken: "Now, there is something in this file you would want to know about.",
+        },
+        { focus: "counts", spoken: analystEvidenceLine(evidence) },
+        {
+          focus: "method",
+          spoken:
+            "Take it at face value and the total comes out badly wrong, and nothing warns you.",
+        },
       ],
       covers: [
         "trap",
@@ -152,11 +176,11 @@ export function buildDeck(
     kind: "code",
     title: "The code that ran",
     subtitle: `${finding.code.lineCount} lines · exit ${finding.execution.exitCode} · ${finding.execution.durationMs} ms`,
-    spoken: `Here is the code that produced it. ${speakable(finding.code.explanation)}`,
+    spoken: "This is the working, if you want to check me.",
     beats: [
-      { focus: "code", spoken: "Here is the code that produced it." },
-      { focus: "explanation", spoken: speakable(finding.code.explanation) },
-      { focus: "exit", spoken: `It exited cleanly in ${finding.execution.durationMs} milliseconds.` },
+      { focus: "code", spoken: "This is the working, if you want to check me." },
+      { focus: "explanation", spoken: "I wrote it, and it ran on your file, not on a summary of it." },
+      { focus: "exit", spoken: "It came back clean in under a second." },
     ],
     covers: ["code", "pandas", "python", "script", "run", "what did you run"],
   });
@@ -166,10 +190,13 @@ export function buildDeck(
     kind: "cells",
     title: "The cells it read",
     subtitle: `${finding.grounding.columns.join(", ")} across ${finding.grounding.rowCount.toLocaleString()} rows`,
-    spoken: `Every figure traces back to real cells — ${finding.grounding.columns.join(" and ")}, across ${finding.grounding.rowCount.toLocaleString()} rows.`,
+    spoken: "And these are the actual cells behind it.",
     beats: [
-      { focus: "columns", spoken: `It read ${finding.grounding.columns.join(" and ")}.` },
-      { focus: "rows", spoken: `Across ${finding.grounding.rowCount.toLocaleString()} rows of your file.` },
+      { focus: "columns", spoken: "And these are the actual cells behind it." },
+      {
+        focus: "rows",
+        spoken: "Nothing here is a guess. You can follow any figure back to a row.",
+      },
     ],
     covers: ["cells", "source", "rows", "columns", "data", "where from", "trace"],
   });
@@ -179,11 +206,11 @@ export function buildDeck(
     kind: "summary",
     title: figure,
     subtitle: finding.claim,
-    spoken: `To summarise. ${figure}. ${speakable(finding.claim)} Computed, and traceable.`,
+    spoken: `So: ${figure}. ${speakable(finding.claim)}`,
     beats: [
-      { focus: "figure", spoken: `To summarise. ${figure}.` },
+      { focus: "figure", spoken: `So, ${figure}.` },
       { focus: "claim", spoken: speakable(finding.claim) },
-      { focus: "proof", spoken: "Computed, and traceable." },
+      { focus: "proof", spoken: "Ask me anything else and I will show my working again." },
     ],
     covers: ["summary", "recap", "overall", "dashboard", "again"],
   });

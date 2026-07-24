@@ -24,6 +24,8 @@ export interface CodegenRequest {
 export interface CodegenOutput {
   code: string;
   explanation: string;
+  /** One sentence a business person would say. No column names, no code terms. */
+  headline: string;
   columnsUsed: string[];
 }
 
@@ -37,13 +39,14 @@ const CODEGEN_JSON_SCHEMA = {
   properties: {
     code: { type: "string", minLength: 1 },
     explanation: { type: "string", minLength: 1 },
+    headline: { type: "string", minLength: 1 },
     columnsUsed: {
       type: "array",
       items: { type: "string" },
       uniqueItems: true,
     },
   },
-  required: ["code", "explanation", "columnsUsed"],
+  required: ["code", "explanation", "headline", "columnsUsed"],
   additionalProperties: false,
 } satisfies Record<string, unknown>;
 
@@ -51,6 +54,7 @@ const codegenSchema = z
   .object({
     code: z.string().min(1).max(16_000),
     explanation: z.string().min(1).max(1_000),
+    headline: z.string().min(1).max(240),
     columnsUsed: z.array(z.string().max(200)).max(200).refine(
       (columns) => new Set(columns).size === columns.length,
       "columnsUsed must not contain duplicates",
@@ -89,6 +93,8 @@ Rules:
 - When a numeric column can contain currency symbols, percent signs, commas, or blank cells, normalize it with pd.to_numeric(..., errors="coerce") before computing. Let pandas skip blank/NaN values unless the question requires counting them.
 - Do not import or use network libraries. Do not access the network, environment, or filesystem except the CSV path above.
 - Print exactly one output line: VERA_RESULT:<JSON value>. Use json.dumps so strings are machine-parseable.
+- "headline": ONE short sentence stating the answer the way a business analyst would say it out loud to a colleague. Plain English. NEVER mention column names, date formats, pandas, parsing, filtering, or any code concept. Say what it MEANS, not how it was computed. Good: "Sales in the third quarter of 2018 came to 143,787 dollars." Bad: "Parsed OrderDate as DD/MM/YYYY, filtered to Q3 2018, and summed Sales."
+- "explanation": the technical one-liner for the code panel. Column names and formats belong HERE, not in the headline.
 - That JSON value MUST be a bare number or a bare string — the single figure that answers the question. Never an object, list, or dict. Do not label it; the label belongs in the explanation field.
 - Do not print debugging text, tables, labels, markdown, or any other line.
 - columnsUsed must list every CSV column read by the computation.
@@ -194,6 +200,9 @@ function mockResponse(request: CodegenRequest): string {
     explanation: numericColumn
       ? `Sums ${numericColumn.name} after applying the profiled schema constraints.`
       : "Counts the dataset rows after loading the profiled CSV.",
+    headline: numericColumn
+      ? `Here is the total ${numericColumn.name.toLowerCase()} across the file.`
+      : "Here is how many records the file holds.",
     columnsUsed,
   });
 }

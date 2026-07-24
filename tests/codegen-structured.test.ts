@@ -58,6 +58,7 @@ print("VERA_RESULT:" + json.dumps(result, separators=(",", ":")))`;
 const validResponse = JSON.stringify({
   code: validCode,
   explanation: "Parses the proven day-first date and sums 2018 sales.",
+  headline: "Sales in the third quarter of 2018 came to 143,787 dollars.",
   columnsUsed: ["OrderDate", "Sales"],
 });
 
@@ -101,6 +102,7 @@ describe("structured pandas codegen", () => {
           "Sales",
         ],
         "explanation": "Parses the proven day-first date and sums 2018 sales.",
+        "headline": "Sales in the third quarter of 2018 came to 143,787 dollars.",
       }
     `);
   });
@@ -120,6 +122,7 @@ describe("structured pandas codegen", () => {
         'date_format = "%d/%m/%Y"',
       ),
       explanation: "mentions but does not apply the format",
+      headline: "A figure.",
       columnsUsed: ["OrderDate", "Sales"],
     });
     expect(() =>
@@ -136,6 +139,7 @@ describe("structured pandas codegen", () => {
         "dates = pd.to_datetime(df.OrderDate)",
       ),
       explanation: "naive attribute access",
+      headline: "A figure.",
       columnsUsed: ["OrderDate", "Sales"],
     });
     expect(() =>
@@ -148,6 +152,7 @@ describe("structured pandas codegen", () => {
         'dates = df.loc[:, "OrderDate"]\ndates = pd.to_datetime(dates)',
       ),
       explanation: "naive alias access",
+      headline: "A figure.",
       columnsUsed: ["OrderDate", "Sales"],
     });
     expect(() =>
@@ -160,6 +165,7 @@ describe("structured pandas codegen", () => {
         'dummy = pd.to_datetime(["01/01/2020"], format="%d/%m/%Y")\ndates = pd.to_datetime(df.OrderDate)',
       ),
       explanation: "formats a dummy but parses the real column naively",
+      headline: "A figure.",
       columnsUsed: ["OrderDate", "Sales"],
     });
     expect(() =>
@@ -178,6 +184,7 @@ describe("structured pandas codegen", () => {
         "import requests\nimport pandas as pd",
       ),
       explanation: "unsafe",
+      headline: "Sales came to 143,787 dollars.",
       columnsUsed: ["OrderDate", "Sales"],
     });
     expect(() =>
@@ -190,6 +197,7 @@ describe("structured pandas codegen", () => {
         'print("debug")\nprint("VERA_RESULT:',
       ),
       explanation: "noisy",
+      headline: "Sales came to 143,787 dollars.",
       columnsUsed: ["OrderDate", "Sales"],
     });
     expect(() =>
@@ -202,6 +210,7 @@ describe("structured pandas codegen", () => {
         'print ("debug")\nprint("VERA_RESULT:',
       ),
       explanation: "noisy",
+      headline: "Sales came to 143,787 dollars.",
       columnsUsed: ["OrderDate", "Sales"],
     });
     expect(() =>
@@ -211,6 +220,7 @@ describe("structured pandas codegen", () => {
     const indirectNetwork = JSON.stringify({
       code: validCode.replace("import json", "import json\nimport subprocess"),
       explanation: "unsafe",
+      headline: "Sales came to 143,787 dollars.",
       columnsUsed: ["OrderDate", "Sales"],
     });
     expect(() =>
@@ -225,6 +235,7 @@ describe("structured pandas codegen", () => {
         'df = pd.read_csv("https://example.com/data.csv")\n# /workspace/data.csv',
       ),
       explanation: "reads the wrong source",
+      headline: "Sales came to 143,787 dollars.",
       columnsUsed: ["OrderDate", "Sales"],
     });
     expect(() =>
@@ -237,6 +248,7 @@ describe("structured pandas codegen", () => {
         '# pd.read_csv("/workspace/data.csv")\ndf = pd.read_pickle("/tmp/other.pkl")',
       ),
       explanation: "puts the required source in a comment",
+      headline: "Sales came to 143,787 dollars.",
       columnsUsed: ["OrderDate", "Sales"],
     });
     expect(() =>
@@ -251,6 +263,7 @@ describe("structured pandas codegen", () => {
         'df.to_csv("/dev/stdout")\nprint("VERA_RESULT:',
       ),
       explanation: "writes extra output",
+      headline: "Sales came to 143,787 dollars.",
       columnsUsed: ["OrderDate", "Sales"],
     });
     expect(() =>
@@ -300,6 +313,7 @@ describe("structured pandas codegen", () => {
           "Sales",
         ],
         "explanation": "Sums Sales after applying the profiled schema constraints.",
+        "headline": "Here is the total sales across the file.",
       }
     `);
   });
