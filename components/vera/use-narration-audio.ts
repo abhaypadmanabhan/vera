@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
  * Speaks one narration beat and reports when the audio finishes.
@@ -18,10 +18,13 @@ export function useNarrationAudio({
   text: string | null;
   enabled: boolean;
   onEnded: () => void;
-}): { speaking: boolean; available: boolean } {
+}): { speaking: boolean; available: boolean; stop: () => void } {
   const [speaking, setSpeaking] = useState(false);
   const [available, setAvailable] = useState(true);
   const endedRef = useRef(onEnded);
+  const stopRef = useRef<() => void>(() => undefined);
+  const stop = useCallback(() => stopRef.current(), []);
+
   useEffect(() => {
     endedRef.current = onEnded;
   }, [onEnded]);
@@ -77,7 +80,7 @@ export function useNarrationAudio({
       }
     })();
 
-    return () => {
+    const stopCurrentAudio = () => {
       cancelled = true;
       controller.abort();
       if (audio) {
@@ -87,7 +90,13 @@ export function useNarrationAudio({
       if (url) URL.revokeObjectURL(url);
       setSpeaking(false);
     };
+    stopRef.current = stopCurrentAudio;
+
+    return () => {
+      stopCurrentAudio();
+      if (stopRef.current === stopCurrentAudio) stopRef.current = () => undefined;
+    };
   }, [available, enabled, text]);
 
-  return { speaking, available };
+  return { speaking, available, stop };
 }
