@@ -9,16 +9,23 @@ export function formatDuration(ms: number): string {
   return `${minutes}m ${String(seconds).padStart(2, "0")}s`;
 }
 
-/** Group digits without inventing precision. Strings pass through untouched. */
+/**
+ * Group digits for display. Strings pass through untouched.
+ *
+ * Two decimals, matching what the voice says (`lib/deck.ts`) — a headline reading
+ * 143,787.3622 while Vera says "143,787.36" looks like two different answers. The
+ * exact value is never lost: it is in the execution result and in the stdout line
+ * shown on the code slide.
+ */
 export function formatValue(value: number | string): string {
   if (typeof value === "string") return value;
-  return value.toLocaleString("en-US", { maximumFractionDigits: 4 });
+  return value.toLocaleString("en-US", { maximumFractionDigits: 2 });
 }
 
 /**
  * The figure as it is set at 88px: sign, then unit, then digits — `-$17,725.48`.
- * Never rounds and never invents precision; the sign stays in front of the unit
- * so a loss reads as a loss at a glance.
+ * Never invents precision; the sign stays in front of the unit so a loss reads as
+ * a loss at a glance.
  */
 export function formatFigure(value: number | string, unit: string | null): string {
   const digits = formatValue(value);
