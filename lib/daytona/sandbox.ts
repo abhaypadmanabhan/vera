@@ -119,6 +119,25 @@ export async function ensureDatasetLoaded(
   return { uploaded: true, bytes };
 }
 
+/**
+ * Accept a bare scalar, or a single-entry object/array wrapping one.
+ *
+ * The prompt asks for a bare value, but models like to label their answer
+ * (`{"total_sales_q3_2018": 143787.36}`). A one-entry wrapper is unambiguous, so
+ * unwrap it. More than one entry IS ambiguous — which of them is the answer? —
+ * so it returns null and the run blocks rather than guessing.
+ */
+function coerceValue(parsed: unknown): number | string | null {
+  if (typeof parsed === "number") return Number.isFinite(parsed) ? parsed : null;
+  if (typeof parsed === "string") return parsed.trim() === "" ? null : parsed;
+  if (Array.isArray(parsed)) return parsed.length === 1 ? coerceValue(parsed[0]) : null;
+  if (parsed !== null && typeof parsed === "object") {
+    const values = Object.values(parsed as Record<string, unknown>);
+    return values.length === 1 ? coerceValue(values[0]) : null;
+  }
+  return null;
+}
+
 /** Pull the single machine-readable value the generated code is required to print. */
 export function parseResultValue(output: string): number | string | null {
   const line = output
@@ -134,9 +153,7 @@ export function parseResultValue(output: string): number | string | null {
 
   try {
     const parsed: unknown = JSON.parse(raw);
-    if (typeof parsed === "number") return Number.isFinite(parsed) ? parsed : null;
-    if (typeof parsed === "string") return parsed.trim() === "" ? null : parsed;
-    return null;
+    return coerceValue(parsed);
   } catch {
     const asNumber = Number(raw);
     return Number.isFinite(asNumber) ? asNumber : raw;

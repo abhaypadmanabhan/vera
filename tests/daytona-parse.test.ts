@@ -31,3 +31,21 @@ describe("python non-answers must block", () => {
     },
   );
 });
+
+describe("labelled answers", () => {
+  it("unwraps a single-key object — unambiguous", () => {
+    expect(parseResultValue('VERA_RESULT:{"total_sales_q3_2018": 143787.3622}')).toBe(143787.3622);
+  });
+  it("unwraps a single-element array", () => {
+    expect(parseResultValue("VERA_RESULT:[42]")).toBe(42);
+  });
+  it("blocks a multi-key object — which one is the answer?", () => {
+    expect(parseResultValue('VERA_RESULT:{"a": 1, "b": 2}')).toBeNull();
+  });
+  it("blocks a multi-element array", () => {
+    expect(parseResultValue("VERA_RESULT:[1,2]")).toBeNull();
+  });
+  it("still blocks a wrapped NaN", () => {
+    expect(parseResultValue('VERA_RESULT:{"x": null}')).toBeNull();
+  });
+});

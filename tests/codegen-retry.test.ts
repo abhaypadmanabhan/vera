@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { LIMITS } from "@/lib/config";
 import {
+  type RetryOutcome,
   runCodegenWithRetries,
   type CodeExecutor,
   type CodeGenerator,
@@ -44,8 +45,8 @@ const successfulExecution: ExecutionResult = {
 };
 
 async function drain(
-  generator: AsyncGenerator<StageEvent, ExecutionResult | null>,
-): Promise<{ events: StageEvent[]; result: ExecutionResult | null }> {
+  generator: AsyncGenerator<StageEvent, RetryOutcome | null>,
+): Promise<{ events: StageEvent[]; result: RetryOutcome | null }> {
   const events: StageEvent[] = [];
   while (true) {
     const next = await generator.next();
@@ -88,7 +89,7 @@ describe("codegen retry orchestration", () => {
       stderr: "NameError: missing_name",
       failingCode: 'print("VERA_RESULT:1")',
     });
-    expect(result).toEqual(successfulExecution);
+    expect(result?.execution).toEqual(successfulExecution);
     expect(
       events
         .filter(
@@ -238,7 +239,7 @@ describe("codegen retry orchestration", () => {
       stderr: "SyntaxError: invalid syntax",
       failingCode: 'print("VERA_RESULT:1")',
     });
-    expect(result).toEqual(successfulExecution);
+    expect(result?.execution).toEqual(successfulExecution);
   });
 
   it("emits a failed writing stage and unverified finding on Fireworks failure", async () => {

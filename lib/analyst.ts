@@ -17,7 +17,8 @@ import type { Analyst } from "./types";
  */
 export function getAnalyst(): Analyst {
   if (MOCK_MODE) return mockAnalyst;
-  throw new Error(
-    "Real analyst not wired yet (Phase 2+). Set VERA_MOCK=1 or leave it unset to run mocked.",
-  );
+  // Lazy require so mock mode never pulls a paid SDK into the process.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { realAnalyst } = require("./real-analyst") as typeof import("./real-analyst");
+  return realAnalyst;
 }

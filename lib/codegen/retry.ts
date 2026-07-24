@@ -73,9 +73,18 @@ async function withinBudget<T>(
   }
 }
 
+/** What a successful run hands to the safeguard. */
+export interface RetryOutcome {
+  execution: ExecutionResult;
+  code: GeneratedCode;
+  /** Columns the model said it used — checked against the real schema downstream. */
+  columnsUsed: string[];
+  attempts: number;
+}
+
 export async function* runCodegenWithRetries(
   options: RetryOptions,
-): AsyncGenerator<StageEvent, ExecutionResult | null> {
+): AsyncGenerator<StageEvent, RetryOutcome | null> {
   const now = options.now ?? Date.now;
   const startedAt = now();
   const rawRequestedRetries = options.maxRetries ?? LIMITS.maxRetries;
@@ -244,7 +253,12 @@ export async function* runCodegenWithRetries(
         detail: `Exit 0 in ${execution.durationMs}ms`,
         attempt,
       });
-      return execution;
+      return {
+        execution,
+        code: lastCode,
+        columnsUsed: output.columnsUsed,
+        attempts: attempt,
+      };
     }
 
     const stderr =

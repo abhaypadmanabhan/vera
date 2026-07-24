@@ -89,6 +89,7 @@ Rules:
 - When a numeric column can contain currency symbols, percent signs, commas, or blank cells, normalize it with pd.to_numeric(..., errors="coerce") before computing. Let pandas skip blank/NaN values unless the question requires counting them.
 - Do not import or use network libraries. Do not access the network, environment, or filesystem except the CSV path above.
 - Print exactly one output line: VERA_RESULT:<JSON value>. Use json.dumps so strings are machine-parseable.
+- That JSON value MUST be a bare number or a bare string — the single figure that answers the question. Never an object, list, or dict. Do not label it; the label belongs in the explanation field.
 - Do not print debugging text, tables, labels, markdown, or any other line.
 - columnsUsed must list every CSV column read by the computation.
 - max_tokens is bounded, so keep the program compact.
