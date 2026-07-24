@@ -1,94 +1,149 @@
 # DESIGN.md — Vera
 
-All UI follows this file. Values here are the system; never hardcode a raw hex or a one-off size
-in a component. Derived from the builder's UI-UX vault
-(`~/Documents/Obsidian Vault/UI-UX` — read `Hackathon Speed Design`, `Color Systems`,
-`What Makes Design Win`, `Motion and Micro-interactions` before touching UI).
+**v2.** v1 was rejected: too generic, weak hierarchy, wrong layout — a dark dashboard like every
+other AI tool. This document replaces it. Derived from the builder's vault at
+`/Users/abhayp/Documents/Obsidian Vault/UI-UX/`. **Read the vault yourself before building** —
+especially `What Makes Design Win`, `Awwwards Teardowns 2026`, `Typography`, `Color Systems`,
+`Motion and Micro-interactions`. This file is the summary; the vault carries the reasoning.
 
-## Feel (one line)
+---
 
-**A verification instrument, not a chat app.** Calm, dark, dense with evidence — Linear's restraint
-with the seriousness of an audit tool. The screen should make you believe the number.
+## The one committed idea
 
-The first-30-seconds question: *what does this make people feel that words can't?* → **relief that
-something finally shows its work.** Every decision serves that.
+> **Vera is not a dashboard. She is an auditor marking up your data in red pen.**
 
-## Colors — dark-first (dark is the default and the demo mode; it photographs better on a projector)
+The screen is a **document of evidence**, not a control panel: paper, ink, and one red mark. Every
+other AI tool at this event will be dark glass panels with a mint accent. We are the only one that
+looks like a finding you could hand to a CFO.
 
-Tokens live in `app/globals.css`. Cool midnight neutrals + **one** accent (mint) + semantic status.
-Zero decorative color. Never pure `#000` / `#fff`.
+The vault's teardown data says the common denominator of winners is *one idea pushed hard, a
+two-colour palette, and typographic craft* — not 3D, not effects. This is that idea.
+
+**The 30-second feeling:** relief that something finally shows its work.
+
+## Anti-goals — reject on sight
+
+Dark glassmorphism · gradient mesh backgrounds · neon mint/cyan on charcoal · three stacked cards
+in a 2-column grid · glowing borders · "AI sparkle" iconography · centred hero with a subtitle and
+two buttons · any layout that would look identical with a different product's copy in it.
+If a screenshot of this could be any AI SaaS, it has failed.
+
+## Colour — exactly two, plus one mark
+
+Commit to **light**. No dark mode, no theme toggle (vault: anti-scope). Near-black on warm paper
+projects fine — Depo Luxe won SOTD 7.62 on pure black and white.
 
 ```css
-/* neutrals — 90% of the UI */
---bg:            oklch(0.16 0.012 258);   /* page */
---surface:       oklch(0.20 0.014 258);   /* card */
---surface-raised:oklch(0.24 0.014 258);   /* code block, table header */
---border:        oklch(0.30 0.015 258);
---text:          oklch(0.96 0.005 258);
---text-muted:    oklch(0.70 0.012 258);
+--paper:      oklch(0.975 0.008 85);   /* warm off-white — the page */
+--paper-deep: oklch(0.945 0.010 85);   /* recessed: exhibits, code blocks */
+--ink:        oklch(0.20 0.012 250);   /* near-black, faintly cool — all text */
+--ink-muted:  oklch(0.52 0.012 250);   /* secondary text, labels */
+--rule:       oklch(0.86 0.008 85);    /* hairlines. 1px. everywhere. */
 
-/* the one accent — interactive AND the verified seal (mint IS the product's idea) */
---primary:       oklch(0.80 0.15 168);
---primary-fg:    oklch(0.18 0.03 168);
-
-/* semantic — status only, never decorative */
---warning:       oklch(0.78 0.14 75);     /* unverified / blocked */
---danger:        oklch(0.65 0.19 25);     /* hard failure */
+--mark:       oklch(0.56 0.20 28);     /* THE red pen. */
+--mark-wash:  oklch(0.94 0.04 28);     /* the faintest wash behind a marked region */
 ```
 
-Rules: 2 active colors + neutrals, max. Accent covers ≤10% of the screen. Mint means **verified /
-interactive**; amber means **we could not verify**; red means **it broke**. A number never renders
-in mint unless `verdict === "verified"`.
+**The red pen is the whole colour system.** It marks: the verdict stamp, the columns Vera actually
+read, the interactive affordance, and the refusal. Nothing else is ever coloured. No green check —
+green-for-success is the cliché we are avoiding. A verified number is simply set large in ink; the
+red mark is the *annotation around it*, exactly like an auditor's pen.
 
-Texture kit (hero only, cheap and high-return): one low-saturation radial gradient + a blurred
-mint glow shape behind the hero, plus 3% SVG `feTurbulence` grain. Nothing else.
+Refusal ("Vera has no number for this one") is set in ink with a red rule and a struck-through
+placeholder where the number would be. **The absence must be composed, not apologetic.**
 
-## Typography
+## Typography — this is the brand
 
-- **Geist** (sans) for everything, **Geist Mono** for code, numbers and column names. Both already
-  wired in `app/layout.tsx`. No third family.
-- Scale: 12 / 14 / 16 / 20 / 32 / 56. The hero finding number is 56 (bump one step for projector).
-- Weights: 400 / 500 / 600 only. Headings tracking `-0.02em`.
-- **`tabular-nums` on every number that changes or aligns.** Right-align numerics in tables.
-- Body max-width 65ch. Never center-align a paragraph.
+Two families. Nothing else, ever.
 
-## Shape & spacing
+- **Newsreader** (`next/font/google`, variable) — the editorial voice. Claims, headings, prose.
+  Weights 400/500/600. Headings tracking `-0.02em`, line-height 1.1.
+- **Geist Mono** (already installed) — **every number, column name, cell value, code line, label
+  and timestamp**. `font-variant-numeric: tabular-nums` on all of it. Small labels are mono,
+  uppercase, `0.08em` tracking, 11-12px, `--ink-muted`.
 
-4px grid: 4 / 8 / 12 / 16 / 24 / 32 / 48 / 64. `--radius: 0.625rem` (shadcn default, keep).
-Two elevation levels only: flat card (1px border, surface bg) and raised (border + subtle shadow).
+The serif/mono pairing with **no sans at all** is the signature. It reads as printed evidence and
+it is instantly not-AI-slop.
 
-## Motion
+Scale — 5 sizes, no more: `12 / 14 / 17 / 28 / 88`.
+`88` is the finding number only, mono, tabular. Prose sits at 17 with `max-width: 68ch` and
+line-height 1.55. Bump one step for the projector.
 
-150ms fast / 250ms base, ease-out. **Only `transform` and `opacity`.** Stage transitions in the
-timeline animate from the direction that makes sense (next stage enters from below the previous).
-Stagger-in on first load, ~40ms apart. **`prefers-reduced-motion: reduce` must kill all of it** —
-opacity-only fallback. If it stutters, delete it.
+## Layout — a document with a margin rail, not a grid of cards
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│  VERA                                          [ how do we know ]│  ← hairline rule under
+├──────────┬───────────────────────────────────────────────────────┤
+│          │                                                       │
+│  MARGIN  │   THE DOCUMENT                                        │
+│  RAIL    │                                                       │
+│          │   Question, set in serif, large.                      │
+│  audit   │                                                       │
+│  trail   │   ─────────────────────────────────────────           │
+│  runs    │                                                       │
+│  down    │   −17,725.48        ← 88px mono, tabular              │
+│  the     │   Tables lost more than any other sub-category.       │
+│  left,   │                          ← serif claim, 28px          │
+│  mono,   │                                                       │
+│  stamped │   EXHIBIT A — THE CODE THAT RAN                       │
+│  times   │   ┌────────────────────────────────────────┐          │
+│          │   │ mono, paper-deep, hairline, red mark   │          │
+│  ● 0.9s  │   │ on the line that uses the proven fmt   │          │
+│  ● 1.3s  │   └────────────────────────────────────────┘          │
+│  ● 0.8s  │                                                       │
+│          │   EXHIBIT B — THE CELLS SHE READ                      │
+│          │   real rows, mono, marked columns in red              │
+│          │                                                       │
+│          │   EXHIBIT C — WHAT SHE PROVED ABOUT YOUR DATA         │
+│          │   5,952 rows can only be day-first. 0 argue otherwise.│
+└──────────┴───────────────────────────────────────────────────────┘
+```
+
+- **Single column document**, generous margins, one narrow left **margin rail** carrying the live
+  reasoning trace as marginalia with mono timestamps. The rail is the timeline — it replaces the
+  old "card of four steps". It should feel like a court reporter's log running alongside.
+- **Exhibits, labelled A/B/C** in mono smallcaps. Numbered exhibits are the whole conceit: this is
+  evidence, presented in order.
+- **Exhibit C is new and it is the money shot** — the schema facts Vera *proved from the data*,
+  with the counts. "5,952 values have a first component above 12, which cannot be a month. 0 argue
+  the other way." Give it real weight; nobody else at this event has this.
+- Nothing is centred except the top rule. No card shadows anywhere — **hairlines only**.
+
+## Motion — paper, not glass
+
+150ms fast / 260ms base, `cubic-bezier(0.22, 1, 0.36, 1)`. Transform and opacity only.
+
+- Rules **draw** left-to-right (`scaleX`) as a section arrives.
+- Exhibits arrive by **clip-path reveal** from the top edge, like a page being uncovered.
+- The verdict mark **stamps**: fast scale-down from 1.06 with a tiny rotation (−2deg), once.
+- The margin rail advances a dot and prints a timestamp per stage. Never silent — always a line of
+  live detail (vault: silence kills the demo).
+- **No number ever counts up.** Fake animation of a real figure would undercut the entire product.
+- `prefers-reduced-motion: reduce` kills all of it — opacity only.
 
 ## Components
 
-- **Button** — all six states designed: rest / hover / focus-visible / active / disabled / loading.
-  One primary action per screen (Analyze).
-- **Card** — 1px border, surface bg, p-6, radius-lg.
-- **Timeline stage** — pending (muted, no fill) / active (mint ring + pulse + live timer) /
-  complete (mint check) / failed (amber). Always shows a detail line — the screen is never static.
-- **Result card** — the hero. Big tabular-nums number, one-line plain-English claim, collapsible
-  executed code (mono, `--surface-raised`), source-cell table. Both scroll in their own container;
-  the page never scrolls horizontally.
-- **Unverified card** — same footprint, amber accent, **no number anywhere**, states the reason and
-  what was attempted. It is a designed state, not an error toast. It should look *deliberate* —
-  refusing to answer is the feature.
-- **Empty / loading** — skeletons matching final layout, never spinners. Empty state carries real
-  copy + one CTA, never "No data".
-- Icons: **Lucide only**, never mixed with another set.
+- **Button** — text + a red underline that thickens on hover; not a filled pill. All six states.
+  One primary action on screen.
+- **Input** — a ruled line, not a box. Serif text sitting on a hairline, red rule on focus.
+- **Exhibit** — hairline border, `--paper-deep` fill, mono label above in smallcaps.
+- **Marked cells** — the columns the code actually read get `--mark-wash` behind them and a red
+  underline. The reader should see *which cells* at a glance.
+- **Verdict stamp** — mono, uppercase, letterspaced, red hairline box, slight rotation. `VERIFIED`
+  or `NO NUMBER RELEASED`.
+- Icons: **almost none**. Lucide only if genuinely needed, hairline weight. Prefer typographic
+  marks (`—`, `·`, `↳`) over icons. An icon set is a crutch this design does not need.
 
-## Accessibility (non-negotiable)
+## Accessibility — non-negotiable
 
-WCAG AA: 4.5:1 body, 3:1 large text and UI. Check muted and placeholder text specifically. Full
-keyboard path through the demo: focus CSV → question → Analyze → expand code. Visible focus rings
-on `--primary`. Labelled inputs. Live region announces stage changes.
+WCAG AA: 4.5:1 body, 3:1 UI. Check `--ink-muted` on `--paper` and the red on paper specifically.
+Never encode meaning in colour alone — the verdict always carries its word. Full keyboard path
+through the demo, visible focus (a red rule, not a glow). Live region announces stage changes.
+Wide exhibits scroll inside their own container; the page never scrolls sideways.
 
 ## Never
 
-Pure black/white · decorative color · a second icon set · spinners for content · a number without
-a verdict next to it · marketing copy that overstates verification (see PRD §6 and CLAUDE.md) ·
-3D, scrollytelling, theme switcher, settings page — all anti-scope for this build.
+A second accent colour · a sans-serif · a card shadow · a green check · a dark mode · a filled
+button · a centred paragraph · a number without its verdict · copy that overstates verification
+(PRD §6 and CLAUDE.md are binding on every string on screen).
