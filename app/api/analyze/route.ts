@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getAnalyst } from "@/lib/analyst";
 import { LIMITS } from "@/lib/config";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { resolveDataset, resolveUpload } from "@/lib/datasets";
 import { encodeEvent } from "@/lib/stream";
 import type { AnalysisRequest, StageEvent } from "@/lib/types";
 
@@ -17,13 +18,18 @@ const requestSchema = z.object({
       LIMITS.maxQuestionLength,
       `Question must be ${LIMITS.maxQuestionLength} characters or fewer.`,
     ),
-  csv: z.object({
-    filename: z.string().min(1, "CSV filename is required."),
-    content: z.string().refine(
-      (content) => Buffer.byteLength(content, "utf8") <= LIMITS.maxCsvBytes,
-      `CSV must be ${LIMITS.maxCsvBytes} bytes or smaller.`,
-    ),
-  }),
+  datasetId: z.string().min(1, "A dataset is required."),
+  // Only present when the user uploaded their own file. The 2.3 MB demo CSV lives
+  // on the server and never crosses the wire.
+  upload: z
+    .object({
+      filename: z.string().min(1, "CSV filename is required."),
+      content: z.string().refine(
+        (content) => Buffer.byteLength(content, "utf8") <= LIMITS.maxCsvBytes,
+        `CSV must be ${LIMITS.maxCsvBytes} bytes or smaller.`,
+      ),
+    })
+    .optional(),
 });
 
 function clientIp(request: Request): string {
@@ -65,7 +71,18 @@ export async function POST(request: Request): Promise<Response> {
     return badRequest(parsed.error.issues[0]?.message ?? "Invalid analysis request.");
   }
 
-  const analysisRequest: AnalysisRequest = parsed.data;
+  let analysisRequest: AnalysisRequest;
+  try {
+    const dataset = parsed.data.upload
+      ? resolveUpload(parsed.data.upload)
+      : await resolveDataset(parsed.data.datasetId);
+    analysisRequest = { question: parsed.data.question, dataset };
+  } catch (error) {
+    return badRequest(
+      error instanceof Error ? error.message : "That dataset could not be loaded.",
+    );
+  }
+
   const encoder = new TextEncoder();
   const startedAt = Date.now();
   const abortedResult = Symbol("aborted");

@@ -1,13 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { mockAnalyst } from "@/lib/mock/engine";
+import { resolveUpload } from "@/lib/datasets";
 import type { AnalysisRequest, StageEvent } from "@/lib/types";
 
 const request = (question: string): AnalysisRequest => ({
   question,
-  csv: {
+  dataset: resolveUpload({
     filename: "business.csv",
-    content: "month,revenue,cogs\n2025-07,100,60\n2025-08,120,70\n",
-  },
+    content: "Sub-Category,Profit,OrderDate\nTables,-100,15/04/2019\nChairs,50,03/02/2018\n",
+  }),
 });
 
 async function collectEvents(question: string): Promise<StageEvent[]> {

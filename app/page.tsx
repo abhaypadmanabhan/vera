@@ -32,9 +32,9 @@ export default function Home() {
     (asked: string) => {
       setQuestion(asked);
       setCurrentRun((previous) => ({ id: previous.id + 1, startedAt: Date.now() }));
-      void start(asked, csv);
+      void start(asked, isDemo ? "superstore" : "upload", isDemo ? undefined : csv);
     },
-    [csv, start],
+    [csv, isDemo, start],
   );
 
   const loadCsv = useCallback(
