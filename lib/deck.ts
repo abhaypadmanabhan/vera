@@ -21,6 +21,16 @@ export type SlideKind =
   | "cells"
   | "summary";
 
+/**
+ * One narration beat: a line Vera says, and the region of the slide the presenter
+ * blob moves to and highlights while she says it. `focus` matches a
+ * `data-focus="..."` attribute rendered on that slide.
+ */
+export interface Beat {
+  focus: string;
+  spoken: string;
+}
+
 export interface Slide {
   id: string;
   kind: SlideKind;
@@ -30,6 +40,12 @@ export interface Slide {
   subtitle: string | null;
   /** What the voice says on this slide. Kept speakable — no code, no symbols. */
   spoken: string;
+  /**
+   * The narration broken into beats. The presenter blob walks these in order,
+   * highlighting one region at a time — a presenter moving around their slide.
+   * Concatenating `beats[].spoken` gives `spoken`.
+   */
+  beats: Beat[];
   /**
    * Topics this slide covers, lowercase. Used to route a follow-up question back
    * to the slide that already answered it.
@@ -85,6 +101,10 @@ export function buildDeck(
     title: question,
     subtitle: `${profile.filename} · ${profile.rowCount.toLocaleString()} rows`,
     spoken: `You asked: ${speakable(question)}`,
+    beats: [
+      { focus: "question", spoken: `You asked: ${speakable(question)}` },
+      { focus: "file", spoken: `I looked at ${profile.filename}, ${profile.rowCount.toLocaleString()} rows.` },
+    ],
     covers: ["question", "ask", "what did i ask"],
   });
 
@@ -94,6 +114,10 @@ export function buildDeck(
     title: figure,
     subtitle: finding.claim,
     spoken: `${figure}. ${speakable(finding.claim)}`,
+    beats: [
+      { focus: "figure", spoken: `${figure}.` },
+      { focus: "claim", spoken: speakable(finding.claim) },
+    ],
     covers: ["answer", "number", "result", "how much", "total", "figure"],
   });
 
@@ -105,6 +129,11 @@ export function buildDeck(
       title: evidence.claim,
       subtitle: `${evidence.supportingRows.toLocaleString()} rows prove it · ${evidence.contradictingRows.toLocaleString()} argue otherwise`,
       spoken: speakable(evidence.method),
+      beats: [
+        { focus: "claim", spoken: `${speakable(evidence.claim)}.` },
+        { focus: "counts", spoken: `${evidence.supportingRows.toLocaleString()} rows prove it. ${evidence.contradictingRows.toLocaleString()} argue otherwise.` },
+        { focus: "method", spoken: speakable(evidence.method) },
+      ],
       covers: [
         "trap",
         "date",
@@ -124,6 +153,11 @@ export function buildDeck(
     title: "The code that ran",
     subtitle: `${finding.code.lineCount} lines · exit ${finding.execution.exitCode} · ${finding.execution.durationMs} ms`,
     spoken: `Here is the code that produced it. ${speakable(finding.code.explanation)}`,
+    beats: [
+      { focus: "code", spoken: "Here is the code that produced it." },
+      { focus: "explanation", spoken: speakable(finding.code.explanation) },
+      { focus: "exit", spoken: `It exited cleanly in ${finding.execution.durationMs} milliseconds.` },
+    ],
     covers: ["code", "pandas", "python", "script", "run", "what did you run"],
   });
 
@@ -133,6 +167,10 @@ export function buildDeck(
     title: "The cells it read",
     subtitle: `${finding.grounding.columns.join(", ")} across ${finding.grounding.rowCount.toLocaleString()} rows`,
     spoken: `Every figure traces back to real cells — ${finding.grounding.columns.join(" and ")}, across ${finding.grounding.rowCount.toLocaleString()} rows.`,
+    beats: [
+      { focus: "columns", spoken: `It read ${finding.grounding.columns.join(" and ")}.` },
+      { focus: "rows", spoken: `Across ${finding.grounding.rowCount.toLocaleString()} rows of your file.` },
+    ],
     covers: ["cells", "source", "rows", "columns", "data", "where from", "trace"],
   });
 
@@ -142,6 +180,11 @@ export function buildDeck(
     title: figure,
     subtitle: finding.claim,
     spoken: `To summarise. ${figure}. ${speakable(finding.claim)} Computed, and traceable.`,
+    beats: [
+      { focus: "figure", spoken: `To summarise. ${figure}.` },
+      { focus: "claim", spoken: speakable(finding.claim) },
+      { focus: "proof", spoken: "Computed, and traceable." },
+    ],
     covers: ["summary", "recap", "overall", "dashboard", "again"],
   });
 

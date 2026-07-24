@@ -74,3 +74,15 @@ describe("deck", () => {
     expect(matchSlide("which region had the highest profit margin", deck)).toBeNull();
   });
 });
+
+describe("presenter beats", () => {
+  it("every slide has beats whose concatenation covers the narration", () => {
+    for (const s of buildDeck("q", verified, profile).slides) {
+      expect(s.beats.length).toBeGreaterThan(0);
+      for (const b of s.beats) {
+        expect(b.focus).toMatch(/^[a-z]+$/);
+        expect(b.spoken.trim().length).toBeGreaterThan(0);
+      }
+    }
+  });
+});
