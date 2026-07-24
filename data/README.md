@@ -1,77 +1,45 @@
-# Demo dataset
+# Demo dataset — Superstore
 
-Baked-in business CSV for the Vera demo and the offline benchmark (`eval/`).
+The one demo CSV for Vera. Served **server-side** from disk (`lib/datasets.ts`); the client
+receives schema + preview only. Never embed this file as an inline TypeScript string.
 
 ## Files
 
 | File | Role |
 | --- | --- |
-| `demo-business.csv` | Source of truth (~24 months × 3 regions × 3 product lines + traps) |
-| `demo.ts` | App import surface (`DEMO_CSV`, `DEMO_FILENAME`, `DEMO_QUESTIONS`) |
+| `superstore.csv` | Source of truth — 9,994 rows, 22 columns, ~2.3 MB, orders 2016–2019 |
+| `demo.ts` | Thin client stub: example questions + placeholder payload for the UI until the page fully drops the old inline-CSV import. **Not** an embedding of the CSV. |
 
-Regenerate `demo.ts` after any CSV edit:
+The Phase 1 synthetic sheet lives at `tests/fixtures/mini-business.csv` so vitest never parses 2.3 MB.
 
-```bash
-node scripts/build-demo-data.mjs
-```
+## Shape
 
-The script embeds the CSV text verbatim so the two can never drift. `git diff` must be empty after a regen when the CSV is unchanged.
+Columns: `OrderID`, `OrderDate`, `OrderYear`, `Order Quarter`, `ShipDate`, `ShipMode`,
+`CustomerID`, `CustomerName`, `Segment`, `Country`, `City`, `State`, `Postal Code`, `Region`,
+`ProductID`, `Category`, `Sub-Category`, `ProductName`, `Sales`, `Quantity`, `Discount`, `Profit`.
+
+- **9,994** rows (line items), **5,009** unique `OrderID`s
+- Regions: West / East / Central / South
+- Categories: Furniture / Office Supplies / Technology
+
+## Planted-vs-inherent messiness
+
+| Issue | Kind | Detail |
+| --- | --- | --- |
+| `OrderDate` uniformly `DD/MM/YYYY` | Inherent trap | Not mixed free text. Naive `pd.to_datetime` (month-first) silently drops **5,952** rows. Profiler proves day-first: 5,952 values have a first component > 12; zero argue the other way. |
+| Null `Postal Code` | Inherent | **11** empty postal codes |
+| Duplicate row | Inherent | **1** exact duplicate row |
 
 ## One-sentence story
 
-**EMEA's gross margin collapses in Q3 2025 (Core COGS spike) while company-wide revenue still grows.**
-
-A judge reading the sheet should see North America and APAC humming along, EMEA Core quietly going from a healthy ~42% margin to mid-single digits in Jul–Sep 2025, and the company topline still up quarter-over-quarter.
+**A month-first parse of OrderDate quietly destroys 60% of the data — 2018 Q3 sales becomes $50,517.26 instead of $143,787.36.**
 
 ## Headline demo question
 
-> What was EMEA's gross margin percentage in Q3 2025?
+> What were total sales in Q3 2018?
 
-**Correct answer: 35.898%**
+**Correct answer: 143787.36** (parse with `format="%d/%m/%Y"`)
 
-Computed as `(sum(revenue) − sum(cogs)) / sum(revenue) × 100` for `region = EMEA` and `month ∈ {2025-07, 2025-08, 2025-09}`, after cleaning (see below).
+**Naive (month-first) answer: 50517.26**
 
-Contrast:
-
-- EMEA Q2 2025 gross margin: **48.3407%**
-- EMEA Core alone in Q3 2025: **5.3163%** (the collapse is concentrated here)
-- Company revenue Q2 → Q3 2025: **+3.6321%** (topline still grows)
-
-One-click questions in `demo.ts` surface this story.
-
-## Schema
-
-Columns: `month`, `region`, `product_line`, `units`, `revenue`, `cogs`, `marketing_spend`, `headcount`.
-
-- Regions: `North America`, `EMEA`, `APAC`
-- Product lines: `Core`, `Plus`, `Enterprise`
-- Months: `2024-01` … `2025-12` (canonical `YYYY-MM`)
-- Clean logical rows: **216** (24 × 3 × 3). On disk: **217** because of the planted duplicate.
-
-Internal consistency on clean rows: `cogs ≈ revenue × (1 − margin)` and `revenue ≈ units × list price` (Core $48 / Plus $95 / Enterprise $220).
-
-## Planted traps
-
-These exist so a no-execution model (or a naive `df.revenue.sum()`) gets the wrong answer. Vera's generated pandas is supposed to clean them first.
-
-| Trap | Where | What happens if you don't clean |
-| --- | --- | --- |
-| Currency string | `2024-06`, North America, Core — `revenue` is `"$12,400"` | String concat / dtype object; total revenue is wrong |
-| Blank `units` | `2024-09`, APAC, Plus | Coerce/`sum` errors or invented fills |
-| Blank `marketing_spend` | `2025-02`, EMEA, Enterprise | Same for marketing totals |
-| Inconsistent date | APAC Enterprise March 2024 written as `03/2024` | Filters on `2024-03` miss the row |
-| Duplicate row | Exact copy of North America / Plus / `2025-01` appended | Double-counts that key unless `drop_duplicates` |
-
-### Required cleaning (shared by `eval/verify-answers.py`)
-
-1. `drop_duplicates()`
-2. Normalize `month`: `MM/YYYY` → `YYYY-MM`
-3. Parse money: strip `$` and `,`
-4. Coerce blank numerics to NaN; sum with `skipna=True` where blanks are allowed
-
-## How to verify
-
-```bash
-python3 eval/verify-answers.py
-node scripts/build-demo-data.mjs && git diff --exit-code data/demo.ts
-```
+Full answer key + scoring rule: `eval/questions.json`, verified by `python3 eval/verify-answers.py`.

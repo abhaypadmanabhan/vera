@@ -22,19 +22,19 @@ runs a full demo. Parallelisable across 3 agents (UI / API+types / data).
 
 ## Phase 2 — Fireworks brain · P0 · 💸 SPENDS CREDITS (needs explicit go)
 
-- [ ] #8 P2.1 — Fireworks client + model selection (from recommended-models, not a guess)
-- [ ] #9 P2.2 — Codegen: CSV schema + question → pandas (structured output)
-- [ ] #10 P2.3 — Retry loop: stderr fed back, max 2 attempts
+- [x] #8 P2.1 — Fireworks client + model selection (from recommended-models, not a guess)
+- [x] #9 P2.2 — Codegen: CSV schema + question → pandas (structured output)
+- [x] #10 P2.3 — Retry loop: stderr fed back, max 2 attempts
 
 ## Phase 3 — Daytona sandbox · P0 · 💸 SPENDS CREDITS
 
-- [ ] #11 P3.1 — Warm sandbox singleton, pandas preinstalled
-- [ ] #12 P3.2 — Write CSV into sandbox + execute generated code → result
+- [x] #11 P3.1 — Warm sandbox singleton, pandas preinstalled
+- [x] #12 P3.2 — Write CSV into sandbox + execute generated code → result
 
 ## Phase 4 — The safeguard · P0 · 💸 SPENDS CREDITS (live path)
 
-- [ ] #13 P4.1 — Grounding check, block-and-retry, honest unverified state
-- [ ] #14 P4.2 — Rate limits + secret hygiene on money endpoints (💚 free)
+- [x] #13 P4.1 — Grounding check, block-and-retry, honest unverified state
+- [x] #14 P4.2 — Rate limits + secret hygiene on money endpoints (💚 free)
 
 ## Phase 5 — Braintrust proof · P1 · 💸 (P5.2 only)
 
@@ -43,7 +43,7 @@ runs a full demo. Parallelisable across 3 agents (UI / API+types / data).
 
 ## Phase 6 — Voice + cold open · P1 · 💸 (P6.1 only)
 
-- [ ] #17 P6.1 — ElevenLabs speaks the verified finding
+- [x] #17 P6.1 — ElevenLabs speaks the verified finding
 - [ ] #18 P6.2 — Cold open: wrong-AI vs Vera, first 30 seconds (💚 free)
 
 ## Phase 7 — Polish + submit · P2 · 💚 free

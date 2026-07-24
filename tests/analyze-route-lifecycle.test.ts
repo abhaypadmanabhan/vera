@@ -39,7 +39,8 @@ import { POST } from "@/app/api/analyze/route";
 
 const body = {
   question: "What happened?",
-  csv: {
+  datasetId: "upload",
+  upload: {
     filename: "business.csv",
     content: "month,revenue\n2025-07,100\n",
   },

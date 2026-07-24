@@ -1,10 +1,13 @@
 import { csvSchema } from "../csv";
+import { isProven } from "../types";
 import type {
   AnalysisRequest,
   Analyst,
   Finding,
   GeneratedCode,
   Grounding,
+  ResolvedDataset,
+  SchemaEvidence,
   SourceCell,
   StageEvent,
 } from "../types";
@@ -29,22 +32,19 @@ const MOCK_CODE = `import pandas as pd
 
 df = pd.read_csv("/workspace/data.csv")
 
-# revenue arrives as a mix of numbers and strings like "$12,400"
-df["revenue"] = (
-    df["revenue"].astype(str).str.replace(r"[$,]", "", regex=True).astype(float)
-)
-df["cogs"] = pd.to_numeric(df["cogs"], errors="coerce")
+# OrderDate is DD/MM/YYYY (proven from the data, see the profile) — parsing it
+# month-first would silently drop 5,952 of 9,994 rows.
+df["OrderDate"] = pd.to_datetime(df["OrderDate"], format="%d/%m/%Y")
 
-q3 = df[df["region"].eq("EMEA") & df["month"].isin(["2025-07", "2025-08", "2025-09"])]
-margin = (q3["revenue"].sum() - q3["cogs"].sum()) / q3["revenue"].sum() * 100
+by_subcat = df.groupby("Sub-Category")["Profit"].sum()
 
-print(round(margin, 3))`;
+print(round(by_subcat.min(), 2))`;
 
 const MOCK_BROKEN_CODE = `import pandas as pd
 
 df = pd.read_csv("/workspace/data.csv")
-margin = (df["revenue"].sum() - df["cogs"].sum()) / df["revenue"].sum()
-print(round(margin * 100, 1))`;
+df["OrderDate"] = pd.to_datetime(df["OrderDate"])
+print(df.groupby("Subcategory")["Profit"].sum().min())`;
 
 function code(source: string, explanation: string): GeneratedCode {
   return {
@@ -56,9 +56,9 @@ function code(source: string, explanation: string): GeneratedCode {
 }
 
 /** Quote back real cells from whatever CSV is loaded, so the mock still looks honest. */
-function groundingFrom(csvContent: string): Grounding {
-  const schema = csvSchema(csvContent, 3);
-  const wanted = ["month", "region", "revenue", "cogs"];
+function groundingFrom(dataset: ResolvedDataset): Grounding {
+  const schema = csvSchema(dataset.content, 3);
+  const wanted = ["Sub-Category", "Profit", "OrderDate"];
   const columns = schema.columns.length > 0 ? schema.columns : wanted;
   const used = columns.filter((c) => wanted.includes(c));
   const usedColumns = used.length > 0 ? used : columns.slice(0, 4);
@@ -78,26 +78,31 @@ function groundingFrom(csvContent: string): Grounding {
     rowCount,
     rowRange: [0, Math.max(rowCount - 1, 0)],
     sampleCells,
+    // Real, counted proof from the profiler — not decoration.
+    schemaEvidence: dataset.profile.columns
+      .map((column) => column.evidence)
+      .filter((evidence): evidence is SchemaEvidence => evidence !== null)
+      .filter(isProven),
   };
 }
 
-const VERIFIED_FINDING = (csvContent: string, attempts: number): Finding => ({
+const VERIFIED_FINDING = (dataset: ResolvedDataset, attempts: number): Finding => ({
   verdict: "verified",
-  value: 35.898,
-  unit: "%",
-  claim: "EMEA gross margin in Q3 2025 was 35.9%, down from 48.3% in Q2.",
+  value: -17725.48,
+  unit: "$",
+  claim: "Tables lost more money than any other sub-category: -$17,725.48.",
   code: code(
     MOCK_CODE,
-    "Cleans the currency-formatted revenue cells, filters to EMEA in Q3 2025, and computes gross margin.",
+    "Parses OrderDate with the format proven from the data, then totals profit by sub-category.",
   ),
   execution: {
     exitCode: 0,
-    stdout: "35.898\n",
+    stdout: "-17725.48\n",
     stderr: "",
-    value: 35.898,
+    value: -17725.48,
     durationMs: 1_284,
   },
-  grounding: groundingFrom(csvContent),
+  grounding: groundingFrom(dataset),
   attempts,
 });
 
@@ -105,7 +110,7 @@ const UNVERIFIED_FINDING: Finding = {
   verdict: "unverified",
   reason: "retry_exhausted",
   detail:
-    'Both attempts failed on the same column: TypeError: unsupported operand type(s) for -: \'str\' and \'float\'. The revenue column mixes numbers with strings like "$12,400" and the generated code did not clean it.',
+    "Both attempts failed the same way: KeyError: 'Subcategory'. The column is named 'Sub-Category' in this file, and the generated code kept guessing the name instead of reading it off the schema.",
   code: code(MOCK_BROKEN_CODE, "Attempted a direct margin calculation without cleaning the currency column."),
   attempts: 2,
 };
@@ -119,7 +124,7 @@ export const mockAnalyst: Analyst = {
     const startedAt = Date.now();
     const elapsed = () => Date.now() - startedAt;
     const blocked = wantsBlockedPath(request.question);
-    const schema = csvSchema(request.csv.content, 1);
+    const schema = csvSchema(request.dataset.content, 1);
 
     type StageFields = Omit<Extract<StageEvent, { type: "stage" }>, "type" | "elapsedMs">;
     const stage = (fields: StageFields): StageEvent => ({
@@ -202,18 +207,18 @@ export const mockAnalyst: Analyst = {
     yield stage({
       stage: "running_sandbox",
       status: "complete",
-      detail: "Exit 0 in 1.28s — stdout: 35.898",
+      detail: "Exit 0 in 1.28s — stdout: -17725.48",
       attempt: 1,
     });
 
     yield stage({
       stage: "verifying",
       status: "active",
-      detail: "Tracing 35.898 back to source cells",
+      detail: "Tracing -17725.48 back to source cells",
       attempt: 1,
     });
     await sleep(800);
-    const finding = VERIFIED_FINDING(request.csv.content, 1);
+    const finding = VERIFIED_FINDING(request.dataset, 1);
     const grounding = finding.verdict === "verified" ? finding.grounding : null;
     yield stage({
       stage: "verifying",

@@ -41,6 +41,38 @@ export interface SourceCell {
   value: string;
 }
 
+/**
+ * Evidence for a schema fact Vera INFERRED from the data.
+ *
+ * Rule: never assert an inferred fact without the counts that prove it. This is
+ * deterministic inference with shown evidence — it is NOT a claim that Vera can
+ * detect a subtly-wrong-but-runnable answer, which PRD §6 explicitly disclaims.
+ * Do not blur the two in code, copy, or the README.
+ */
+export interface SchemaEvidence {
+  /** "OrderDate is DD/MM/YYYY" */
+  claim: string;
+  /** Rows that can only be explained by this claim. */
+  supportingRows: number;
+  /** Rows that argue against it. */
+  contradictingRows: number;
+  /** Real values from the column, quoted back. */
+  examples: string[];
+  /** Plain English: "5,952 values have a first component above 12, which cannot be a month." */
+  method: string;
+}
+
+/**
+ * A claim is PROVEN only when something actually supports it and nothing contradicts it.
+ *
+ * Checking `contradictingRows === 0` alone is a bug: a column where every value reads
+ * validly both ways yields 0 and 0 — no contradiction, but no proof either. Never act
+ * on a claim, or show it as established, unless this returns true.
+ */
+export function isProven(evidence: SchemaEvidence): boolean {
+  return evidence.supportingRows > 0 && evidence.contradictingRows === 0;
+}
+
 /** Proof that a value came from real cells and not from the model's imagination. */
 export interface Grounding {
   /** Columns the executed code actually read. */
@@ -51,6 +83,42 @@ export interface Grounding {
   rowRange: [number, number] | null;
   /** A handful of real cells to render under the number. */
   sampleCells: SourceCell[];
+  /** Inferred schema facts the analysis relied on, each with its proof. */
+  schemaEvidence: SchemaEvidence[];
+}
+
+export type ColumnKind = "integer" | "number" | "date" | "category" | "text" | "id";
+
+export interface ColumnProfile {
+  name: string;
+  kind: ColumnKind;
+  nullCount: number;
+  distinctCount: number;
+  sampleValues: string[];
+  /** strftime format, set only when `kind === "date"` and the format was PROVEN. */
+  dateFormat: string | null;
+  /** The proof behind `dateFormat`, or any other inferred fact about this column. */
+  evidence: SchemaEvidence | null;
+}
+
+/**
+ * What the profiler learns about a dataset before any model sees it.
+ * This is what goes into the codegen prompt — never the whole file.
+ */
+export interface DatasetProfile {
+  datasetId: string;
+  filename: string;
+  rowCount: number;
+  columns: ColumnProfile[];
+  duplicateRowCount: number;
+  /**
+   * Convenience period columns (Year / Quarter / Month) checked against the date
+   * column we proved. A stated column that disagrees with the real dates is the
+   * dangerous case: code using it runs clean and returns a wrong number.
+   */
+  crossChecks: SchemaEvidence[];
+  /** Facts the generated code MUST respect, in plain English, for the prompt. */
+  notes: string[];
 }
 
 /** The analysis code Fireworks wrote (Phase 2) — or the mock's stand-in. */
@@ -144,9 +212,42 @@ export interface CsvPayload {
   content: string;
 }
 
+/**
+ * What the browser POSTs. The demo CSV is 2.3 MB and lives on the SERVER — it
+ * never crosses the wire. The client sends a key; only a user upload sends bytes.
+ */
+export interface AnalyzeWirePayload {
+  question: string;
+  datasetId: string;
+  /** Present only when the user uploaded their own file. */
+  upload?: CsvPayload;
+}
+
+/** A dataset the server has read off disk (or accepted as an upload) and profiled. */
+export interface ResolvedDataset {
+  id: string;
+  filename: string;
+  /** Full file text. Server-side only — never send this to the client. */
+  content: string;
+  profile: DatasetProfile;
+}
+
 export interface AnalysisRequest {
   question: string;
-  csv: CsvPayload;
+  dataset: ResolvedDataset;
+}
+
+/** The safe subset of a dataset the client may receive: schema + preview, no bulk rows. */
+export interface DatasetSummary {
+  id: string;
+  filename: string;
+  rowCount: number;
+  columns: ColumnProfile[];
+  duplicateRowCount: number;
+  notes: string[];
+  /** First handful of rows, for the preview table only. */
+  previewRows: string[][];
+  sizeBytes: number;
 }
 
 /**

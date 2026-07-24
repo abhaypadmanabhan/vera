@@ -51,7 +51,7 @@ export function useAnalysis() {
     setState({ stages: initialStages(), finding: null, error: null, isRunning: false });
   }, []);
 
-  const start = useCallback(async (question: string, csv: CsvPayload) => {
+  const start = useCallback(async (question: string, datasetId: string, upload?: CsvPayload) => {
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -62,7 +62,7 @@ export function useAnalysis() {
       const response = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question, csv }),
+        body: JSON.stringify({ question, datasetId, upload }),
         signal: controller.signal,
       });
 

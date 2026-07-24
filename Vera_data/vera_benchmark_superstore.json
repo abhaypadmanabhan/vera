@@ -1,0 +1,104 @@
+[
+  {
+    "id": 1,
+    "question": "What were total sales across the whole dataset?",
+    "expected_answer": 2297200.86,
+    "how": "sum(Sales)"
+  },
+  {
+    "id": 2,
+    "question": "What was total profit?",
+    "expected_answer": 286397.02,
+    "how": "sum(Profit)"
+  },
+  {
+    "id": 3,
+    "question": "What was the overall profit margin percentage?",
+    "expected_answer": 12.47,
+    "how": "sum(Profit)/sum(Sales)*100"
+  },
+  {
+    "id": 4,
+    "question": "Which region had the highest sales?",
+    "expected_answer": "West",
+    "how": "groupby(Region).Sales.sum().idxmax"
+  },
+  {
+    "id": 5,
+    "question": "Which region had the lowest sales?",
+    "expected_answer": "South",
+    "how": "groupby(Region).Sales.sum().idxmin"
+  },
+  {
+    "id": 6,
+    "question": "What were total sales in the West region?",
+    "expected_answer": 725457.82,
+    "how": "West sales"
+  },
+  {
+    "id": 7,
+    "question": "Which product category was most profitable?",
+    "expected_answer": "Technology",
+    "how": "groupby(Category).Profit.sum().idxmax"
+  },
+  {
+    "id": 8,
+    "question": "How much profit did the Technology category generate?",
+    "expected_answer": 145454.95,
+    "how": "Technology profit"
+  },
+  {
+    "id": 9,
+    "question": "Which sub-category lost the most money?",
+    "expected_answer": "Tables",
+    "how": "groupby(Sub-Category).Profit.sum().idxmin"
+  },
+  {
+    "id": 10,
+    "question": "How much profit did the Tables sub-category make (a loss)?",
+    "expected_answer": -17725.48,
+    "how": "Tables profit"
+  },
+  {
+    "id": 11,
+    "question": "Which customer segment generated the most sales?",
+    "expected_answer": "Consumer",
+    "how": "groupby(Segment).Sales.sum().idxmax"
+  },
+  {
+    "id": 12,
+    "question": "What was the average discount across all orders?",
+    "expected_answer": 0.16,
+    "how": "mean(Discount)"
+  },
+  {
+    "id": 13,
+    "question": "How many total units (quantity) were sold?",
+    "expected_answer": 37873,
+    "how": "sum(Quantity)"
+  },
+  {
+    "id": 14,
+    "question": "How many unique orders are in the dataset?",
+    "expected_answer": 5009,
+    "how": "nunique(OrderID)"
+  },
+  {
+    "id": 15,
+    "question": "Which category had the lowest profit margin?",
+    "expected_answer": "Furniture",
+    "how": "min margin by category (Furniture)"
+  },
+  {
+    "id": 16,
+    "question": "What were total sales in 2019?",
+    "expected_answer": 733215.26,
+    "how": "OrderYear==2019 sales"
+  },
+  {
+    "id": 17,
+    "question": "What was sales growth from 2018 to 2019?",
+    "expected_answer": 20.36,
+    "how": "yr2019/yr2018-1"
+  }
+]

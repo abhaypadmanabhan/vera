@@ -22,7 +22,8 @@ function analyzeRequest(
 
 const validBody = {
   question: "What was gross margin?",
-  csv: {
+  datasetId: "upload",
+  upload: {
     filename: "business.csv",
     content: "month,revenue,cogs\n2025-07,100,60\n",
   },
@@ -69,8 +70,8 @@ describe("POST /api/analyze", () => {
       analyzeRequest(
         {
           ...validBody,
-          csv: {
-            ...validBody.csv,
+          upload: {
+            ...validBody.upload,
             content: "x".repeat(5_000_001),
           },
         },

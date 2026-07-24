@@ -1,7 +1,7 @@
 # RESUME PROMPT — paste this into a fresh Claude Code session
 
 Everything below the line is the handoff. It assumes zero conversation history. Regenerated at
-every checkpoint — last updated **CP-2, 2026-07-24 12:05 PDT**.
+every checkpoint — last updated **CP-6 (orchestrator handover), 2026-07-24 14:40 PDT**.
 
 ---
 
@@ -45,21 +45,38 @@ Use the `superpowers` skill for all coding work. For anything touching UI, also 
   pass" is not proof the feature works. Never report done on someone else's say-so; check yourself.
 - Run locally with `next dev`. Do **not** deploy to Vercel.
 
-## Where things stand right now (CP-2)
+## Where things stand right now (CP-6) — YOU ARE TAKING OVER MID-BUILD
 
-- **Phase 1 is complete and verified.** PR **#21** (`feat/p1-scaffold-mock` → `dev`) is **OPEN and
-  UNMERGED**, awaiting builder review. Until it merges, branch new work off
-  `feat/p1-scaffold-mock`, not `dev`.
-- **Phase 2 (Fireworks) is APPROVED to spend credits.** Daytona/Phase 3 is **NOT** approved yet.
-- The builder supplied `Vera_data/` (untracked, repo root): the real 9,994-row Superstore CSV plus a
-  17-question answer key. All 17 were re-verified with pandas. Superstore replaces the Phase 1
-  synthetic CSV as the one demo dataset; the synthetic one is demoted to a test fixture.
-- The **date profiler** is the centrepiece of Phase 2 — see CP-2 in `tasks/checkpoints.md` for the
-  full reasoning and the exact numbers. Short version: `OrderDate` is uniformly DD/MM/YYYY; naive
-  parsing silently drops 5,952 of 9,994 rows and reports 2018 Q3 sales as $50,517.26 instead of
-  $143,787.36. A deterministic profiler proves the format from the data and shows that evidence.
-- The **Phase 1 UI was rejected by the builder.** A redesign is in scope, driven by the Obsidian
-  vault above.
+**The demo is at 3:30pm PDT today. Check the clock before you plan anything.**
+
+Read **CP-6 in `tasks/checkpoints.md` first** — it is the full handover and it is current.
+
+Short version:
+
+- **Everything works, live.** Fireworks → Daytona → safeguard, verified end to end on the real
+  9,994-row file (**143787.36**). ElevenLabs narration confirmed live in a browser. Braintrust
+  **100% vs 47.6%**. Landing at `/welcome`, keynote deck at `/`, cold open at `/open`.
+- Branch **`feat/p2-fireworks`** holds it all. **PR #22 is open against `dev`, unmerged.**
+  PR #21 is merged. Repo is **public**.
+- 83 tests pass, 5 skipped. Live tests are gated behind `VERA_LIVE=1` and never spend on
+  `pnpm test`.
+- **All four sponsor APIs are approved and proven.** Fireworks, Daytona, Braintrust, ElevenLabs.
+- **Agent `polish` (codex, workspace `wE`, branch `p7/polish`) is running right now** on: stop
+  button, sponsor marks on the working screen, alignment pass, voice orb, benchmark panel. Merge
+  what it pushes and verify it yourself in a browser.
+
+**Six recent fixes you must not regress** — chips run on click, light is the default theme,
+evidence examples are deduped, figures display at 2dp, the hero carries a plain-English `headline`
+(no code jargon), and `lib/deck.ts` narration is written in an analyst's voice rather than reading
+the slides. CP-6 explains each.
+
+**Sandbox hygiene:** after any live session, delete the sandbox or it keeps burning:
+`set -a; . ./.env.local; set +a; VERA_LIVE=1 VERA_SANDBOX_ID=<id> pnpm vitest run tests/reap.live.test.ts`
+
+**Two open questions the builder has not answered** — do not decide these alone: whether to move
+the landing page from `/welcome` to `/`, and whether to retry fetching official vendor logos for
+the powered-by strip.
+
 
 ## Fleet
 

@@ -1,0 +1,81 @@
+/*
+ * Scoped to the landing page only — the shared globals.css is being edited by
+ * other agents right now, so nothing here leaks out of components/landing/**.
+ */
+
+.marquee {
+  /* Both edges fade out so the loop seam is never visible. */
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    black 8%,
+    black 92%,
+    transparent
+  );
+}
+
+.track {
+  animation: landing-marquee 48s linear infinite;
+}
+
+.logo {
+  display: block;
+  flex: none;
+  background-color: currentColor;
+  mask-position: center;
+  mask-repeat: no-repeat;
+  mask-size: contain;
+}
+
+/*
+ * Daytona ships a glyph, not a wordmark — the other three are lockups that
+ * already carry their name. The glyph is set square and slightly shorter than
+ * the wordmarks' cap height so it does not out-weigh them, and the name is set
+ * beside it in our own type.
+ */
+.daytonaLogo {
+  width: 1.4375rem;
+  height: 1.4375rem;
+  mask-image: url("/logos/daytona.svg");
+}
+
+.fireworksLogo {
+  width: 10.25rem;
+  height: 1.3125rem;
+  mask-image: url("/logos/fireworks.svg");
+}
+
+.braintrustLogo {
+  width: 9.1875rem;
+  height: 1.4375rem;
+  mask-image: url("/logos/braintrust.svg");
+}
+
+.elevenLabsLogo {
+  width: 10.125rem;
+  height: 1.3125rem;
+  mask-image: url("/logos/elevenlabs.svg");
+}
+
+.marquee:hover .track,
+.marquee:focus-within .track {
+  animation-play-state: paused;
+}
+
+@keyframes landing-marquee {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-100%, 0, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .track {
+    animation: none;
+  }
+  .marquee {
+    overflow-x: auto;
+  }
+}

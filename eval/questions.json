@@ -1,166 +1,216 @@
 {
-  "dataset": "data/demo-business.csv",
+  "dataset": "data/superstore.csv",
   "scoring": {
     "type": "numeric_relative_epsilon",
-    "relative_epsilon": 1e-06,
+    "relative_epsilon": 0.0001,
     "absolute_floor": 1e-09,
-    "rule": "pass if abs(actual - expected) <= max(absolute_floor, relative_epsilon * abs(expected))"
+    "rule": "pass if abs(actual - expected) <= max(absolute_floor, relative_epsilon * abs(expected)); strings compared case-insensitively after trimming"
   },
-  "headline_question_id": "q04_emea_q3_2025_gross_margin_pct",
-  "story": "EMEA's gross margin collapses in Q3 2025 (driven by Core COGS spike) while company-wide revenue still grows.",
-  "meta": {
-    "top_region_2025": "North America"
+  "braintrust_mapping": {
+    "input": "input",
+    "expected": "expected"
   },
+  "headline_question_id": "q18_sales_2018_q3",
+  "story": "OrderDate is uniformly DD/MM/YYYY. A naive month-first parse silently drops 5,952 rows, so 2018 Q3 sales reads $50,517.26 instead of the correct $143,787.36.",
+  "baseline_fairness": "Vera's model only ever sees the schema profile plus sample rows — never the 2.3 MB file. The no-execution baseline gets identical context and is simply not allowed to run code. Same prompt, one executes.",
   "questions": [
     {
-      "id": "q01_total_revenue",
-      "question": "What is total revenue across the entire dataset?",
-      "expected": 11818726.0,
-      "unit": "USD",
-      "difficulty": "trap",
-      "trap": true,
-      "notes": "Fails if currency string '$12,400' is not parsed; naive string concat / skip / coerce errors.",
-      "how_computed": "Clean revenue (strip $ and commas), drop duplicate rows, sum revenue."
-    },
-    {
-      "id": "q02_total_units",
-      "question": "What is the total units sold across all rows (ignoring blank unit cells)?",
-      "expected": 139928.0,
-      "unit": "units",
-      "difficulty": "trap",
-      "trap": true,
-      "notes": "One blank units cell; must coerce blanks to NaN and sum with skipna.",
-      "how_computed": "Clean + sum(units, skipna=True)."
-    },
-    {
-      "id": "q03_na_plus_jan_2025_revenue",
-      "question": "What was North America Plus revenue in January 2025?",
-      "expected": 71725.0,
-      "unit": "USD",
-      "difficulty": "trap",
-      "trap": true,
-      "notes": "Exact duplicate row exists for this key; summing without drop_duplicates double-counts.",
-      "how_computed": "drop_duplicates then filter month/region/product_line and read revenue."
-    },
-    {
-      "id": "q04_emea_q3_2025_gross_margin_pct",
-      "question": "What was EMEA's gross margin percentage in Q3 2025?",
-      "expected": 35.898,
-      "unit": "percent",
-      "difficulty": "hard",
-      "trap": false,
-      "notes": "Headline demo question \u2014 margin collapse while topline grows.",
-      "how_computed": "(sum(revenue)-sum(cogs))/sum(revenue)*100 for region=EMEA and month in 2025-07..09."
-    },
-    {
-      "id": "q05_emea_core_q3_2025_gross_margin_pct",
-      "question": "What was EMEA Core's gross margin percentage in Q3 2025?",
-      "expected": 5.3163,
-      "unit": "percent",
-      "difficulty": "hard",
-      "trap": false,
-      "notes": "The collapse is concentrated in Core.",
-      "how_computed": "Same as q04 filtered to product_line=Core."
-    },
-    {
-      "id": "q06_emea_q2_2025_gross_margin_pct",
-      "question": "What was EMEA's gross margin percentage in Q2 2025?",
-      "expected": 48.3407,
-      "unit": "percent",
-      "difficulty": "medium",
-      "trap": false,
-      "notes": "Healthy baseline before the Q3 collapse.",
-      "how_computed": "(sum(rev)-sum(cogs))/sum(rev)*100 for EMEA months 2025-04..06."
-    },
-    {
-      "id": "q07_company_q3_vs_q2_2025_revenue_growth_pct",
-      "question": "By what percentage did company-wide revenue grow from Q2 2025 to Q3 2025?",
-      "expected": 3.6321,
-      "unit": "percent",
-      "difficulty": "medium",
-      "trap": false,
-      "notes": "Shows topline still growing while EMEA margin collapses.",
-      "how_computed": "(Q3_rev - Q2_rev) / Q2_rev * 100 for all regions."
-    },
-    {
-      "id": "q08_apac_enterprise_mar_2024_revenue",
-      "question": "What was APAC Enterprise revenue in March 2024?",
-      "expected": 36960.0,
-      "unit": "USD",
-      "difficulty": "trap",
-      "trap": true,
-      "notes": "Month written as '03/2024' \u2014 filters on '2024-03' miss it without normalization.",
-      "how_computed": "Normalize month formats then filter."
-    },
-    {
-      "id": "q09_na_core_jun_2024_revenue",
-      "question": "What was North America Core revenue in June 2024?",
-      "expected": 12400.0,
+      "id": "q01_total_sales",
+      "input": "What were total sales across the whole dataset?",
+      "expected": 2297200.86,
       "unit": "USD",
       "difficulty": "easy",
       "trap": false,
-      "notes": "Stored as '$12,400' in the CSV.",
-      "how_computed": "Parse currency string to 12400."
+      "how_computed": "sum(Sales)"
     },
     {
-      "id": "q10_total_cogs",
-      "question": "What is total COGS across the entire dataset?",
-      "expected": 6167201.4,
+      "id": "q02_total_profit",
+      "input": "What was total profit?",
+      "expected": 286397.02,
       "unit": "USD",
       "difficulty": "easy",
       "trap": false,
-      "notes": "Straightforward after cleaning; duplicate must be dropped.",
-      "how_computed": "drop_duplicates; sum(cogs)."
+      "how_computed": "sum(Profit)"
     },
     {
-      "id": "q11_total_marketing_spend",
-      "question": "What is total marketing spend across the entire dataset (ignoring blank cells)?",
-      "expected": 1100649.44,
-      "unit": "USD",
-      "difficulty": "medium",
+      "id": "q03_profit_margin_pct",
+      "input": "What was the overall profit margin percentage?",
+      "expected": 12.47,
+      "unit": "percent",
+      "difficulty": "easy",
       "trap": false,
-      "notes": "One blank marketing_spend cell.",
-      "how_computed": "sum(marketing_spend, skipna=True) after cleaning."
+      "how_computed": "sum(Profit)/sum(Sales)*100"
     },
     {
-      "id": "q12_top_region_2025_revenue",
-      "question": "Which region had the highest total revenue in 2025, and what was that total?",
-      "expected": 2626491.0,
-      "unit": "USD",
-      "difficulty": "medium",
+      "id": "q04_region_highest_sales",
+      "input": "Which region had the highest sales?",
+      "expected": "West",
+      "unit": "label",
+      "difficulty": "easy",
       "trap": false,
-      "notes": "Expected region label: North America. Scorer checks the numeric total.",
-      "how_computed": "Filter 2025-*; groupby region sum revenue; take max."
+      "how_computed": "groupby(Region).Sales.sum().idxmax"
     },
     {
-      "id": "q13_emea_core_q3_2025_units",
-      "question": "How many Core units did EMEA sell in Q3 2025?",
-      "expected": 3655.0,
+      "id": "q05_region_lowest_sales",
+      "input": "Which region had the lowest sales?",
+      "expected": "South",
+      "unit": "label",
+      "difficulty": "easy",
+      "trap": false,
+      "how_computed": "groupby(Region).Sales.sum().idxmin"
+    },
+    {
+      "id": "q06_west_sales",
+      "input": "What were total sales in the West region?",
+      "expected": 725457.82,
+      "unit": "USD",
+      "difficulty": "easy",
+      "trap": false,
+      "how_computed": "West sales"
+    },
+    {
+      "id": "q07_most_profitable_category",
+      "input": "Which product category was most profitable?",
+      "expected": "Technology",
+      "unit": "label",
+      "difficulty": "easy",
+      "trap": false,
+      "how_computed": "groupby(Category).Profit.sum().idxmax"
+    },
+    {
+      "id": "q08_technology_profit",
+      "input": "How much profit did the Technology category generate?",
+      "expected": 145454.95,
+      "unit": "USD",
+      "difficulty": "easy",
+      "trap": false,
+      "how_computed": "Technology profit"
+    },
+    {
+      "id": "q09_worst_subcategory",
+      "input": "Which sub-category lost the most money?",
+      "expected": "Tables",
+      "unit": "label",
+      "difficulty": "easy",
+      "trap": false,
+      "how_computed": "groupby(Sub-Category).Profit.sum().idxmin"
+    },
+    {
+      "id": "q10_tables_profit",
+      "input": "How much profit did the Tables sub-category make (a loss)?",
+      "expected": -17725.48,
+      "unit": "USD",
+      "difficulty": "easy",
+      "trap": false,
+      "how_computed": "Tables profit"
+    },
+    {
+      "id": "q11_top_segment",
+      "input": "Which customer segment generated the most sales?",
+      "expected": "Consumer",
+      "unit": "label",
+      "difficulty": "easy",
+      "trap": false,
+      "how_computed": "groupby(Segment).Sales.sum().idxmax"
+    },
+    {
+      "id": "q12_avg_discount",
+      "input": "What was the average discount across all orders?",
+      "expected": 0.1562,
+      "unit": "ratio",
+      "difficulty": "easy",
+      "trap": false,
+      "how_computed": "mean(Discount)"
+    },
+    {
+      "id": "q13_total_quantity",
+      "input": "How many total units (quantity) were sold?",
+      "expected": 37873,
       "unit": "units",
       "difficulty": "easy",
       "trap": false,
-      "notes": "Volume still grew during the margin collapse.",
-      "how_computed": "Sum units for EMEA+Core+Q3 2025."
+      "how_computed": "sum(Quantity)"
     },
     {
-      "id": "q14_company_2024_gross_margin_pct",
-      "question": "What was company-wide gross margin percentage in 2024?",
-      "expected": 48.3983,
+      "id": "q14_unique_orders",
+      "input": "How many unique orders are in the dataset?",
+      "expected": 5009,
+      "unit": "orders",
+      "difficulty": "trap",
+      "trap": true,
+      "notes": "9,994 rows but only 5,009 unique OrderIDs. A model that never executes often conflates rows with orders.",
+      "how_computed": "nunique(OrderID)"
+    },
+    {
+      "id": "q15_lowest_margin_category",
+      "input": "Which category had the lowest profit margin?",
+      "expected": "Furniture",
+      "unit": "label",
+      "difficulty": "medium",
+      "trap": false,
+      "how_computed": "min margin by category (Furniture)"
+    },
+    {
+      "id": "q16_sales_2019",
+      "input": "What were total sales in 2019?",
+      "expected": 733215.26,
+      "unit": "USD",
+      "difficulty": "easy",
+      "trap": false,
+      "notes": "Uses the clean OrderYear column, not OrderDate.",
+      "how_computed": "OrderYear==2019 sales"
+    },
+    {
+      "id": "q17_sales_growth_2018_2019",
+      "input": "What was sales growth from 2018 to 2019?",
+      "expected": 20.36,
       "unit": "percent",
-      "difficulty": "easy",
+      "difficulty": "medium",
       "trap": false,
-      "notes": "Baseline healthy year.",
-      "how_computed": "(sum(rev)-sum(cogs))/sum(rev)*100 for 2024-*."
+      "how_computed": "(yr2019/yr2018-1)*100 using OrderYear"
     },
     {
-      "id": "q15_emea_dec_2025_headcount",
-      "question": "What was total EMEA headcount in December 2025 (sum across product lines)?",
-      "expected": 36.0,
-      "unit": "people",
-      "difficulty": "easy",
-      "trap": false,
-      "notes": "Headcount is split across product lines per region-month.",
-      "how_computed": "Sum headcount for EMEA + 2025-12."
+      "id": "q18_sales_2018_q3",
+      "input": "What were total sales in Q3 2018?",
+      "expected": 143787.36,
+      "naive_answer": 50517.26,
+      "unit": "USD",
+      "difficulty": "trap",
+      "trap": true,
+      "notes": "Requires parsing OrderDate with format='%d/%m/%Y'. Naive month-first pd.to_datetime silently drops 5,952 rows.",
+      "how_computed": "to_datetime(OrderDate, format='%d/%m/%Y'); filter year==2018 & quarter==3; sum(Sales)"
+    },
+    {
+      "id": "q19_sales_july_2018",
+      "input": "What were total sales in July 2018?",
+      "expected": 39261.96,
+      "naive_answer": 16571.28,
+      "unit": "USD",
+      "difficulty": "trap",
+      "trap": true,
+      "notes": "Monthly date-derived figure. Same DD/MM trap as Q3.",
+      "how_computed": "to_datetime(OrderDate, format='%d/%m/%Y'); filter year==2018 & month==7; sum(Sales)"
+    },
+    {
+      "id": "q20_sales_2017_q4",
+      "input": "What were total sales in Q4 2017?",
+      "expected": 182297.01,
+      "naive_answer": 34734.45,
+      "unit": "USD",
+      "difficulty": "trap",
+      "trap": true,
+      "notes": "Another quarterly date-derived figure that only comes out right with day-first parsing.",
+      "how_computed": "to_datetime(OrderDate, format='%d/%m/%Y'); filter year==2017 & quarter==4; sum(Sales)"
+    },
+    {
+      "id": "q21_row_count",
+      "input": "How many rows (line items) are in the dataset?",
+      "expected": 9994,
+      "unit": "rows",
+      "difficulty": "trap",
+      "trap": true,
+      "notes": "Paired with q14: 9,994 rows vs 5,009 unique OrderIDs. No-execution models often conflate them.",
+      "how_computed": "len(df)"
     }
   ]
 }
