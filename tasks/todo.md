@@ -43,7 +43,7 @@ runs a full demo. Parallelisable across 3 agents (UI / API+types / data).
 
 ## Phase 6 — Voice + cold open · P1 · 💸 (P6.1 only)
 
-- [ ] #17 P6.1 — ElevenLabs speaks the verified finding
+- [x] #17 P6.1 — ElevenLabs speaks the verified finding
 - [ ] #18 P6.2 — Cold open: wrong-AI vs Vera, first 30 seconds (💚 free)
 
 ## Phase 7 — Polish + submit · P2 · 💚 free
