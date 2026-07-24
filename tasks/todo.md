@@ -12,13 +12,13 @@ Repo: https://github.com/abhaypadmanabhan/vera (private) · base branch `dev` ·
 The whole demo, end to end, with nothing real behind it. Exit gate: `rm -f .env.local && VERA_MOCK=1 pnpm dev`
 runs a full demo. Parallelisable across 3 agents (UI / API+types / data).
 
-- [ ] #1 P1.1 — Next.js scaffold: TS strict, Tailwind, shadcn/ui, mock-mode env
-- [ ] #2 P1.2 — Domain types + the single swappable mock module
-- [ ] #3 P1.3 — Demo business CSV (24 months, realistic, some messy rows)
-- [ ] #4 P1.4 — UI: CSV dropzone + question box
-- [ ] #5 P1.5 — UI: live 4-stage reasoning timeline
-- [ ] #6 P1.6 — UI: result card — number + code + source cells + unverified state
-- [ ] #7 P1.7 — /api/analyze streaming route wired to the mock engine
+- [x] #1 P1.1 — Next.js scaffold: TS strict, Tailwind, shadcn/ui, mock-mode env
+- [x] #2 P1.2 — Domain types + the single swappable mock module
+- [x] #3 P1.3 — Demo business CSV (24 months, realistic, some messy rows)
+- [x] #4 P1.4 — UI: CSV dropzone + question box
+- [x] #5 P1.5 — UI: live 4-stage reasoning timeline
+- [x] #6 P1.6 — UI: result card — number + code + source cells + unverified state
+- [x] #7 P1.7 — /api/analyze streaming route wired to the mock engine
 
 ## Phase 2 — Fireworks brain · P0 · 💸 SPENDS CREDITS (needs explicit go)
 
