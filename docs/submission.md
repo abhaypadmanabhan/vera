@@ -1,6 +1,6 @@
 # Devpost submission — Vera
 
-Draft. Numbers marked `‹TBC›` land when the Braintrust run finishes.
+Draft. Braintrust numbers are final and filled in.
 Submission due **3:30pm PDT**. Checklist at the bottom.
 
 ---
@@ -21,6 +21,15 @@ does arithmetic by pattern-matching, states the result with total confidence, an
 to check it. So the people who most need the answer are the least able to trust it.
 
 The failure is not that AI is bad at maths. It is that **you cannot see where the number came from.**
+
+## How she presents it
+
+Vera does not hand you a page. She **presents**, like an analyst walking you through a keynote:
+the question, the headline figure, one slide per fact she proved about your data, the code that
+ran, the cells it read, and a summary dashboard as the finale. A presenter marker moves across each
+slide to the thing she is talking about, and she says it out loud. When she stops, you can jump to
+any slide — and if your follow-up is something she already covered, she goes back to that slide and
+references it instead of starting over.
 
 ## What Vera does
 
@@ -67,9 +76,17 @@ We are careful here, because it is the whole pitch and a judge should probe it.
 1. **Live, per answer — real.** The number was produced by code that actually executed on the real
    cells of your file. We show the code, the exit status, and the cells it read. If it cannot be
    traced, no number is released.
-2. **Aggregate, measured offline.** On our fixed 21-question benchmark, Vera scores **‹TBC›%** vs
-   **‹TBC›%** for a no-execution baseline. That is a pre-computed dashboard figure, not a
-   per-answer guarantee.
+2. **Aggregate, measured offline.** On our fixed 21-question benchmark, Vera scores **100%
+   (21/21)** vs **47.6%** for a no-execution baseline. That is a pre-computed dashboard figure, not
+   a per-answer guarantee.
+
+   The interesting number is the baseline's. Given *identical* context — the same schema profile and
+   the same sample rows — and asked only to not execute code, it failed **all three** date-derived
+   questions, plus total profit, profit margin, West sales, Technology profit, the Tables loss,
+   average discount, 2019 sales and 2018→2019 growth. It got rows-vs-unique-orders right. Vera's
+   100% is not "the model is smart"; it is "the model wrote code and the code ran on the real
+   cells."
+
 
 **What we do not claim:** that Vera can tell you a cleanly-executing number is the *wrong answer to
 your question*. At demo time there is no answer key. What she can do is refuse to release a number
@@ -116,7 +133,8 @@ sandbox. Runs locally — serverless timeouts would kill the sandbox call.
   carries the profiler's proven facts, never the whole file.
 - **Braintrust — the proof.** Offline eval over 21 hand-verified questions, Vera versus a
   no-execution baseline on identical context, numeric-tolerant scoring. Produces the headline
-  accuracy figure and the dashboard. ‹dashboard link TBC›
+  accuracy figure and the dashboard: **Vera 100% vs baseline 47.6%**.
+  Dashboard: https://www.braintrust.dev/app/Padzy/p/Vera%20Accuracy%20Benchmark/experiments/vera-vs-baseline-2026-07-24T20-28-28-903Z
 - **ElevenLabs — the voice.** Vera speaks the finding aloud. Only a *verified* finding can be
   spoken — that is enforced by the type system, not by convention.
 - **CodeRabbit** (dev-time): reviewed every pull request on this repo.
@@ -168,8 +186,9 @@ the cross-check evidence.
 **1:10–1:30 — the refusal.** Force a run she cannot trace. **No number appears.** "She'd rather tell
 you she doesn't know."
 
-**1:30–1:50 — the proof at scale.** Braintrust dashboard: **‹TBC›% vs ‹TBC›%** on 21 questions
-against a no-execution baseline with identical context.
+**1:30–1:50 — the proof at scale.** Braintrust dashboard: **100% vs 47.6%** on 21 questions
+against a no-execution baseline with identical context. Name what the baseline missed — all three
+date questions, total profit, margin, the Tables loss.
 
 **1:50–2:00 — close.** "Every number, computed and traceable. Vera."
 
@@ -183,6 +202,6 @@ against a no-execution baseline with identical context.
 - [ ] Technical architecture
 - [ ] Sponsor tools + how each is integrated
 - [x] Public GitHub repo — https://github.com/abhaypadmanabhan/vera (made public 13:18 PDT)
-- [ ] Braintrust figures and dashboard link filled in (replace every `‹TBC›`)
+- [x] Braintrust figures and dashboard link filled in
 - [ ] Backup demo clip recorded in case live fails on stage
 - [ ] CodeRabbit comments on both PRs triaged
