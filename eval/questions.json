@@ -1,0 +1,166 @@
+{
+  "dataset": "data/demo-business.csv",
+  "scoring": {
+    "type": "numeric_relative_epsilon",
+    "relative_epsilon": 1e-06,
+    "absolute_floor": 1e-09,
+    "rule": "pass if abs(actual - expected) <= max(absolute_floor, relative_epsilon * abs(expected))"
+  },
+  "headline_question_id": "q04_emea_q3_2025_gross_margin_pct",
+  "story": "EMEA's gross margin collapses in Q3 2025 (driven by Core COGS spike) while company-wide revenue still grows.",
+  "meta": {
+    "top_region_2025": "North America"
+  },
+  "questions": [
+    {
+      "id": "q01_total_revenue",
+      "question": "What is total revenue across the entire dataset?",
+      "expected": 11818726.0,
+      "unit": "USD",
+      "difficulty": "trap",
+      "trap": true,
+      "notes": "Fails if currency string '$12,400' is not parsed; naive string concat / skip / coerce errors.",
+      "how_computed": "Clean revenue (strip $ and commas), drop duplicate rows, sum revenue."
+    },
+    {
+      "id": "q02_total_units",
+      "question": "What is the total units sold across all rows (ignoring blank unit cells)?",
+      "expected": 139928.0,
+      "unit": "units",
+      "difficulty": "trap",
+      "trap": true,
+      "notes": "One blank units cell; must coerce blanks to NaN and sum with skipna.",
+      "how_computed": "Clean + sum(units, skipna=True)."
+    },
+    {
+      "id": "q03_na_plus_jan_2025_revenue",
+      "question": "What was North America Plus revenue in January 2025?",
+      "expected": 71725.0,
+      "unit": "USD",
+      "difficulty": "trap",
+      "trap": true,
+      "notes": "Exact duplicate row exists for this key; summing without drop_duplicates double-counts.",
+      "how_computed": "drop_duplicates then filter month/region/product_line and read revenue."
+    },
+    {
+      "id": "q04_emea_q3_2025_gross_margin_pct",
+      "question": "What was EMEA's gross margin percentage in Q3 2025?",
+      "expected": 35.898,
+      "unit": "percent",
+      "difficulty": "hard",
+      "trap": false,
+      "notes": "Headline demo question \u2014 margin collapse while topline grows.",
+      "how_computed": "(sum(revenue)-sum(cogs))/sum(revenue)*100 for region=EMEA and month in 2025-07..09."
+    },
+    {
+      "id": "q05_emea_core_q3_2025_gross_margin_pct",
+      "question": "What was EMEA Core's gross margin percentage in Q3 2025?",
+      "expected": 5.3163,
+      "unit": "percent",
+      "difficulty": "hard",
+      "trap": false,
+      "notes": "The collapse is concentrated in Core.",
+      "how_computed": "Same as q04 filtered to product_line=Core."
+    },
+    {
+      "id": "q06_emea_q2_2025_gross_margin_pct",
+      "question": "What was EMEA's gross margin percentage in Q2 2025?",
+      "expected": 48.3407,
+      "unit": "percent",
+      "difficulty": "medium",
+      "trap": false,
+      "notes": "Healthy baseline before the Q3 collapse.",
+      "how_computed": "(sum(rev)-sum(cogs))/sum(rev)*100 for EMEA months 2025-04..06."
+    },
+    {
+      "id": "q07_company_q3_vs_q2_2025_revenue_growth_pct",
+      "question": "By what percentage did company-wide revenue grow from Q2 2025 to Q3 2025?",
+      "expected": 3.6321,
+      "unit": "percent",
+      "difficulty": "medium",
+      "trap": false,
+      "notes": "Shows topline still growing while EMEA margin collapses.",
+      "how_computed": "(Q3_rev - Q2_rev) / Q2_rev * 100 for all regions."
+    },
+    {
+      "id": "q08_apac_enterprise_mar_2024_revenue",
+      "question": "What was APAC Enterprise revenue in March 2024?",
+      "expected": 36960.0,
+      "unit": "USD",
+      "difficulty": "trap",
+      "trap": true,
+      "notes": "Month written as '03/2024' \u2014 filters on '2024-03' miss it without normalization.",
+      "how_computed": "Normalize month formats then filter."
+    },
+    {
+      "id": "q09_na_core_jun_2024_revenue",
+      "question": "What was North America Core revenue in June 2024?",
+      "expected": 12400.0,
+      "unit": "USD",
+      "difficulty": "easy",
+      "trap": false,
+      "notes": "Stored as '$12,400' in the CSV.",
+      "how_computed": "Parse currency string to 12400."
+    },
+    {
+      "id": "q10_total_cogs",
+      "question": "What is total COGS across the entire dataset?",
+      "expected": 6167201.4,
+      "unit": "USD",
+      "difficulty": "easy",
+      "trap": false,
+      "notes": "Straightforward after cleaning; duplicate must be dropped.",
+      "how_computed": "drop_duplicates; sum(cogs)."
+    },
+    {
+      "id": "q11_total_marketing_spend",
+      "question": "What is total marketing spend across the entire dataset (ignoring blank cells)?",
+      "expected": 1100649.44,
+      "unit": "USD",
+      "difficulty": "medium",
+      "trap": false,
+      "notes": "One blank marketing_spend cell.",
+      "how_computed": "sum(marketing_spend, skipna=True) after cleaning."
+    },
+    {
+      "id": "q12_top_region_2025_revenue",
+      "question": "Which region had the highest total revenue in 2025, and what was that total?",
+      "expected": 2626491.0,
+      "unit": "USD",
+      "difficulty": "medium",
+      "trap": false,
+      "notes": "Expected region label: North America. Scorer checks the numeric total.",
+      "how_computed": "Filter 2025-*; groupby region sum revenue; take max."
+    },
+    {
+      "id": "q13_emea_core_q3_2025_units",
+      "question": "How many Core units did EMEA sell in Q3 2025?",
+      "expected": 3655.0,
+      "unit": "units",
+      "difficulty": "easy",
+      "trap": false,
+      "notes": "Volume still grew during the margin collapse.",
+      "how_computed": "Sum units for EMEA+Core+Q3 2025."
+    },
+    {
+      "id": "q14_company_2024_gross_margin_pct",
+      "question": "What was company-wide gross margin percentage in 2024?",
+      "expected": 48.3983,
+      "unit": "percent",
+      "difficulty": "easy",
+      "trap": false,
+      "notes": "Baseline healthy year.",
+      "how_computed": "(sum(rev)-sum(cogs))/sum(rev)*100 for 2024-*."
+    },
+    {
+      "id": "q15_emea_dec_2025_headcount",
+      "question": "What was total EMEA headcount in December 2025 (sum across product lines)?",
+      "expected": 36.0,
+      "unit": "people",
+      "difficulty": "easy",
+      "trap": false,
+      "notes": "Headcount is split across product lines per region-month.",
+      "how_computed": "Sum headcount for EMEA + 2025-12."
+    }
+  ]
+}
