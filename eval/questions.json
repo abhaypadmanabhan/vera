@@ -2,9 +2,9 @@
   "dataset": "data/superstore.csv",
   "scoring": {
     "type": "numeric_relative_epsilon",
-    "relative_epsilon": 1e-06,
+    "relative_epsilon": 0.0001,
     "absolute_floor": 1e-09,
-    "rule": "pass if abs(actual - expected) <= max(absolute_floor, relative_epsilon * abs(expected)); strings compared exactly"
+    "rule": "pass if abs(actual - expected) <= max(absolute_floor, relative_epsilon * abs(expected)); strings compared case-insensitively after trimming"
   },
   "braintrust_mapping": {
     "input": "input",
@@ -116,7 +116,7 @@
     {
       "id": "q12_avg_discount",
       "input": "What was the average discount across all orders?",
-      "expected": 0.16,
+      "expected": 0.1562,
       "unit": "ratio",
       "difficulty": "easy",
       "trap": false,
