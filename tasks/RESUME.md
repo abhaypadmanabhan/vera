@@ -1,7 +1,7 @@
 # RESUME PROMPT — paste this into a fresh Claude Code session
 
 Everything below the line is the handoff. It assumes zero conversation history. Regenerated at
-every checkpoint — last updated **CP-2, 2026-07-24 12:05 PDT**.
+every checkpoint — last updated **CP-3, 2026-07-24 12:25 PDT**.
 
 ---
 

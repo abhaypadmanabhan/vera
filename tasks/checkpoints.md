@@ -79,6 +79,59 @@ naive pd.to_datetime() → NaT (dropped):   5,952   (60% of the data, no error r
   `/Users/abhayp/Documents/Obsidian Vault/UI-UX` (the builder's Obsidian vault). The UI agent must
   read the vault itself, not just the derived `DESIGN.md`.
 
-## CP-3 — Phase 2 · IN PROGRESS
+## CP-3 — Phase 2 · IN PROGRESS · branch `feat/p2-fireworks`
+
+**PR #21 (Phase 1) was MERGED into `dev`** at builder's approval. Phase 2 branch is
+`feat/p2-fireworks`, cut from the Phase 1 head.
+
+### Landed by the orchestrator (verified, merged, pushed)
+
+- **`lib/profile/profiler.ts` — the deterministic schema profiler. This is the differentiator.**
+  Proven on the real file: `OrderDate` → `%d/%m/%Y`, 5,952 supporting rows, 0 contradicting. It
+  also caught `ShipDate` (6,096). It **refuses to guess** when a column reads validly both ways.
+- **`lib/datasets.ts`** — server-side registry, reads the 2.3 MB CSV off disk, profiles once per
+  process, exposes only `DatasetSummary` (schema + preview) to the client.
+- **Wire contract changed:** the browser POSTs `{ question, datasetId, upload? }`. The CSV no
+  longer crosses the wire. `AnalysisRequest` now carries a `ResolvedDataset`. Route, hook, mock
+  engine and all tests migrated.
+- **`isProven(evidence)` guard** — found by the eval agent: a fully-ambiguous column returns
+  supportingRows 0 AND contradictingRows 0, so any consumer checking only `contradictingRows === 0`
+  treated "unproven" as "proven". The mock engine had exactly that bug. Fixed + regression tests.
+- **`DESIGN.md` v2** — v1 was rejected by the builder as a generic dark dashboard with weak
+  hierarchy and the wrong layout. v2 commits to one idea: **Vera is an auditor marking up your data
+  in red pen** — paper/ink/one red mark, Newsreader serif + Geist Mono and no sans at all, a
+  single-column document of numbered exhibits with the reasoning trace as a left margin rail. New
+  **Exhibit C** renders the schema evidence with its counts. Anti-goals list is explicit.
+
+### Merged from agents
+
+- **`p2/eval` (cursor, zero spend) — DONE, merged.** Benchmark rebuilt on Superstore: 21 questions,
+  all recomputed and verified by the orchestrator. Three date-trap questions now carry the naive
+  answer alongside the correct one:
+  | Question | Correct | Naive month-first |
+  |---|---|---|
+  | 2018 Q3 sales | 143787.36 | 50517.26 |
+  | July 2018 sales | 39261.96 | 16571.28 |
+  | 2017 Q4 sales | 182297.01 | 34734.45 |
+  Plus rows-vs-unique-orders (9,994 rows / 5,009 orders). Phase 1 synthetic CSV moved to
+  `tests/fixtures/mini-business.csv`; `scripts/build-demo-data.mjs` deleted. `eval/README.md`
+  documents why the baseline is fair: Vera's model only ever sees the profile + sample rows, never
+  the 2.3 MB file, so the no-execution baseline gets identical context and simply cannot run code.
+  Agent torn down after merge.
+
+### Still running
+
+- **`p2/fireworks` (codex) — SPENDING FIREWORKS CREDITS.** Issues #8/#9/#10: client + confirmed
+  model id, codegen with structured output driven by the profile, retry loop against an injected
+  fake executor. Explicitly forbidden from touching Daytona.
+- **`p2/ui` (claude-account-2, Opus) — zero spend.** Full redesign against `DESIGN.md` v2, with the
+  vault reading made mandatory in its brief.
+
+### Known loose end
+
+`data/demo.ts` survives as a thin stub because the old `app/page.tsx` still imports it. The UI agent
+is removing that import; **delete `data/demo.ts` at the p2/ui merge.**
+
+## CP-4 — Phase 3 · NOT STARTED · ⚠️ Daytona NOT approved yet
 
 _(next entry appended here)_
