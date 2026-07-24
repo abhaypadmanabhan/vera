@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
+import landing from "@/components/landing/landing.module.css";
 import { HowSheWorks } from "@/components/landing/how-she-works";
 import { Hero } from "@/components/landing/hero";
 import { PoweredBy } from "@/components/landing/powered-by";
@@ -44,6 +45,12 @@ export default async function WelcomePage() {
 
   return (
     <main className="mx-auto w-full">
+      {/* Decorative only — behind everything, ignored by assistive tech. */}
+      <div aria-hidden className={landing.backdrop}>
+        <div className={`${landing.wash} ${landing.washOne}`} />
+        <div className={`${landing.wash} ${landing.washTwo}`} />
+      </div>
+
       <Hero questionCount={facts.questionCount} />
       <ThreeAnswers />
       <HowSheWorks />

@@ -71,11 +71,96 @@
   }
 }
 
+/*
+ * The benchmark bars grow to their real width once. Width is the only property
+ * that moves, on the page's own settle curve, delayed to land just behind the
+ * block's fade so the eye reads the label before the bar arrives.
+ */
+.bar {
+  width: var(--percent);
+  animation: landing-bar-grow 900ms var(--ease-settle) both;
+  animation-delay: calc(var(--step, 0) * 90ms + 120ms);
+}
+
+@keyframes landing-bar-grow {
+  from {
+    width: 0%;
+  }
+  to {
+    width: var(--percent);
+  }
+}
+
+/*
+ * The page background. Two very large, very faint accent washes drifting on a
+ * long cycle — enough to keep a white page from reading as dead, far too slow
+ * and too pale to compete with the type. Nothing throbs, nothing spins.
+ */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.wash {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  will-change: transform;
+}
+
+.washOne {
+  top: -22vmax;
+  left: -14vmax;
+  width: 62vmax;
+  height: 62vmax;
+  background: radial-gradient(circle, var(--color-accent) 0%, transparent 68%);
+  opacity: 0.055;
+  animation: landing-drift-one 46s var(--ease-settle) infinite alternate;
+}
+
+.washTwo {
+  right: -20vmax;
+  bottom: -26vmax;
+  width: 54vmax;
+  height: 54vmax;
+  background: radial-gradient(circle, var(--color-accent) 0%, transparent 70%);
+  opacity: 0.045;
+  animation: landing-drift-two 58s var(--ease-settle) infinite alternate;
+}
+
+@keyframes landing-drift-one {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(7vmax, 5vmax, 0) scale(1.12);
+  }
+}
+
+@keyframes landing-drift-two {
+  from {
+    transform: translate3d(0, 0, 0) scale(1.08);
+  }
+  to {
+    transform: translate3d(-6vmax, -4vmax, 0) scale(1);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .track {
     animation: none;
   }
   .marquee {
     overflow-x: auto;
+  }
+  /* The bar keeps its real width; it simply never travels to get there. */
+  .bar {
+    animation: none;
+  }
+  .wash {
+    animation: none;
   }
 }
