@@ -232,6 +232,7 @@ export function DeckPlayer({
               finding={finding}
               dataset={dataset}
               activeFocus={null}
+              speaking={false}
             />
           </div>
         )}
@@ -241,6 +242,7 @@ export function DeckPlayer({
             finding={finding}
             dataset={dataset}
             activeFocus={focus}
+            speaking={veraSpeaking}
           />
         </div>
       </div>
@@ -308,11 +310,13 @@ export function DeckSlide({
   finding,
   dataset,
   activeFocus,
+  speaking = false,
 }: {
   slide: Slide;
   finding: VerifiedFinding;
   dataset: DatasetSummary;
   activeFocus: string | null;
+  speaking?: boolean;
 }) {
   const stageRef = useRef<HTMLDivElement>(null);
   const [halo, setHalo] = useState({ x: 0, y: 0, visible: false });
@@ -351,11 +355,16 @@ export function DeckSlide({
   return (
     <div ref={stageRef} className="deck-slide" data-kind={slide.kind}>
       <div
-        className={cn("presenter-halo", halo.visible && "presenter-halo-visible")}
+        className={cn(
+          "presenter-orb",
+          halo.visible && "presenter-orb-visible",
+          speaking && "presenter-orb-speaking",
+        )}
         style={{ transform: `translate3d(${halo.x}px, ${halo.y}px, 0)` }}
         aria-hidden
       >
-        <span />
+        <span className="presenter-orb-wave" />
+        <span className="presenter-orb-core" />
       </div>
       <SlideContent
         slide={slide}

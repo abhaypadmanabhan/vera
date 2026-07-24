@@ -384,18 +384,14 @@
   opacity: 0.24;
 }
 
-.presenter-halo {
+.presenter-orb {
   position: absolute;
   z-index: 8;
   top: -3.75rem;
   left: -3.75rem;
   width: 7.5rem;
   height: 7.5rem;
-  border: 1px solid color-mix(in oklch, var(--v-accent), transparent 72%);
   border-radius: 50%;
-  box-shadow:
-    inset 0 0 0 1.55rem color-mix(in oklch, var(--v-accent-wash), transparent 48%),
-    inset 0 0 0 2.95rem color-mix(in oklch, var(--v-accent-wash), transparent 70%);
   pointer-events: none;
   opacity: 0;
   transition:
@@ -404,19 +400,83 @@
   will-change: transform;
 }
 
-.presenter-halo span {
+.presenter-orb-wave,
+.presenter-orb-core {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 0.7rem;
-  height: 0.7rem;
   border-radius: 50%;
-  background: var(--v-accent);
   transform: translate3d(-50%, -50%, 0);
 }
 
-.presenter-halo-visible {
+.presenter-orb-wave {
+  width: 5.5rem;
+  height: 5.5rem;
+  border: 1px solid color-mix(in oklch, var(--v-accent), transparent 76%);
+  background: color-mix(in oklch, var(--v-accent-wash), transparent 38%);
+  box-shadow:
+    0 0 0 0.9rem color-mix(in oklch, var(--v-accent-wash), transparent 62%),
+    0 0 2.5rem color-mix(in oklch, var(--v-accent), transparent 82%);
+  animation: presenter-orb-idle 3.6s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+.presenter-orb-core {
+  width: 1.15rem;
+  height: 1.15rem;
+  background: var(--v-accent);
+  box-shadow: 0 0 0 0.45rem color-mix(in oklch, var(--v-accent), transparent 84%);
+}
+
+.presenter-orb-visible {
   opacity: 1;
+}
+
+.presenter-orb-speaking .presenter-orb-wave {
+  animation: presenter-orb-speaking 1.25s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+.presenter-orb-speaking .presenter-orb-core {
+  animation: presenter-orb-core 1.25s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+@keyframes presenter-orb-idle {
+  0%,
+  100% {
+    opacity: 0.7;
+    transform: translate3d(-50%, -50%, 0) scale(0.96);
+  }
+  50% {
+    opacity: 1;
+    transform: translate3d(-50%, -50%, 0) scale(1);
+  }
+}
+
+@keyframes presenter-orb-speaking {
+  0%,
+  100% {
+    opacity: 0.74;
+    transform: translate3d(-50%, -50%, 0) scale(0.94);
+  }
+  42% {
+    opacity: 1;
+    transform: translate3d(-50%, -50%, 0) scale(1.08);
+  }
+  68% {
+    opacity: 0.86;
+    transform: translate3d(-50%, -50%, 0) scale(1.01);
+  }
+}
+
+@keyframes presenter-orb-core {
+  0%,
+  100% {
+    opacity: 0.82;
+    transform: translate3d(-50%, -50%, 0) scale(0.9);
+  }
+  42% {
+    opacity: 1;
+    transform: translate3d(-50%, -50%, 0) scale(1.12);
+  }
 }
 
 .deck-question {
@@ -1087,9 +1147,14 @@
     animation: none;
   }
 
-  .presenter-halo,
+  .presenter-orb,
   .deck-focus,
   .deck-rail-fill {
     transition: none;
+  }
+
+  .presenter-orb-wave,
+  .presenter-orb-core {
+    animation: none;
   }
 }

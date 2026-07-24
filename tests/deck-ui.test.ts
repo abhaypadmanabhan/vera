@@ -122,6 +122,23 @@ describe("deck slide presentation", () => {
     }
   });
 
+  it("shows the presenter orb in its speaking state during audio playback", () => {
+    const slide = buildDeck("What were sales in Q3 2018?", finding, profile).slides[0];
+    const markup = renderToStaticMarkup(
+      createElement(DeckSlide, {
+        slide,
+        finding,
+        dataset,
+        activeFocus: slide.beats[0]?.focus ?? null,
+        speaking: true,
+      }),
+    );
+
+    expect(markup).toContain("presenter-orb-speaking");
+    expect(markup).toContain("presenter-orb-core");
+    expect(markup).toContain("presenter-orb-wave");
+  });
+
   it("keeps the benchmark explicitly separate from the live proof", () => {
     const summary = buildDeck("What were sales in Q3 2018?", finding, profile).slides.at(-1);
     expect(summary).toBeDefined();
