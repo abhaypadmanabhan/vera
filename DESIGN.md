@@ -1,172 +1,134 @@
 # DESIGN.md — Vera
 
-**v2.** v1 was rejected: too generic, weak hierarchy, wrong layout — a dark dashboard like every
-other AI tool. This document replaces it. Derived from the builder's vault at
-`/Users/abhayp/Documents/Obsidian Vault/UI-UX/`. **Read the vault yourself before building** —
-especially `What Makes Design Win`, `Awwwards Teardowns 2026`, `Typography`, `Color Systems`,
-`Motion and Micro-interactions`. This file is the summary; the vault carries the reasoning.
+**v3.** Written from the builder's direct spec. It supersedes v2 (the auditor / red-pen evidence
+document) entirely — where they conflict, **v3 wins**. Read the builder's vault at
+`/Users/abhayp/Documents/Obsidian Vault/UI-UX/` before building, and use the **Mobbin MCP**
+(`search_screens`, `search_flows`, `search_sections`) for real reference screens.
 
 ---
 
-## The one committed idea
+## The brief, in the builder's words
 
-> **Vera is not a dashboard. She is an auditor marking up your data in red pen.**
+> Apple-clean. One tight design system, generous whitespace, a real type scale, minimal colour. No
+> jargon, no walls of text. Every answer is a crisp headline number, one clean chart, and a one-line
+> source — not a paragraph. **The hero screen must look expensive.**
 
-The screen is a **document of evidence**, not a control panel: paper, ink, and one red mark. Every
-other AI tool at this event will be dark glass panels with a mint accent. We are the only one that
-looks like a finding you could hand to a CFO.
+One flawless flow beats five rough ones. Do not over-scope.
 
-The vault's teardown data says the common denominator of winners is *one idea pushed hard, a
-two-colour palette, and typographic craft* — not 3D, not effects. This is that idea.
+## Aesthetic
 
-**The 30-second feeling:** relief that something finally shows its work.
+Apple-clean: calm surfaces, generous negative space, one accent, type doing the work. Nothing
+decorative. If an element does not carry information or afford an action, delete it.
 
-## Anti-goals — reject on sight
+**Anti-goals — reject on sight:** dark glassmorphism · gradient mesh · neon-on-charcoal · dense
+dashboards with six cards above the fold · walls of explanatory text · spinners · emoji · any
+screen that would look identical with a different product's copy in it.
 
-Dark glassmorphism · gradient mesh backgrounds · neon mint/cyan on charcoal · three stacked cards
-in a 2-column grid · glowing borders · "AI sparkle" iconography · centred hero with a subtitle and
-two buttons · any layout that would look identical with a different product's copy in it.
-If a screenshot of this could be any AI SaaS, it has failed.
+## Colour — minimal, and it means something
 
-## Colour — exactly two, plus one mark
-
-Commit to **light**. No dark mode, no theme toggle (vault: anti-scope). Near-black on warm paper
-projects fine — Depo Luxe won SOTD 7.62 on pure black and white.
+Light is the primary mode. Dark must work too, because charts have to read consistently in both
+(`prefers-color-scheme` + a `data-theme` override). Swap token values, never component code.
 
 ```css
---paper:      oklch(0.975 0.008 85);   /* warm off-white — the page */
---paper-deep: oklch(0.945 0.010 85);   /* recessed: exhibits, code blocks */
---ink:        oklch(0.20 0.012 250);   /* near-black, faintly cool — all text */
---ink-muted:  oklch(0.52 0.012 250);   /* secondary text, labels */
---rule:       oklch(0.86 0.008 85);    /* hairlines. 1px. everywhere. */
-
---mark:       oklch(0.56 0.20 28);     /* THE red pen. */
---mark-wash:  oklch(0.94 0.04 28);     /* the faintest wash behind a marked region */
+/* light */
+--bg:          oklch(0.99 0.002 250);
+--surface:     oklch(1 0 0);
+--surface-sunk:oklch(0.975 0.003 250);
+--border:      oklch(0.92 0.004 250);
+--text:        oklch(0.22 0.01 250);
+--text-muted:  oklch(0.55 0.012 250);
+--accent:      oklch(0.58 0.17 250);   /* the one accent: interactive + verified */
+--warn:        oklch(0.72 0.15 70);    /* unverified / could not trace */
+--danger:      oklch(0.58 0.20 25);
 ```
 
-**The red pen is the whole colour system.** It marks: the verdict stamp, the columns Vera actually
-read, the interactive affordance, and the refusal. Nothing else is ever coloured. No green check —
-green-for-success is the cliché we are avoiding. A verified number is simply set large in ink; the
-red mark is the *annotation around it*, exactly like an auditor's pen.
+Rules: neutrals carry ~90% of the surface. **One accent.** Semantic colour only for status, never
+decoration. Never pure `#000`/`#fff`. Contrast AA everywhere — check muted and placeholder text.
 
-Refusal ("Vera has no number for this one") is set in ink with a red rule and a struck-through
-placeholder where the number would be. **The absence must be composed, not apologetic.**
+## Typography
 
-## Typography — this is the brand
+**Inter** (`next/font/google`) for everything, **Geist Mono** for numbers, code, column names and
+timings. Two families, no more.
 
-Two families. Nothing else, ever.
+Scale — 6 sizes: `12 / 14 / 16 / 20 / 32 / 72`. `72` is the headline finding only.
+Weights 400/500/600. Headings tracking `-0.02em`, line-height 1.1. Prose 16/1.55, `max-width: 68ch`.
+**`tabular-nums` on every figure.** Right-align numerics in tables.
 
-- **Newsreader** (`next/font/google`, variable) — the editorial voice. Claims, headings, prose.
-  Weights 400/500/600. Headings tracking `-0.02em`, line-height 1.1.
-- **Geist Mono** (already installed) — **every number, column name, cell value, code line, label
-  and timestamp**. `font-variant-numeric: tabular-nums` on all of it. Small labels are mono,
-  uppercase, `0.08em` tracking, 11-12px, `--ink-muted`.
+## Layout — progressive disclosure, not a dump
 
-The serif/mono pairing with **no sans at all** is the signature. It reads as printed evidence and
-it is instantly not-AI-slop.
+**Screen 1 — Ask (calm, near-empty).** One question box, centred, lots of air. Beneath it,
+suggested-question **chips drawn from the benchmark questions** in `eval/`. A quiet line naming the
+file on record (`superstore.csv · 9,994 rows`). Nothing else. This screen should feel like it is
+waiting, not loading.
 
-Scale — 5 sizes, no more: `12 / 14 / 17 / 28 / 88`.
-`88` is the finding number only, mono, tabular. Prose sits at 17 with `max-width: 68ch` and
-line-height 1.55. Bump one step for the projector.
+**Screen 2 — Working.** The four stages — *writing code → running in sandbox → verifying → done* —
+as a **quiet, intentional sequence**. This is on screen during the demo: make it beautiful. One
+stage active at a time, each with a live detail line and elapsed time so it is never silent. Stages
+settle in place rather than popping. No spinner, ever. A failed attempt stays visible and the retry
+is legible.
 
-## Layout — a document with a margin rail, not a grid of cards
+**Screen 3 — The finding.** Reveals in stages, not all at once:
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│  VERA                                          [ how do we know ]│  ← hairline rule under
-├──────────┬───────────────────────────────────────────────────────┤
-│          │                                                       │
-│  MARGIN  │   THE DOCUMENT                                        │
-│  RAIL    │                                                       │
-│          │   Question, set in serif, large.                      │
-│  audit   │                                                       │
-│  trail   │   ─────────────────────────────────────────           │
-│  runs    │                                                       │
-│  down    │   −17,725.48        ← 88px mono, tabular              │
-│  the     │   Tables lost more than any other sub-category.       │
-│  left,   │                          ← serif claim, 28px          │
-│  mono,   │                                                       │
-│  stamped │   EXHIBIT A — THE CODE THAT RAN                       │
-│  times   │   ┌────────────────────────────────────────┐          │
-│          │   │ mono, paper-deep, hairline, red mark   │          │
-│  ● 0.9s  │   │ on the line that uses the proven fmt   │          │
-│  ● 1.3s  │   └────────────────────────────────────────┘          │
-│  ● 0.8s  │                                                       │
-│          │   EXHIBIT B — THE CELLS SHE READ                      │
-│          │   real rows, mono, marked columns in red              │
-│          │                                                       │
-│          │   EXHIBIT C — WHAT SHE PROVED ABOUT YOUR DATA         │
-│          │   5,952 rows can only be day-first. 0 argue otherwise.│
-└──────────┴───────────────────────────────────────────────────────┘
-```
+1. The **headline number** (72px, tabular) and a one-line claim. Nothing else at first.
+2. **One clean chart** that makes the number make sense.
+3. Insight cards — at most 3 — each a single fact with its figure.
+4. A one-line source, with the code and the source cells behind a disclosure. **The proof is one
+   click away, never a wall of text on arrival.**
 
-- **Single column document**, generous margins, one narrow left **margin rail** carrying the live
-  reasoning trace as marginalia with mono timestamps. The rail is the timeline — it replaces the
-  old "card of four steps". It should feel like a court reporter's log running alongside.
-- **Exhibits, labelled A/B/C** in mono smallcaps. Numbered exhibits are the whole conceit: this is
-  evidence, presented in order.
-- **Exhibit C is new and it is the money shot** — the schema facts Vera *proved from the data*,
-  with the counts. "5,952 values have a first component above 12, which cannot be a month. 0 argue
-  the other way." Give it real weight; nobody else at this event has this.
-- Nothing is centred except the top rule. No card shadows anywhere — **hairlines only**.
+Keep the existing pipeline intact underneath: `Finding`, `Grounding`, `SchemaEvidence`, the code,
+the cells. Change the presentation, not the contract.
 
-## Motion — paper, not glass
+## Charts
 
-150ms fast / 260ms base, `cubic-bezier(0.22, 1, 0.36, 1)`. Transform and opacity only.
+**Load the `dataviz` skill before writing a single line of chart code.** Recharts, minimal: no
+gridline clutter, no legends where a direct label works, axis labels only where they earn their
+place, tooltips that show the real value. Same palette tokens in light and dark. `tabular-nums` on
+every axis and tooltip. A chart that needs a legend to be understood is the wrong chart.
 
-- Rules **draw** left-to-right (`scaleX`) as a section arrives.
-- Exhibits arrive by **clip-path reveal** from the top edge, like a page being uncovered.
-- The verdict mark **stamps**: fast scale-down from 1.06 with a tiny rotation (−2deg), once.
-- The margin rail advances a dot and prints a timestamp per stage. Never silent — always a line of
-  live detail (vault: silence kills the demo).
-- **No number ever counts up.** Fake animation of a real figure would undercut the entire product.
-- `prefers-reduced-motion: reduce` kills all of it — opacity only.
+## The two modes — build mode 1, architect for mode 2
 
-## Components
+- **Mode 1, text-first (build now):** the finding appears as text plus chart.
+- **Mode 2, spotlight presentation (architect now, wire when ElevenLabs lands):** as Vera speaks,
+  the relevant chart and figures come **forward** and the surrounding text clears — a business
+  analyst walking you through it. Design that transition now: the result view must be able to
+  promote one element and recede the rest, driven by a `spotlight: string | null` prop or
+  equivalent. Do not hard-code the text layout in a way that blocks this.
 
-- **Button** — text + a red underline that thickens on hover; not a filled pill. All six states.
-  One primary action on screen.
-- **Input** — a ruled line, not a box. Serif text sitting on a hairline, red rule on focus.
-- **Exhibit** — hairline border, `--paper-deep` fill, mono label above in smallcaps.
-- **Marked cells** — the columns the code actually read get `--mark-wash` behind them and a red
-  underline. The reader should see *which cells* at a glance.
-- **Verdict stamp** — mono, uppercase, letterspaced, red hairline box, slight rotation. `VERIFIED`
-  or `NO NUMBER RELEASED`.
-- Icons: **almost none**. Lucide only if genuinely needed, hairline weight. Prefer typographic
-  marks (`—`, `·`, `↳`) over icons. An icon set is a crutch this design does not need.
+## Cold open — the money shot
 
-## Accessibility — non-negotiable
+A scripted, deterministic view. No live dependency; it must not be able to fail on stage.
 
-WCAG AA: 4.5:1 body, 3:1 UI. Check `--ink-muted` on `--paper` and the red on paper specifically.
-Never encode meaning in colour alone — the verdict always carries its word. Full keyboard path
-through the demo, visible focus (a red rule, not a glow). Live region announces stage changes.
-Wide exhibits scroll inside their own container; the page never scrolls sideways.
+1. A naive AI confidently reports **2018 Q3 sales = $50,517** — and silently dropped 60% of the rows.
+2. Vera reports **$143,787**, with the date-trap evidence shown: `OrderDate` is `DD/MM/YYYY`,
+   proven by 5,952 values whose first component exceeds 12 and cannot be months, 0 arguing
+   otherwise.
 
-## Departures recorded during the build (v2.1)
+Under 30 seconds to the punchline. Both numbers are **real** — recorded, not invented. Label the
+naive one as what it is.
 
-Each of these moves *toward* the concept, not away from it. Measured in Chromium at 1440×900
-and 1280×800.
+## Motion
 
-1. **`--ink-muted` darkened `0.52 → 0.45`, and a second step added on the red ramp.**
-   At `0.52` muted body text measured 4.3:1 on paper — under AA. It now measures **6.89:1**.
-   `--mark` at `0.56` measures 4.77:1, fine for the stamp, rules and marks (UI, 3:1) but thin for
-   12px red text, so small red type uses **`--mark-ink: oklch(0.47 0.19 28)` (7.0:1)**. Same hue,
-   same pen — a ramp step, not a second accent.
-2. **The refusal placeholder is a struck *slot*, not struck glyphs.** `——,———.——` set at 88px mono
-   renders as disconnected dashes and reads as a rendering bug. It is now the figure's blank space,
-   ruled, with a red stroke corner to corner — the mark an auditor puts through space that must
-   stay empty — captioned "the figure's place, left blank".
-3. **Mock mode is stated on screen.** While the mock engine drives the run, the masthead carries
-   `MOCK ENGINE · NO SANDBOX CALL` and the colophon says which parts are scripted and which
-   (Exhibit C) are counted from the real file. The honesty rule outranks a clean masthead.
-4. **Exhibit B leads with the full column list, marked.** Quoting only the read columns made every
-   cell red and killed the contrast the red pen exists to create. The file's whole column list sits
-   above the quoted rows with the read ones washed — the "which cells" read happens at a glance.
-5. **Wide exhibits are keyboard-scrollable regions** (`tabindex="0"`, labelled), so the sideways
-   scroll the design relies on is reachable without a mouse.
+Fast 150ms / base 260ms, `cubic-bezier(0.22, 1, 0.36, 1)`. Transform and opacity only. Staged
+reveals, ~60ms apart. Elements settle; they do not bounce. **No number ever counts up** — animating
+a real figure would undercut the entire product. `prefers-reduced-motion: reduce` kills all of it.
+If it stutters, delete it.
+
+## Accessibility
+
+AA contrast on every pair actually shipped. Full keyboard path: question → submit → chips →
+disclosure. Visible focus. Live region announces stage changes. Charts carry a text alternative —
+the number and claim must be readable without seeing the chart. Wide content scrolls in its own
+container; the page never scrolls sideways.
+
+## Honesty — non-negotiable, outranks any visual goal
+
+PRD §6 and `CLAUDE.md` bind every string on screen. A number renders **only** when
+`verdict === "verified"`. The unverified state shows **no number at all**, and must look
+deliberate, not broken. Never imply Vera can catch a subtly-wrong-but-runnable answer live; the
+live claim is exactly *computed, and traceable*, and the accuracy figure is a separate
+pre-computed benchmark. When the app is running mocked, say so on screen.
 
 ## Never
 
-A second accent colour · a sans-serif · a card shadow · a green check · a dark mode · a filled
-button · a centred paragraph · a number without its verdict · copy that overstates verification
-(PRD §6 and CLAUDE.md are binding on every string on screen).
+A second accent · a third font · a spinner · a card shadow stack · a number without its verdict ·
+a chart without a real label · marketing copy that overstates verification.
