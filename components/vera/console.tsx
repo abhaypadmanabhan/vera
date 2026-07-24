@@ -1,10 +1,12 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useAnalysis } from "@/hooks/use-analysis";
+import { buildDeck } from "@/lib/deck";
 import type { DatasetSummary } from "@/lib/types";
 import { AskScreen } from "./ask-screen";
 import { TopBar } from "./chrome";
+import { DeckPlayer } from "./deck-player";
 import { FindingScreen } from "./finding-screen";
 import { WorkingScreen } from "./working-screen";
 
@@ -50,10 +52,38 @@ export function Console({
 
   const settled = finding !== null || error !== null;
   const phase = !submitted ? "ask" : settled ? "finding" : "working";
+  const deck = useMemo(
+    () =>
+      finding?.verdict === "verified"
+        ? buildDeck(asked, finding, {
+            datasetId: dataset.id,
+            filename: dataset.filename,
+            rowCount: dataset.rowCount,
+            columns: dataset.columns,
+            duplicateRowCount: dataset.duplicateRowCount,
+            crossChecks: [],
+            notes: dataset.notes,
+          })
+        : null,
+    [asked, dataset, finding],
+  );
+
+  const askFollowUp = useCallback(
+    (nextQuestion: string) => {
+      setQuestion(nextQuestion);
+      setAsked(nextQuestion);
+      setStartedAt(Date.now());
+      setSubmitted(true);
+      void start(nextQuestion, dataset.id);
+    },
+    [dataset.id, start],
+  );
 
   return (
-    <main className="flex min-h-dvh flex-col">
-      <TopBar isMock={isMock} className="mx-auto w-full max-w-5xl px-6 py-5" />
+    <div className="flex min-h-dvh flex-col">
+      {(phase !== "finding" || finding?.verdict !== "verified") && (
+        <TopBar isMock={isMock} className="mx-auto w-full max-w-5xl px-6 py-5" />
+      )}
 
       {phase === "ask" && (
         <AskScreen
@@ -74,7 +104,17 @@ export function Console({
         />
       )}
 
-      {phase === "finding" && finding && (
+      {phase === "finding" && finding?.verdict === "verified" && deck && (
+        <DeckPlayer
+          deck={deck}
+          finding={finding}
+          dataset={dataset}
+          isMock={isMock}
+          onNewQuestion={askFollowUp}
+        />
+      )}
+
+      {phase === "finding" && finding?.verdict === "unverified" && (
         <FindingScreen
           question={asked}
           finding={finding}
@@ -97,6 +137,6 @@ export function Console({
           </button>
         </div>
       )}
-    </main>
+    </div>
   );
 }
