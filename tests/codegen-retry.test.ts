@@ -174,6 +174,72 @@ describe("codegen retry orchestration", () => {
     expect(executionCount).toBe(1 + LIMITS.maxRetries);
   });
 
+  it("normalizes a non-finite retry option without bypassing the initial attempt", async () => {
+    let executionCount = 0;
+    const generator: CodeGenerator = {
+      async generate(request) {
+        return generated(request.attempt);
+      },
+    };
+    const executor: CodeExecutor = {
+      async execute() {
+        executionCount++;
+        return failedExecution("broken");
+      },
+    };
+
+    await drain(
+      runCodegenWithRetries({
+        question: "answer it",
+        profile,
+        sampleRows: [],
+        sandboxPath: "/workspace/data.csv",
+        generator,
+        executor,
+        maxRetries: Number.NaN,
+      }),
+    );
+
+    expect(executionCount).toBe(1);
+  });
+
+  it("feeds a thrown executor error back into codegen for retry", async () => {
+    const requests: Parameters<CodeGenerator["generate"]>[0][] = [];
+    const generator: CodeGenerator = {
+      async generate(request) {
+        requests.push(request);
+        return generated(request.attempt);
+      },
+    };
+    let executionCount = 0;
+    const executor: CodeExecutor = {
+      async execute() {
+        executionCount++;
+        if (executionCount === 1) {
+          throw new Error("SyntaxError: invalid syntax");
+        }
+        return successfulExecution;
+      },
+    };
+
+    const { result } = await drain(
+      runCodegenWithRetries({
+        question: "answer it",
+        profile,
+        sampleRows: [],
+        sandboxPath: "/workspace/data.csv",
+        generator,
+        executor,
+      }),
+    );
+
+    expect(requests[1]?.previousFailure).toEqual({
+      stderr: "SyntaxError: invalid syntax",
+      failingCode: 'print("VERA_RESULT:1")',
+    });
+    expect(result).toEqual(successfulExecution);
+  });
+
   it("emits a failed writing stage and unverified finding on Fireworks failure", async () => {
     const generator: CodeGenerator = {
       async generate() {

@@ -128,6 +128,46 @@ describe("structured pandas codegen", () => {
         "/workspace/data.csv",
       ),
     ).toThrow(/pd\.to_datetime/);
+
+    const attributeBypass = JSON.stringify({
+      code: validCode.replace(
+        'df["OrderDate"] = pd.to_datetime(df["OrderDate"], format="%d/%m/%Y")',
+        "dates = pd.to_datetime(df.OrderDate)",
+      ),
+      explanation: "naive attribute access",
+      columnsUsed: ["OrderDate", "Sales"],
+    });
+    expect(() =>
+      parseCodegenResponse(attributeBypass, profile, "/workspace/data.csv"),
+    ).toThrow(/%d\/%m\/%Y/);
+
+    const aliasBypass = JSON.stringify({
+      code: validCode.replace(
+        'df["OrderDate"] = pd.to_datetime(df["OrderDate"], format="%d/%m/%Y")',
+        'dates = df.loc[:, "OrderDate"]\ndates = pd.to_datetime(dates)',
+      ),
+      explanation: "naive alias access",
+      columnsUsed: ["OrderDate", "Sales"],
+    });
+    expect(() =>
+      parseCodegenResponse(aliasBypass, profile, "/workspace/data.csv"),
+    ).toThrow(/%d\/%m\/%Y/);
+
+    const dummyConversionBypass = JSON.stringify({
+      code: validCode.replace(
+        'df["OrderDate"] = pd.to_datetime(df["OrderDate"], format="%d/%m/%Y")',
+        'dummy = pd.to_datetime(["01/01/2020"], format="%d/%m/%Y")\ndates = pd.to_datetime(df.OrderDate)',
+      ),
+      explanation: "formats a dummy but parses the real column naively",
+      columnsUsed: ["OrderDate", "Sales"],
+    });
+    expect(() =>
+      parseCodegenResponse(
+        dummyConversionBypass,
+        profile,
+        "/workspace/data.csv",
+      ),
+    ).toThrow(/OrderDate.*%d\/%m\/%Y/);
   });
 
   it("rejects network imports and output that is not one result line", () => {
@@ -154,6 +194,78 @@ describe("structured pandas codegen", () => {
     expect(() =>
       parseCodegenResponse(extraPrint, profile, "/workspace/data.csv"),
     ).toThrow(/exactly one print/);
+
+    const spacedPrint = JSON.stringify({
+      code: validCode.replace(
+        'print("VERA_RESULT:',
+        'print ("debug")\nprint("VERA_RESULT:',
+      ),
+      explanation: "noisy",
+      columnsUsed: ["OrderDate", "Sales"],
+    });
+    expect(() =>
+      parseCodegenResponse(spacedPrint, profile, "/workspace/data.csv"),
+    ).toThrow(/exactly one print/);
+
+    const indirectNetwork = JSON.stringify({
+      code: validCode.replace("import json", "import json\nimport subprocess"),
+      explanation: "unsafe",
+      columnsUsed: ["OrderDate", "Sales"],
+    });
+    expect(() =>
+      parseCodegenResponse(indirectNetwork, profile, "/workspace/data.csv"),
+    ).toThrow(/not import/);
+  });
+
+  it("requires one exact pandas CSV read rather than a path in a comment", () => {
+    const wrongRead = JSON.stringify({
+      code: validCode.replace(
+        'df = pd.read_csv("/workspace/data.csv")',
+        'df = pd.read_csv("https://example.com/data.csv")\n# /workspace/data.csv',
+      ),
+      explanation: "reads the wrong source",
+      columnsUsed: ["OrderDate", "Sales"],
+    });
+    expect(() =>
+      parseCodegenResponse(wrongRead, profile, "/workspace/data.csv"),
+    ).toThrow(/exactly once/);
+
+    const commentOnlyRead = JSON.stringify({
+      code: validCode.replace(
+        'df = pd.read_csv("/workspace/data.csv")',
+        '# pd.read_csv("/workspace/data.csv")\ndf = pd.read_pickle("/tmp/other.pkl")',
+      ),
+      explanation: "puts the required source in a comment",
+      columnsUsed: ["OrderDate", "Sales"],
+    });
+    expect(() =>
+      parseCodegenResponse(commentOnlyRead, profile, "/workspace/data.csv"),
+    ).toThrow(/exactly once/);
+  });
+
+  it("rejects extra pandas I/O that could emit another result or access files", () => {
+    const extraIo = JSON.stringify({
+      code: validCode.replace(
+        'print("VERA_RESULT:',
+        'df.to_csv("/dev/stdout")\nprint("VERA_RESULT:',
+      ),
+      explanation: "writes extra output",
+      columnsUsed: ["OrderDate", "Sales"],
+    });
+    expect(() =>
+      parseCodegenResponse(extraIo, profile, "/workspace/data.csv"),
+    ).toThrow(/I\/O/);
+  });
+
+  it("rejects a paid prompt whose bounded context would still be too large", () => {
+    expect(() =>
+      buildCodegenPrompt({
+        question: "x".repeat(70_000),
+        profile,
+        sampleRows: [],
+        sandboxPath: "/workspace/data.csv",
+      }),
+    ).toThrow(/prompt.*limit/i);
   });
 
   it("returns the golden response in mock mode without calling Fireworks", async () => {

@@ -6,6 +6,7 @@ import {
   type FireworksClient,
 } from "../fireworks/client";
 import type { DatasetProfile } from "../types";
+import { validatePythonPolicy } from "./python-policy";
 
 export interface CodegenRequest {
   question: string;
@@ -48,45 +49,16 @@ const CODEGEN_JSON_SCHEMA = {
 
 const codegenSchema = z
   .object({
-    code: z.string().min(1),
-    explanation: z.string().min(1),
-    columnsUsed: z.array(z.string()).refine(
+    code: z.string().min(1).max(16_000),
+    explanation: z.string().min(1).max(1_000),
+    columnsUsed: z.array(z.string().max(200)).max(200).refine(
       (columns) => new Set(columns).size === columns.length,
       "columnsUsed must not contain duplicates",
     ),
   })
   .strict();
 
-const NETWORK_MODULES = new Set([
-  "aiohttp",
-  "ftplib",
-  "http",
-  "httpx",
-  "requests",
-  "socket",
-  "urllib",
-]);
-
-function importedModules(line: string): string[] {
-  const trimmed = line.trim();
-  if (trimmed.startsWith("import ")) {
-    return trimmed
-      .slice("import ".length)
-      .split(",")
-      .map((entry) => entry.trim().split(/[\s.]/, 1)[0] ?? "")
-      .filter(Boolean);
-  }
-  if (trimmed.startsWith("from ")) {
-    const moduleName =
-      trimmed.slice("from ".length).split(/[\s.]/, 1)[0]?.trim() ?? "";
-    return moduleName ? [moduleName] : [];
-  }
-  return [];
-}
-
-function quoted(value: string, quote: "'" | '"'): string {
-  return `${quote}${value}${quote}`;
-}
+const MAX_PROMPT_CHARS = 64_000;
 
 export function buildCodegenPrompt(request: CodegenRequest): string {
   const safeContext = {
@@ -95,13 +67,16 @@ export function buildCodegenPrompt(request: CodegenRequest): string {
   };
   const retryContext = request.previousFailure
     ? `\nThe previous code failed. Fix this exact code and error:\n${JSON.stringify(
-        request.previousFailure,
+        {
+          stderr: request.previousFailure.stderr.slice(-4_000),
+          failingCode: request.previousFailure.failingCode,
+        },
         null,
         2,
       )}\n`
     : "";
 
-  return `You write small, deterministic pandas programs for Vera.
+  const prompt = `You write small, deterministic pandas programs for Vera.
 
 Return JSON only, matching this schema exactly:
 ${JSON.stringify(CODEGEN_JSON_SCHEMA, null, 2)}
@@ -124,6 +99,13 @@ ${JSON.stringify(safeContext, null, 2)}
 User question:
 ${request.question}
 ${retryContext}`;
+
+  if (prompt.length > MAX_PROMPT_CHARS) {
+    throw new Error(
+      `Codegen prompt exceeds the ${MAX_PROMPT_CHARS}-character paid-request limit.`,
+    );
+  }
+  return prompt;
 }
 
 function assertSafeCode(
@@ -131,66 +113,24 @@ function assertSafeCode(
   profile: DatasetProfile,
   sandboxPath: string,
 ): void {
-  if (
-    !output.code.includes("pd.read_csv") ||
-    !output.code.includes(sandboxPath)
-  ) {
-    throw new Error(`Generated code must read the CSV from ${sandboxPath}.`);
-  }
-
-  for (const line of output.code.split("\n")) {
-    for (const moduleName of importedModules(line)) {
-      if (NETWORK_MODULES.has(moduleName)) {
-        throw new Error(
-          `Generated code must not import network module ${moduleName}.`,
-        );
-      }
-    }
-  }
-
-  const printLines = output.code
-    .split("\n")
-    .filter((line) => line.trimStart().startsWith("print("));
-  if (printLines.length !== 1) {
-    throw new Error("Generated code must contain exactly one print statement.");
-  }
-  if (!printLines[0]?.includes("VERA_RESULT:")) {
-    throw new Error("Generated code must print one VERA_RESULT line.");
-  }
-  if (!printLines[0].includes("json.dumps")) {
-    throw new Error("Generated result output must use json.dumps.");
-  }
-
-  const knownColumns = new Set(profile.columns.map((column) => column.name));
-  const unknownColumn = output.columnsUsed.find((column) => !knownColumns.has(column));
-  if (unknownColumn) {
-    throw new Error(`Generated code named unknown column ${unknownColumn}.`);
-  }
-
-  for (const column of profile.columns) {
-    if (column.kind !== "date" || !column.dateFormat) continue;
-    const touchesColumn =
-      output.code.includes(`[${quoted(column.name, '"')}]`) ||
-      output.code.includes(`[${quoted(column.name, "'")}]`);
-    if (!touchesColumn) continue;
-
-    if (!output.code.includes("pd.to_datetime")) {
-      throw new Error(
-        `Generated code touching ${column.name} must call pd.to_datetime.`,
-      );
-    }
-    const hasExactFormat =
-      output.code.includes(`format=${quoted(column.dateFormat, '"')}`) ||
-      output.code.includes(`format=${quoted(column.dateFormat, "'")}`);
-    if (!hasExactFormat) {
-      throw new Error(
-        `Generated code touching ${column.name} must use format=${quoted(
-          column.dateFormat,
-          '"',
-        )}.`,
-      );
-    }
-  }
+  validatePythonPolicy({
+    code: output.code,
+    sandboxPath,
+    knownColumns: profile.columns.map((column) => column.name),
+    columnsUsed: output.columnsUsed,
+    provenDateFormats: profile.columns
+      .filter(
+        (
+          column,
+        ): column is typeof column & {
+          dateFormat: string;
+        } => column.kind === "date" && column.dateFormat !== null,
+      )
+      .map((column) => ({
+        column: column.name,
+        format: column.dateFormat,
+      })),
+  });
 }
 
 export function parseCodegenResponse(

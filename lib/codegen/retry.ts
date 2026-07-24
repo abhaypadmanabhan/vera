@@ -78,7 +78,10 @@ export async function* runCodegenWithRetries(
 ): AsyncGenerator<StageEvent, ExecutionResult | null> {
   const now = options.now ?? Date.now;
   const startedAt = now();
-  const requestedRetries = options.maxRetries ?? LIMITS.maxRetries;
+  const rawRequestedRetries = options.maxRetries ?? LIMITS.maxRetries;
+  const requestedRetries = Number.isFinite(rawRequestedRetries)
+    ? Math.floor(rawRequestedRetries)
+    : 0;
   const maxAttempts =
     1 + Math.max(0, Math.min(requestedRetries, LIMITS.maxRetries));
   const runBudgetMs = options.runBudgetMs ?? LIMITS.runBudgetMs;
@@ -190,18 +193,48 @@ export async function* runCodegenWithRetries(
           : `Executor failed: ${error instanceof Error ? error.message : "unknown error"}`,
         attempt,
       });
-      yield {
-        type: "finding",
-        finding: {
-          verdict: "unverified",
-          reason: timedOut ? "timeout" : "code_error",
-          detail: error instanceof Error ? error.message : "Code execution failed.",
-          code: lastCode,
-          attempts: attempt,
-        },
-        elapsedMs: elapsed(),
+      if (timedOut) {
+        yield {
+          type: "finding",
+          finding: {
+            verdict: "unverified",
+            reason: "timeout",
+            detail: error.message,
+            code: lastCode,
+            attempts: attempt,
+          },
+          elapsedMs: elapsed(),
+        };
+        return null;
+      }
+
+      const stderr =
+        error instanceof Error ? error.message : "Code execution failed.";
+      previousFailure = {
+        stderr,
+        failingCode: output.code,
       };
-      return null;
+      if (attempt === maxAttempts) {
+        yield stage({
+          stage: "verifying",
+          status: "failed",
+          detail: "Retry cap reached — blocking an unverified answer",
+          attempt,
+        });
+        yield {
+          type: "finding",
+          finding: {
+            verdict: "unverified",
+            reason: "retry_exhausted",
+            detail: `${maxAttempts} attempts failed. Last error: ${stderr}`,
+            code: lastCode,
+            attempts: attempt,
+          },
+          elapsedMs: elapsed(),
+        };
+        return null;
+      }
+      continue;
     }
 
     if (execution.exitCode === 0 && execution.value !== null) {
