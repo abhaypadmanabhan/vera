@@ -1,4 +1,5 @@
 import { csvSchema } from "../csv";
+import { isProven } from "../types";
 import type {
   AnalysisRequest,
   Analyst,
@@ -81,7 +82,7 @@ function groundingFrom(dataset: ResolvedDataset): Grounding {
     schemaEvidence: dataset.profile.columns
       .map((column) => column.evidence)
       .filter((evidence): evidence is SchemaEvidence => evidence !== null)
-      .filter((evidence) => evidence.contradictingRows === 0),
+      .filter(isProven),
   };
 }
 

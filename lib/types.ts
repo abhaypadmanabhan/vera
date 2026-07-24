@@ -54,12 +54,23 @@ export interface SchemaEvidence {
   claim: string;
   /** Rows that can only be explained by this claim. */
   supportingRows: number;
-  /** Rows that argue against it. If this is not 0, do not act on the claim. */
+  /** Rows that argue against it. */
   contradictingRows: number;
   /** Real values from the column, quoted back. */
   examples: string[];
   /** Plain English: "5,952 values have a first component above 12, which cannot be a month." */
   method: string;
+}
+
+/**
+ * A claim is PROVEN only when something actually supports it and nothing contradicts it.
+ *
+ * Checking `contradictingRows === 0` alone is a bug: a column where every value reads
+ * validly both ways yields 0 and 0 — no contradiction, but no proof either. Never act
+ * on a claim, or show it as established, unless this returns true.
+ */
+export function isProven(evidence: SchemaEvidence): boolean {
+  return evidence.supportingRows > 0 && evidence.contradictingRows === 0;
 }
 
 /** Proof that a value came from real cells and not from the model's imagination. */
