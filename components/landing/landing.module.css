@@ -18,6 +18,39 @@
   animation: landing-marquee 48s linear infinite;
 }
 
+.logo {
+  display: block;
+  flex: none;
+  background-color: currentColor;
+  mask-position: center;
+  mask-repeat: no-repeat;
+  mask-size: contain;
+}
+
+.daytonaLogo {
+  width: 8.8125rem;
+  height: 1.5rem;
+  mask-image: url("/logos/daytona.svg");
+}
+
+.fireworksLogo {
+  width: 10.25rem;
+  height: 1.3125rem;
+  mask-image: url("/logos/fireworks.svg");
+}
+
+.braintrustLogo {
+  width: 9.1875rem;
+  height: 1.4375rem;
+  mask-image: url("/logos/braintrust.svg");
+}
+
+.elevenLabsLogo {
+  width: 10.125rem;
+  height: 1.3125rem;
+  mask-image: url("/logos/elevenlabs.svg");
+}
+
 .marquee:hover .track,
 .marquee:focus-within .track {
   animation-play-state: paused;
