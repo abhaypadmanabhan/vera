@@ -111,6 +111,12 @@ export interface DatasetProfile {
   rowCount: number;
   columns: ColumnProfile[];
   duplicateRowCount: number;
+  /**
+   * Convenience period columns (Year / Quarter / Month) checked against the date
+   * column we proved. A stated column that disagrees with the real dates is the
+   * dangerous case: code using it runs clean and returns a wrong number.
+   */
+  crossChecks: SchemaEvidence[];
   /** Facts the generated code MUST respect, in plain English, for the prompt. */
   notes: string[];
 }

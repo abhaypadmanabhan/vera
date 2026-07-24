@@ -13,6 +13,7 @@ const profile: DatasetProfile = {
   filename: "superstore.csv",
   rowCount: 9_994,
   duplicateRowCount: 1,
+  crossChecks: [],
   columns: [
     {
       name: "OrderDate",

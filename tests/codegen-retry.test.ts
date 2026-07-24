@@ -16,6 +16,7 @@ const profile: DatasetProfile = {
   filename: "tiny.csv",
   rowCount: 1,
   duplicateRowCount: 0,
+  crossChecks: [],
   columns: [],
   notes: [],
 };
