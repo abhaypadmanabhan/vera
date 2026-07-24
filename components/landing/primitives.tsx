@@ -18,7 +18,7 @@ export function SpeakToVera({ tone = "solid" }: { tone?: "solid" | "quiet" }) {
 
   return (
     <Link
-      href="/"
+      href="/ask"
       className={
         tone === "solid"
           ? `${base} bg-ink text-bg hover:bg-accent`

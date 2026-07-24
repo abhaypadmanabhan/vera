@@ -95,7 +95,7 @@ export function ColdOpen() {
         </div>
         <div className="flex items-center gap-1.5">
           <Link
-            href="/"
+            href="/ask"
             className="rounded-full px-3 py-1.5 text-micro text-ink-muted transition-colors duration-150 hover:bg-sunk hover:text-ink"
           >
             Ask Vera
