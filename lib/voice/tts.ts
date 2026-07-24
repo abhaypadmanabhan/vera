@@ -55,12 +55,28 @@ export interface SpokenFinding {
   text: string;
 }
 
+/**
+ * Speak one line. Used for a narration beat from the deck.
+ *
+ * The deck only produces beats for a VERIFIED finding (`buildDeck` returns zero
+ * slides otherwise), so an unproven number can never reach this function.
+ */
+export async function speakLine(
+  text: string,
+  signal?: AbortSignal,
+): Promise<SpokenFinding> {
+  return convert(text, signal);
+}
+
 /** Convert a verified finding to speech. Spends ElevenLabs credits. */
 export async function speakFinding(
   finding: VerifiedFinding,
   signal?: AbortSignal,
 ): Promise<SpokenFinding> {
-  const text = speechFor(finding);
+  return convert(speechFor(finding), signal);
+}
+
+async function convert(text: string, signal?: AbortSignal): Promise<SpokenFinding> {
   const stream = await client().textToSpeech.convert(
     process.env.ELEVENLABS_VOICE_ID ?? DEFAULT_VOICE_ID,
     {
