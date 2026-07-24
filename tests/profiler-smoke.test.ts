@@ -132,3 +132,14 @@ describe("isProven guards the ambiguous case", () => {
     expect(isProven(col!.evidence!)).toBe(true);
   });
 });
+
+describe("evidence examples are unique", () => {
+  it("never repeats an example — duplicates become React key collisions", () => {
+    const csv = readFileSync("data/superstore.csv", "utf8");
+    const p = profileDataset("s", "s.csv", csv);
+    for (const e of [...p.crossChecks, ...p.columns.map((c) => c.evidence)]) {
+      if (!e) continue;
+      expect(new Set(e.examples).size).toBe(e.examples.length);
+    }
+  });
+});

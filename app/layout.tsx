@@ -30,7 +30,10 @@ export const metadata: Metadata = {
  * Applies the stored theme before first paint so a dark-mode reader never sees
  * a white flash. Inline because a module would run after the first frame.
  */
-const THEME_BOOTSTRAP = `try{var t=localStorage.getItem("vera-theme");if(t==="dark"||t==="light"){document.documentElement.dataset.theme=t}}catch(e){}`;
+// Vera's design is light (DESIGN.md v3). We default to light regardless of the OS
+// preference so the demo looks the same on any machine; the toggle still works and
+// an explicit choice is remembered.
+const THEME_BOOTSTRAP = `try{var t=localStorage.getItem("vera-theme");document.documentElement.dataset.theme=(t==="dark"||t==="light")?t:"light"}catch(e){document.documentElement.dataset.theme="light"}`;
 
 export default function RootLayout({
   children,

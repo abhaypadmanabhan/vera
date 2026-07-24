@@ -25,7 +25,8 @@ function subscribe(onChange: () => void): () => void {
 function getSnapshot(): Theme {
   const stamped = document.documentElement.dataset.theme;
   if (stamped === "dark" || stamped === "light") return stamped;
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  // Light is Vera's default (DESIGN.md v3), not the OS preference.
+  return "light";
 }
 
 const getServerSnapshot = (): Theme => "light";

@@ -14,12 +14,15 @@ export function AskScreen({
   question,
   onQuestionChange,
   onSubmit,
+  onAsk,
   suggestions,
   dataset,
 }: {
   question: string;
   onQuestionChange: (value: string) => void;
   onSubmit: () => void;
+  /** Run this exact question now. Used by the chips so one click is one run. */
+  onAsk: (value: string) => void;
   suggestions: string[];
   dataset: DatasetSummary;
 }) {
@@ -92,10 +95,7 @@ export function AskScreen({
           <button
             key={suggestion}
             type="button"
-            onClick={() => {
-              onQuestionChange(suggestion);
-              boxRef.current?.focus();
-            }}
+            onClick={() => onAsk(suggestion)}
             className="rounded-full border border-line bg-surface px-3.5 py-2 text-left text-small text-ink-muted transition-[color,border-color,background-color] duration-150 hover:border-line-strong hover:bg-sunk hover:text-ink"
           >
             {suggestion}

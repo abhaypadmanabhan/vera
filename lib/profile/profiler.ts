@@ -59,10 +59,10 @@ function proveSlashDateFormat(values: string[], column: string): {
     const second = Number(match[2]);
     if (first > 12 && second <= 12) {
       dayFirstProof++;
-      if (dayFirstExamples.length < 3) dayFirstExamples.push(value);
+      if (dayFirstExamples.length < 3 && !dayFirstExamples.includes(value)) dayFirstExamples.push(value);
     } else if (second > 12 && first <= 12) {
       monthFirstProof++;
-      if (monthFirstExamples.length < 3) monthFirstExamples.push(value);
+      if (monthFirstExamples.length < 3 && !monthFirstExamples.includes(value)) monthFirstExamples.push(value);
     }
   }
 
@@ -238,9 +238,8 @@ function crossCheckPeriodColumns(
       compared++;
       if (statedNumber !== kind.of(date)) {
         mismatched++;
-        if (examples.length < 3) {
-          examples.push(`${dateValues[i]} → ${kind.label} ${kind.of(date)}, but "${column}" says ${raw}`);
-        }
+        const example = `${dateValues[i]} → ${kind.label} ${kind.of(date)}, but "${column}" says ${raw}`;
+        if (examples.length < 3 && !examples.includes(example)) examples.push(example);
       }
     }
 

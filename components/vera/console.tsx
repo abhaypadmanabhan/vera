@@ -33,14 +33,25 @@ export function Console({
   const [startedAt, setStartedAt] = useState(0);
   const [submitted, setSubmitted] = useState(false);
 
-  const submit = useCallback(() => {
-    const trimmed = question.trim();
-    if (!trimmed) return;
-    setAsked(trimmed);
-    setStartedAt(Date.now());
-    setSubmitted(true);
-    void start(trimmed, dataset.id);
-  }, [dataset.id, question, start]);
+  /**
+   * Ask an explicit question. Chips call this with their own text so a click runs
+   * immediately — routing through `question` state first raced the submit and left
+   * the box cleared with nothing running.
+   */
+  const ask = useCallback(
+    (value: string) => {
+      const trimmed = value.trim();
+      if (!trimmed) return;
+      setQuestion(trimmed);
+      setAsked(trimmed);
+      setStartedAt(Date.now());
+      setSubmitted(true);
+      void start(trimmed, dataset.id);
+    },
+    [dataset.id, start],
+  );
+
+  const submit = useCallback(() => ask(question), [ask, question]);
 
   const askAgain = useCallback(() => {
     reset();
@@ -90,6 +101,7 @@ export function Console({
           question={question}
           onQuestionChange={setQuestion}
           onSubmit={submit}
+          onAsk={ask}
           suggestions={suggestions}
           dataset={dataset}
         />
