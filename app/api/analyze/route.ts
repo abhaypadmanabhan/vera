@@ -1,10 +1,10 @@
 import { Buffer } from "node:buffer";
 import { z } from "zod";
-import { getAnalyst } from "../../../lib/analyst";
-import { LIMITS } from "../../../lib/config";
-import { checkRateLimit } from "../../../lib/rate-limit";
-import { encodeEvent } from "../../../lib/stream";
-import type { AnalysisRequest, StageEvent } from "../../../lib/types";
+import { getAnalyst } from "@/lib/analyst";
+import { LIMITS } from "@/lib/config";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { encodeEvent } from "@/lib/stream";
+import type { AnalysisRequest, StageEvent } from "@/lib/types";
 
 export const runtime = "nodejs";
 
