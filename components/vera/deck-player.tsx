@@ -17,16 +17,45 @@ const NARRATION_TIMING = {
 
 type VerifiedFinding = Extract<Finding, { verdict: "verified" }>;
 
+export type DeckBenchmark = {
+  veraPercent: number;
+  baselinePercent: number;
+  dashboardUrl: string;
+  baselineMisses: string[];
+};
+
+const PRESENTER_RADIUS = 60;
+const PRESENTER_GAP = 16;
+const PRESENTER_EDGE = 16;
+
+export function presenterPosition(
+  stage: { left: number; top: number; width: number; height: number },
+  target: { left: number; right: number; top: number; height: number },
+): { x: number; y: number } {
+  const targetLeft = target.left - stage.left;
+  const targetRight = target.right - stage.left;
+  const right = targetRight + PRESENTER_RADIUS + PRESENTER_GAP;
+  const left = targetLeft - PRESENTER_RADIUS - PRESENTER_GAP;
+  const min = PRESENTER_RADIUS + PRESENTER_EDGE;
+  const maxX = stage.width - min;
+  const maxY = stage.height - min;
+  const x = right <= maxX ? right : left >= min ? left : maxX;
+  const y = Math.max(min, Math.min(target.top - stage.top + target.height * 0.5, maxY));
+  return { x, y };
+}
+
 export function DeckPlayer({
   deck,
   finding,
   dataset,
+  benchmark,
   isMock,
   onNewQuestion,
 }: {
   deck: Deck;
   finding: VerifiedFinding;
   dataset: DatasetSummary;
+  benchmark: DeckBenchmark;
   isMock: boolean;
   onNewQuestion: (question: string) => void;
 }) {
@@ -211,7 +240,9 @@ export function DeckPlayer({
               slide={deck.slides[previousIndex]}
               finding={finding}
               dataset={dataset}
+              benchmark={benchmark}
               activeFocus={null}
+              speaking={false}
             />
           </div>
         )}
@@ -220,7 +251,9 @@ export function DeckPlayer({
             slide={slide}
             finding={finding}
             dataset={dataset}
+            benchmark={benchmark}
             activeFocus={focus}
+            speaking={veraSpeaking}
           />
         </div>
       </div>
@@ -287,12 +320,16 @@ export function DeckSlide({
   slide,
   finding,
   dataset,
+  benchmark,
   activeFocus,
+  speaking = false,
 }: {
   slide: Slide;
   finding: VerifiedFinding;
   dataset: DatasetSummary;
+  benchmark?: DeckBenchmark;
   activeFocus: string | null;
+  speaking?: boolean;
 }) {
   const stageRef = useRef<HTMLDivElement>(null);
   const [halo, setHalo] = useState({ x: 0, y: 0, visible: false });
@@ -309,9 +346,10 @@ export function DeckSlide({
     const update = () => {
       const stageBox = stage.getBoundingClientRect();
       const targetBox = target.getBoundingClientRect();
+      const position = presenterPosition(stageBox, targetBox);
       setHalo({
-        x: targetBox.right - stageBox.left - Math.min(targetBox.width * 0.12, 38),
-        y: targetBox.top - stageBox.top + targetBox.height * 0.52,
+        x: position.x,
+        y: position.y,
         visible: true,
       });
     };
@@ -330,16 +368,22 @@ export function DeckSlide({
   return (
     <div ref={stageRef} className="deck-slide" data-kind={slide.kind}>
       <div
-        className={cn("presenter-halo", halo.visible && "presenter-halo-visible")}
+        className={cn(
+          "presenter-orb",
+          halo.visible && "presenter-orb-visible",
+          speaking && "presenter-orb-speaking",
+        )}
         style={{ transform: `translate3d(${halo.x}px, ${halo.y}px, 0)` }}
         aria-hidden
       >
-        <span />
+        <span className="presenter-orb-wave" />
+        <span className="presenter-orb-core" />
       </div>
       <SlideContent
         slide={slide}
         finding={finding}
         dataset={dataset}
+        benchmark={benchmark}
         focusClass={focusClass}
       />
     </div>
@@ -350,11 +394,13 @@ function SlideContent({
   slide,
   finding,
   dataset,
+  benchmark,
   focusClass,
 }: {
   slide: Slide;
   finding: VerifiedFinding;
   dataset: DatasetSummary;
+  benchmark?: DeckBenchmark;
   focusClass: (id: string) => string;
 }) {
   const evidenceIndex = slide.kind === "trap" ? Number(slide.id.split("-")[1] ?? 0) : 0;
@@ -454,13 +500,36 @@ function SlideContent({
           />
         </div>
       </div>
-      <div className="deck-benchmark">
-        <strong>Pre-computed benchmark</strong>
-        <span>Vera 100%</span>
-        <span>baseline 47.6%</span>
-        <em>Live: every number is computed and traceable.</em>
-      </div>
+      {benchmark && <BenchmarkPanel benchmark={benchmark} />}
     </section>
+  );
+}
+
+function BenchmarkPanel({ benchmark }: { benchmark: DeckBenchmark }) {
+  return (
+    <details className="deck-benchmark">
+      <summary>
+        <strong>Pre-computed aggregate benchmark</strong>
+        <span>Vera {benchmark.veraPercent}%</span>
+        <span>baseline {benchmark.baselinePercent}%</span>
+        <em>View misses and Braintrust run</em>
+      </summary>
+      <div className="deck-benchmark-panel">
+        <p>What the no-execution baseline missed</p>
+        <ul>
+          {benchmark.baselineMisses.map((miss) => (
+            <li key={miss}>{miss}</li>
+          ))}
+        </ul>
+        <a href={benchmark.dashboardUrl} target="_blank" rel="noreferrer">
+          Open the Braintrust dashboard <span aria-hidden>↗</span>
+        </a>
+        <small>
+          Pre-computed aggregate benchmark, not a per-answer guarantee. Live, every displayed
+          number is computed and traceable.
+        </small>
+      </div>
+    </details>
   );
 }
 

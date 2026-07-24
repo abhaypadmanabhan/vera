@@ -1,7 +1,11 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { DeckPlayer, DeckSlide } from "@/components/vera/deck-player";
+import {
+  DeckPlayer,
+  DeckSlide,
+  presenterPosition,
+} from "@/components/vera/deck-player";
 import { buildDeck } from "@/lib/deck";
 import type { DatasetProfile, DatasetSummary, Finding } from "@/lib/types";
 
@@ -68,7 +72,26 @@ const finding: Extract<Finding, { verdict: "verified" }> = {
   attempts: 1,
 };
 
+const benchmark = {
+  veraPercent: 100,
+  baselinePercent: 47.6,
+  dashboardUrl: "https://www.braintrust.dev/app/vera-benchmark",
+  baselineMisses: ["What was total profit?"],
+};
+
 describe("deck slide presentation", () => {
+  it("keeps the presenter clear of a focused figure when there is room beside it", () => {
+    const position = presenterPosition(
+      { left: 0, top: 0, width: 1440, height: 708 },
+      { left: 80, right: 1180, top: 180, height: 180 },
+    );
+
+    expect(position.x).toBeGreaterThanOrEqual(1256);
+    expect(position.x + 60).toBeLessThanOrEqual(1424);
+    expect(position.y).toBeGreaterThanOrEqual(76);
+    expect(position.y).toBeLessThanOrEqual(632);
+  });
+
   it("offers an accessible narration stop control with its keyboard shortcuts", () => {
     const deck = buildDeck("What were sales in Q3 2018?", finding, profile);
     const markup = renderToStaticMarkup(
@@ -76,6 +99,7 @@ describe("deck slide presentation", () => {
         deck,
         finding,
         dataset,
+        benchmark,
         isMock: false,
         onNewQuestion: () => undefined,
       }),
@@ -106,6 +130,23 @@ describe("deck slide presentation", () => {
     }
   });
 
+  it("shows the presenter orb in its speaking state during audio playback", () => {
+    const slide = buildDeck("What were sales in Q3 2018?", finding, profile).slides[0];
+    const markup = renderToStaticMarkup(
+      createElement(DeckSlide, {
+        slide,
+        finding,
+        dataset,
+        activeFocus: slide.beats[0]?.focus ?? null,
+        speaking: true,
+      }),
+    );
+
+    expect(markup).toContain("presenter-orb-speaking");
+    expect(markup).toContain("presenter-orb-core");
+    expect(markup).toContain("presenter-orb-wave");
+  });
+
   it("keeps the benchmark explicitly separate from the live proof", () => {
     const summary = buildDeck("What were sales in Q3 2018?", finding, profile).slides.at(-1);
     expect(summary).toBeDefined();
@@ -115,13 +156,16 @@ describe("deck slide presentation", () => {
         slide: summary!,
         finding,
         dataset,
+        benchmark,
         activeFocus: "proof",
       }),
     );
 
-    expect(markup).toContain("Pre-computed benchmark");
+    expect(markup).toContain("Pre-computed aggregate benchmark");
     expect(markup).toContain("100%");
     expect(markup).toContain("47.6%");
+    expect(markup).toContain("What was total profit?");
+    expect(markup).toContain("https://www.braintrust.dev/app/vera-benchmark");
     expect(markup).toContain("computed and traceable");
   });
 

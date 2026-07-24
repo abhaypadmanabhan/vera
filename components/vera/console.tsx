@@ -6,7 +6,7 @@ import { buildDeck } from "@/lib/deck";
 import type { DatasetSummary } from "@/lib/types";
 import { AskScreen } from "./ask-screen";
 import { TopBar } from "./chrome";
-import { DeckPlayer } from "./deck-player";
+import { DeckPlayer, type DeckBenchmark } from "./deck-player";
 import { FindingScreen } from "./finding-screen";
 import { WorkingScreen } from "./working-screen";
 
@@ -21,10 +21,12 @@ import { WorkingScreen } from "./working-screen";
 export function Console({
   dataset,
   suggestions,
+  benchmark,
   isMock,
 }: {
   dataset: DatasetSummary;
   suggestions: string[];
+  benchmark: DeckBenchmark;
   isMock: boolean;
 }) {
   const { stages, finding, error, isRunning, start, reset } = useAnalysis();
@@ -121,6 +123,7 @@ export function Console({
           deck={deck}
           finding={finding}
           dataset={dataset}
+          benchmark={benchmark}
           isMock={isMock}
           onNewQuestion={askFollowUp}
         />
