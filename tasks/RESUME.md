@@ -1,7 +1,7 @@
 # RESUME PROMPT — paste this into a fresh Claude Code session
 
 Everything below the line is the handoff. It assumes zero conversation history. Regenerated at
-every checkpoint — last updated **CP-5, 2026-07-24 13:56 PDT**.
+every checkpoint — last updated **CP-6 (orchestrator handover), 2026-07-24 14:40 PDT**.
 
 ---
 
@@ -45,23 +45,37 @@ Use the `superpowers` skill for all coding work. For anything touching UI, also 
   pass" is not proof the feature works. Never report done on someone else's say-so; check yourself.
 - Run locally with `next dev`. Do **not** deploy to Vercel.
 
-## Where things stand right now (CP-4)
+## Where things stand right now (CP-6) — YOU ARE TAKING OVER MID-BUILD
 
-- **Phases 1-4 are DONE and verified live.** PR #21 (Phase 1) is merged into `dev`.
-  **PR #22 (Phases 2-4) is OPEN against `dev` and unmerged** — branch `feat/p2-fireworks`.
-- **The full loop is real:** Fireworks writes pandas from a deterministic schema profile, Daytona
-  runs it in a warm sandbox, and `lib/verify.ts` gates the result. Live on the real 9,994-row
-  Superstore file: sandbox up in 0.3s, exit 0 in 828ms, `verified`, value **143787.36**, matching
-  the hand-verified answer key.
-- **MONEY: Fireworks and Daytona are APPROVED. Braintrust and ElevenLabs are NOT** — each needs its
-  own explicit go.
-- **Sandbox hygiene:** after any live session, delete the sandbox or it keeps burning.
-  `set -a; . ./.env.local; set +a; VERA_LIVE=1 VERA_SANDBOX_ID=<id> pnpm vitest run tests/reap.live.test.ts`
-- Live tests are gated behind `VERA_LIVE=1`; a plain `pnpm test` (69 pass, 3 skipped) never spends.
-- Read **CP-3 and CP-4 in `tasks/checkpoints.md`** for the profiler, the poisoned `Order Quarter`
-  column, and the safeguard — that is where the real reasoning lives.
-- What is left: Braintrust (#16), ElevenLabs (#17), cold open (#18), polish (#19), Devpost (#20).
-  **Submission is due 3:30pm PDT and PRD §10 reserves ~45 minutes for it.**
+**The demo is at 3:30pm PDT today. Check the clock before you plan anything.**
+
+Read **CP-6 in `tasks/checkpoints.md` first** — it is the full handover and it is current.
+
+Short version:
+
+- **Everything works, live.** Fireworks → Daytona → safeguard, verified end to end on the real
+  9,994-row file (**143787.36**). ElevenLabs narration confirmed live in a browser. Braintrust
+  **100% vs 47.6%**. Landing at `/welcome`, keynote deck at `/`, cold open at `/open`.
+- Branch **`feat/p2-fireworks`** holds it all. **PR #22 is open against `dev`, unmerged.**
+  PR #21 is merged. Repo is **public**.
+- 83 tests pass, 5 skipped. Live tests are gated behind `VERA_LIVE=1` and never spend on
+  `pnpm test`.
+- **All four sponsor APIs are approved and proven.** Fireworks, Daytona, Braintrust, ElevenLabs.
+- **Agent `polish` (codex, workspace `wE`, branch `p7/polish`) is running right now** on: stop
+  button, sponsor marks on the working screen, alignment pass, voice orb, benchmark panel. Merge
+  what it pushes and verify it yourself in a browser.
+
+**Six recent fixes you must not regress** — chips run on click, light is the default theme,
+evidence examples are deduped, figures display at 2dp, the hero carries a plain-English `headline`
+(no code jargon), and `lib/deck.ts` narration is written in an analyst's voice rather than reading
+the slides. CP-6 explains each.
+
+**Sandbox hygiene:** after any live session, delete the sandbox or it keeps burning:
+`set -a; . ./.env.local; set +a; VERA_LIVE=1 VERA_SANDBOX_ID=<id> pnpm vitest run tests/reap.live.test.ts`
+
+**Two open questions the builder has not answered** — do not decide these alone: whether to move
+the landing page from `/welcome` to `/`, and whether to retry fetching official vendor logos for
+the powered-by strip.
 
 
 ## Fleet
