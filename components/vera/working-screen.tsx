@@ -7,6 +7,11 @@ import { cn } from "@/lib/utils";
 import { formatDuration } from "./format";
 import { useRunClock } from "./use-run-clock";
 
+const STAGE_VENDOR: Partial<Record<StageView["id"], string>> = {
+  writing_code: "Fireworks",
+  running_sandbox: "Daytona",
+};
+
 /**
  * Screen 2 — Working. The four stages as a quiet, intentional sequence
  * (DESIGN.md v3). One active at a time, each carrying a live detail line and the
@@ -68,6 +73,7 @@ export function WorkingScreen({
 
 function StageRow({ stage, isLast }: { stage: StageView; isLast: boolean }) {
   const pending = stage.status === "pending";
+  const vendor = STAGE_VENDOR[stage.id];
 
   return (
     <li className="grid grid-cols-[20px_1fr_auto] gap-x-4">
@@ -90,6 +96,12 @@ function StageRow({ stage, isLast }: { stage: StageView; isLast: boolean }) {
           )}
         >
           {STAGE_LABELS[stage.id]}
+          {vendor && (
+            <span className="ml-2 inline-flex items-center gap-1.5 align-middle font-mono text-micro font-semibold tracking-[-0.02em] text-ink-muted">
+              <span aria-hidden className="size-1 rounded-full bg-line-strong" />
+              {vendor}
+            </span>
+          )}
           {stage.attempt > 1 && (
             <span className="v-label ml-2 rounded-full border border-line px-2 py-0.5 align-middle">
               Attempt {stage.attempt}

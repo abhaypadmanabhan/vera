@@ -83,11 +83,40 @@ export function DeckPlayer({
 
   // Vera speaks the beat; the deck moves on when she finishes, so the blob is
   // always highlighting whatever she is currently saying.
-  const { speaking: veraSpeaking, available: voiceAvailable } = useNarrationAudio({
+  const {
+    speaking: veraSpeaking,
+    available: voiceAvailable,
+    stop: stopNarrationAudio,
+  } = useNarrationAudio({
     text: spokenLine,
     enabled: narrating,
     onEnded: advance,
   });
+
+  const stopNarration = useCallback(() => {
+    stopNarrationAudio();
+    setNarrating(false);
+    setReferencing(false);
+  }, [stopNarrationAudio]);
+
+  useEffect(() => {
+    if (!narrating) return;
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        (target.matches("input, textarea, select") || target.isContentEditable)
+      ) {
+        return;
+      }
+      if (event.key === "Escape" || event.key === " ") {
+        event.preventDefault();
+        stopNarration();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [narrating, stopNarration]);
 
   // Fallback pacing when there is no audio (mock mode, blocked autoplay, failure).
   useEffect(() => {
@@ -151,6 +180,19 @@ export function DeckPlayer({
             </span>
           )}
           {isMock && <span className="deck-mock">Mock engine</span>}
+          {narrating && (
+            <button
+              type="button"
+              className="deck-stop"
+              onClick={stopNarration}
+              aria-label="Stop narration"
+            >
+              <span className="deck-stop-mark" aria-hidden />
+              <span>Stop</span>
+              <kbd>Esc</kbd>
+              <kbd>Space</kbd>
+            </button>
+          )}
           <Link href="/open" className="deck-link">
             Cold open
           </Link>

@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { DeckSlide } from "@/components/vera/deck-player";
+import { DeckPlayer, DeckSlide } from "@/components/vera/deck-player";
 import { buildDeck } from "@/lib/deck";
 import type { DatasetProfile, DatasetSummary, Finding } from "@/lib/types";
 
@@ -69,6 +69,24 @@ const finding: Extract<Finding, { verdict: "verified" }> = {
 };
 
 describe("deck slide presentation", () => {
+  it("offers an accessible narration stop control with its keyboard shortcuts", () => {
+    const deck = buildDeck("What were sales in Q3 2018?", finding, profile);
+    const markup = renderToStaticMarkup(
+      createElement(DeckPlayer, {
+        deck,
+        finding,
+        dataset,
+        isMock: false,
+        onNewQuestion: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain('aria-label="Stop narration"');
+    expect(markup).toContain("Stop");
+    expect(markup).toContain("Esc");
+    expect(markup).toContain("Space");
+  });
+
   it("renders every beat focus as a focusable presentation region", () => {
     const deck = buildDeck("What were sales in Q3 2018?", finding, profile);
 
