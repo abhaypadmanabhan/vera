@@ -8,6 +8,7 @@ import { isProven } from "@/lib/types";
 import type { DatasetSummary, Finding, SchemaEvidence, SourceCell } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { formatCount, formatFigure } from "./format";
+import { useNarrationAudio } from "./use-narration-audio";
 
 const NARRATION_TIMING = {
   beatMs: 1_650,
@@ -39,6 +40,7 @@ export function DeckPlayer({
 
   const slide = deck.slides[slideIndex];
   const focus = slide?.beats[activeBeat]?.focus ?? null;
+  const spokenLine = narrating ? (slide?.beats[activeBeat]?.spoken ?? null) : null;
 
   const goTo = useCallback(
     (nextIndex: number, asReference = false) => {
@@ -64,22 +66,35 @@ export function DeckPlayer({
     [],
   );
 
+  /** Advance one beat, then one slide, then stop. Shared by the voice and the timer. */
+  const advance = useCallback(() => {
+    if (!slide) return;
+    if (activeBeat < slide.beats.length - 1) {
+      setActiveBeat((current) => current + 1);
+      return;
+    }
+    if (slideIndex < deck.slides.length - 1) {
+      goTo(slideIndex + 1);
+      return;
+    }
+    setNarrating(false);
+    setReferencing(false);
+  }, [activeBeat, deck.slides.length, goTo, slide, slideIndex]);
+
+  // Vera speaks the beat; the deck moves on when she finishes, so the blob is
+  // always highlighting whatever she is currently saying.
+  const { speaking: veraSpeaking, available: voiceAvailable } = useNarrationAudio({
+    text: spokenLine,
+    enabled: narrating,
+    onEnded: advance,
+  });
+
+  // Fallback pacing when there is no audio (mock mode, blocked autoplay, failure).
   useEffect(() => {
-    if (!narrating || !slide) return;
-    const id = window.setTimeout(() => {
-      if (activeBeat < slide.beats.length - 1) {
-        setActiveBeat((current) => current + 1);
-        return;
-      }
-      if (slideIndex < deck.slides.length - 1) {
-        goTo(slideIndex + 1);
-        return;
-      }
-      setNarrating(false);
-      setReferencing(false);
-    }, NARRATION_TIMING.beatMs);
+    if (!narrating || !slide || voiceAvailable) return;
+    const id = window.setTimeout(advance, NARRATION_TIMING.beatMs);
     return () => window.clearTimeout(id);
-  }, [activeBeat, deck.slides.length, goTo, narrating, slide, slideIndex]);
+  }, [advance, narrating, slide, voiceAvailable]);
 
   useEffect(() => {
     if (narrating) return;
@@ -198,6 +213,7 @@ export function DeckPlayer({
             {String(slideIndex + 1).padStart(2, "0")} / {String(deck.slides.length).padStart(2, "0")}
           </span>
           <span>{narrating ? slide.beats[activeBeat]?.spoken : "Use ← → or the rail to revisit"}</span>
+          {veraSpeaking ? <span className="sr-only">Vera is speaking</span> : null}
         </div>
 
         {!narrating && (
