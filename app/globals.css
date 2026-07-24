@@ -1,93 +1,155 @@
 @import "tailwindcss";
 
 /*
- * Vera design tokens — DESIGN.md v2.
+ * Vera design tokens — DESIGN.md v3.
  *
- * One committed idea: Vera is not a dashboard, she is an auditor marking up your
- * data in red pen. Paper, ink, one red mark. Light only — there is no dark mode
- * and no theme switcher (anti-scope). Two families, no sans anywhere.
+ * Apple-clean: neutrals carry ~90% of the surface, ONE accent (interactive +
+ * verified), semantic colour only for status. Light is primary; dark exists
+ * because the charts have to read in both. Swap token values, never components.
+ *
+ * Every chart colour below was validated with the dataviz skill's palette
+ * validator against the real surfaces:
+ *   light  accent #0073cf + danger #cc272e on #fbfcfd  → all six checks PASS
+ *   dark   accent #3093ec + danger #e24947 on #121416  → all six checks PASS
+ * Do not re-step them without re-running that validator.
  */
 
-@theme {
-  /* ── Colour: exactly two, plus one mark ─────────────────────────────────── */
-  --color-paper: oklch(0.975 0.008 85); /* warm off-white — the page */
-  --color-paper-deep: oklch(0.945 0.01 85); /* recessed: exhibits, code */
-  --color-ink: oklch(0.2 0.012 250); /* near-black, faintly cool — all text */
-  --color-ink-muted: oklch(0.45 0.012 250); /* secondary text, labels (AA on paper) */
-  --color-rule: oklch(0.86 0.008 85); /* hairlines. 1px. everywhere. */
+:root {
+  color-scheme: light;
 
-  --color-mark: oklch(0.56 0.2 28); /* THE red pen — rules, stamps, marks */
-  --color-mark-ink: oklch(0.47 0.19 28); /* the same pen, for small red text (AA) */
-  --color-mark-wash: oklch(0.94 0.04 28); /* the faintest wash behind a marked cell */
+  --v-bg: oklch(0.99 0.002 250);
+  --v-surface: oklch(1 0 0);
+  --v-sunk: oklch(0.975 0.003 250);
+  --v-line: oklch(0.92 0.004 250);
+  --v-line-strong: oklch(0.86 0.006 250);
+  --v-ink: oklch(0.22 0.01 250);
+  --v-ink-muted: oklch(0.5 0.014 250);
+  --v-accent: oklch(0.55 0.17 250);
+  --v-accent-wash: oklch(0.96 0.02 250);
+  --v-warn: oklch(0.62 0.14 70);
+  --v-warn-wash: oklch(0.965 0.03 70);
+  --v-danger: oklch(0.55 0.2 25);
 
-  /* ── Type: two families, five sizes, no more ────────────────────────────── */
-  --font-serif: var(--font-newsreader), Georgia, "Times New Roman", serif;
+  /* The one shadow in the system: a hairline lift, never a stack. */
+  --v-lift: 0 1px 2px oklch(0.22 0.01 250 / 0.05), 0 8px 24px oklch(0.22 0.01 250 / 0.04);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+
+    --v-bg: oklch(0.19 0.006 250);
+    --v-surface: oklch(0.225 0.008 250);
+    --v-sunk: oklch(0.165 0.006 250);
+    --v-line: oklch(0.3 0.009 250);
+    --v-line-strong: oklch(0.38 0.01 250);
+    --v-ink: oklch(0.96 0.003 250);
+    --v-ink-muted: oklch(0.72 0.014 250);
+    --v-accent: oklch(0.65 0.16 250);
+    --v-accent-wash: oklch(0.28 0.04 250);
+    --v-warn: oklch(0.74 0.13 70);
+    --v-warn-wash: oklch(0.29 0.04 70);
+    --v-danger: oklch(0.62 0.19 25);
+
+    --v-lift: 0 1px 2px oklch(0 0 0 / 0.4), 0 8px 24px oklch(0 0 0 / 0.28);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --v-bg: oklch(0.19 0.006 250);
+  --v-surface: oklch(0.225 0.008 250);
+  --v-sunk: oklch(0.165 0.006 250);
+  --v-line: oklch(0.3 0.009 250);
+  --v-line-strong: oklch(0.38 0.01 250);
+  --v-ink: oklch(0.96 0.003 250);
+  --v-ink-muted: oklch(0.72 0.014 250);
+  --v-accent: oklch(0.65 0.16 250);
+  --v-accent-wash: oklch(0.28 0.04 250);
+  --v-warn: oklch(0.74 0.13 70);
+  --v-warn-wash: oklch(0.29 0.04 70);
+  --v-danger: oklch(0.62 0.19 25);
+
+  --v-lift: 0 1px 2px oklch(0 0 0 / 0.4), 0 8px 24px oklch(0 0 0 / 0.28);
+}
+
+@theme inline {
+  --color-bg: var(--v-bg);
+  --color-surface: var(--v-surface);
+  --color-sunk: var(--v-sunk);
+  --color-line: var(--v-line);
+  --color-line-strong: var(--v-line-strong);
+  --color-ink: var(--v-ink);
+  --color-ink-muted: var(--v-ink-muted);
+  --color-accent: var(--v-accent);
+  --color-accent-wash: var(--v-accent-wash);
+  --color-warn: var(--v-warn);
+  --color-warn-wash: var(--v-warn-wash);
+  --color-danger: var(--v-danger);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, "SFMono-Regular", monospace;
 
-  --text-note: 0.75rem; /* 12 — mono labels, timestamps, captions */
-  --text-note--line-height: 1.45;
-  --text-meta: 0.875rem; /* 14 — mono data, cells, code */
-  --text-meta--line-height: 1.6;
-  --text-body: 1.0625rem; /* 17 — prose */
+  /* Six sizes. That is the whole scale. */
+  --text-micro: 0.75rem; /* 12 — labels, timings, captions */
+  --text-micro--line-height: 1.4;
+  --text-small: 0.875rem; /* 14 — secondary, dense UI */
+  --text-small--line-height: 1.5;
+  --text-body: 1rem; /* 16 — prose */
   --text-body--line-height: 1.55;
-  --text-claim: 1.75rem; /* 28 — the claim, the question */
-  --text-claim--line-height: 1.25;
-  --text-figure: 5.5rem; /* 88 — the number, mono, tabular */
+  --text-lead: 1.25rem; /* 20 — the claim, the question */
+  --text-lead--line-height: 1.35;
+  --text-title: 2rem; /* 32 — screen titles */
+  --text-title--line-height: 1.1;
+  --text-figure: 4.5rem; /* 72 — the headline finding, and nothing else */
   --text-figure--line-height: 1;
 
-  /* ── Motion: paper, not glass ───────────────────────────────────────────── */
-  --ease-paper: cubic-bezier(0.22, 1, 0.36, 1);
-  --duration-fast: 150ms;
-  --duration-base: 260ms;
+  --ease-settle: cubic-bezier(0.22, 1, 0.36, 1);
+  --shadow-lift: var(--v-lift);
 }
 
 @layer base {
   html {
-    font-family: var(--font-serif);
-    background-color: var(--color-paper);
-    color: var(--color-ink);
+    background-color: var(--v-bg);
+    color: var(--v-ink);
     -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
 
   body {
-    /* The page never scrolls sideways; wide exhibits scroll inside themselves. */
+    /* The page never scrolls sideways; wide content scrolls inside itself. */
     overflow-x: hidden;
   }
 
   ::selection {
-    background-color: var(--color-mark-wash);
-    color: var(--color-ink);
+    background-color: var(--v-accent-wash);
+    color: var(--v-ink);
   }
 
-  /*
-   * One focus treatment everywhere: a red rule, never a glow. Elements that
-   * animate their colour transition `color` only — never `outline-color`, or the
-   * ring fades in and the first frame of focus is invisible.
-   */
+  /* One focus treatment, everywhere. Visible on every keyboard-reachable thing. */
   :focus-visible {
-    outline: 2px solid var(--color-mark);
-    outline-offset: 3px;
+    outline: 2px solid var(--v-accent);
+    outline-offset: 2px;
+    border-radius: 4px;
   }
 
-  /* Every digit on this page aligns. */
-  code,
-  kbd,
-  samp,
-  pre,
-  table {
-    font-variant-numeric: tabular-nums;
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.02em;
   }
 }
 
 @layer components {
-  /* Mono smallcaps label. The only label idiom on the page. */
+  /* The only label idiom on the page. */
   .v-label {
     font-family: var(--font-mono);
-    font-size: var(--text-note);
-    line-height: 1.45;
+    font-size: 0.75rem;
+    line-height: 1.4;
     text-transform: uppercase;
-    letter-spacing: 0.09em;
-    color: var(--color-ink-muted);
+    letter-spacing: 0.1em;
+    color: var(--v-ink-muted);
     font-variant-numeric: tabular-nums;
   }
 
@@ -96,106 +158,35 @@
     font-feature-settings: "tnum";
   }
 
-  /*
-   * The red pen itself: a wash behind a region the code actually read, plus a
-   * hand-drawn-weight underline. Not a border — an annotation.
-   */
-  .v-marked {
-    background-color: var(--color-mark-wash);
-    box-shadow: inset 0 -1.5px 0 var(--color-mark);
-  }
-
-  /* Text + a red underline that thickens on hover. Never a filled pill. */
-  .v-pen {
-    background-image: linear-gradient(var(--color-mark), var(--color-mark));
-    background-repeat: no-repeat;
-    background-position: 0 100%;
-    background-size: 100% 1px;
-    padding-bottom: 2px;
-    transition: background-size var(--duration-fast) var(--ease-paper);
-  }
-
-  .v-pen:hover,
-  .v-pen:focus-visible {
-    background-size: 100% 2.5px;
-  }
-
-  .v-pen:disabled {
-    background-size: 100% 1px;
-    color: var(--color-ink-muted);
-    opacity: 0.55;
-  }
-
-  .v-pen:active {
-    background-size: 100% 3.5px;
-  }
-
-  /* The verdict stamp: mono, letterspaced, red hairline box, slightly askew. */
-  .v-stamp {
-    display: inline-block;
-    font-family: var(--font-mono);
-    font-size: var(--text-note);
-    text-transform: uppercase;
-    letter-spacing: 0.22em;
-    color: var(--color-mark-ink);
-    border: 1px solid var(--color-mark);
-    padding: 0.45rem 0.75rem 0.45rem 0.85rem;
-    transform: rotate(-1.5deg);
+  .v-card {
+    background-color: var(--v-surface);
+    border: 1px solid var(--v-line);
+    border-radius: 16px;
   }
 }
 
 @layer utilities {
-  /* A rule that draws itself left to right as its section arrives. */
-  .v-draw {
-    transform-origin: left center;
-    animation: v-draw var(--duration-base) var(--ease-paper) both;
+  /* Staged reveal: elements settle in, ~60ms apart. Transform + opacity only. */
+  .v-reveal {
+    animation: v-reveal 400ms var(--ease-settle) both;
+    animation-delay: calc(var(--step, 0) * 60ms);
   }
 
-  /* An exhibit uncovered from its top edge, like a page being lifted. */
-  .v-uncover {
-    animation: v-uncover var(--duration-base) var(--ease-paper) both;
+  .v-reveal-slow {
+    animation: v-reveal 520ms var(--ease-settle) both;
+    animation-delay: calc(var(--step, 0) * 90ms);
   }
 
-  .v-rise {
-    animation: v-rise var(--duration-base) var(--ease-paper) both;
-    animation-delay: calc(var(--stagger, 0) * 45ms);
-  }
-
-  /* The stamp lands once. */
-  .v-stamped {
-    animation: v-stamped var(--duration-fast) var(--ease-paper) both;
-  }
-
-  /* The rail's live dot. Opacity only — nothing on this page throbs. */
-  .v-live {
-    animation: v-live 1.6s var(--ease-paper) infinite;
+  /* The live dot. Opacity only — nothing on this page throbs or spins. */
+  .v-breathe {
+    animation: v-breathe 1.8s var(--ease-settle) infinite;
   }
 }
 
-@keyframes v-draw {
-  from {
-    transform: scaleX(0);
-  }
-  to {
-    transform: scaleX(1);
-  }
-}
-
-@keyframes v-uncover {
+@keyframes v-reveal {
   from {
     opacity: 0;
-    clip-path: inset(0 0 100% 0);
-  }
-  to {
-    opacity: 1;
-    clip-path: inset(0 0 0 0);
-  }
-}
-
-@keyframes v-rise {
-  from {
-    opacity: 0;
-    transform: translate3d(0, 6px, 0);
+    transform: translate3d(0, 8px, 0);
   }
   to {
     opacity: 1;
@@ -203,28 +194,17 @@
   }
 }
 
-@keyframes v-stamped {
-  from {
-    opacity: 0;
-    transform: scale(1.06) rotate(-4deg);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1) rotate(-1.5deg);
-  }
-}
-
-@keyframes v-live {
+@keyframes v-breathe {
   0%,
   100% {
     opacity: 1;
   }
   50% {
-    opacity: 0.25;
+    opacity: 0.3;
   }
 }
 
-/* prefers-reduced-motion kills all movement — opacity only. DESIGN.md "Motion". */
+/* prefers-reduced-motion kills all of it. DESIGN.md "Motion". */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -235,17 +215,11 @@
     transition-duration: 1ms !important;
   }
 
-  .v-draw,
-  .v-uncover,
-  .v-rise,
-  .v-stamped {
+  .v-reveal,
+  .v-reveal-slow,
+  .v-breathe {
     animation: none !important;
-    clip-path: none !important;
-  }
-
-  .v-rise,
-  .v-draw,
-  .v-uncover {
+    opacity: 1 !important;
     transform: none !important;
   }
 }
