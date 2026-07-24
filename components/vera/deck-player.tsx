@@ -17,6 +17,13 @@ const NARRATION_TIMING = {
 
 type VerifiedFinding = Extract<Finding, { verdict: "verified" }>;
 
+export type DeckBenchmark = {
+  veraPercent: number;
+  baselinePercent: number;
+  dashboardUrl: string;
+  baselineMisses: string[];
+};
+
 const PRESENTER_RADIUS = 60;
 const PRESENTER_GAP = 16;
 const PRESENTER_EDGE = 16;
@@ -41,12 +48,14 @@ export function DeckPlayer({
   deck,
   finding,
   dataset,
+  benchmark,
   isMock,
   onNewQuestion,
 }: {
   deck: Deck;
   finding: VerifiedFinding;
   dataset: DatasetSummary;
+  benchmark: DeckBenchmark;
   isMock: boolean;
   onNewQuestion: (question: string) => void;
 }) {
@@ -231,6 +240,7 @@ export function DeckPlayer({
               slide={deck.slides[previousIndex]}
               finding={finding}
               dataset={dataset}
+              benchmark={benchmark}
               activeFocus={null}
               speaking={false}
             />
@@ -241,6 +251,7 @@ export function DeckPlayer({
             slide={slide}
             finding={finding}
             dataset={dataset}
+            benchmark={benchmark}
             activeFocus={focus}
             speaking={veraSpeaking}
           />
@@ -309,12 +320,14 @@ export function DeckSlide({
   slide,
   finding,
   dataset,
+  benchmark,
   activeFocus,
   speaking = false,
 }: {
   slide: Slide;
   finding: VerifiedFinding;
   dataset: DatasetSummary;
+  benchmark?: DeckBenchmark;
   activeFocus: string | null;
   speaking?: boolean;
 }) {
@@ -370,6 +383,7 @@ export function DeckSlide({
         slide={slide}
         finding={finding}
         dataset={dataset}
+        benchmark={benchmark}
         focusClass={focusClass}
       />
     </div>
@@ -380,11 +394,13 @@ function SlideContent({
   slide,
   finding,
   dataset,
+  benchmark,
   focusClass,
 }: {
   slide: Slide;
   finding: VerifiedFinding;
   dataset: DatasetSummary;
+  benchmark?: DeckBenchmark;
   focusClass: (id: string) => string;
 }) {
   const evidenceIndex = slide.kind === "trap" ? Number(slide.id.split("-")[1] ?? 0) : 0;
@@ -484,13 +500,36 @@ function SlideContent({
           />
         </div>
       </div>
-      <div className="deck-benchmark">
-        <strong>Pre-computed benchmark</strong>
-        <span>Vera 100%</span>
-        <span>baseline 47.6%</span>
-        <em>Live: every number is computed and traceable.</em>
-      </div>
+      {benchmark && <BenchmarkPanel benchmark={benchmark} />}
     </section>
+  );
+}
+
+function BenchmarkPanel({ benchmark }: { benchmark: DeckBenchmark }) {
+  return (
+    <details className="deck-benchmark">
+      <summary>
+        <strong>Pre-computed aggregate benchmark</strong>
+        <span>Vera {benchmark.veraPercent}%</span>
+        <span>baseline {benchmark.baselinePercent}%</span>
+        <em>View misses and Braintrust run</em>
+      </summary>
+      <div className="deck-benchmark-panel">
+        <p>What the no-execution baseline missed</p>
+        <ul>
+          {benchmark.baselineMisses.map((miss) => (
+            <li key={miss}>{miss}</li>
+          ))}
+        </ul>
+        <a href={benchmark.dashboardUrl} target="_blank" rel="noreferrer">
+          Open the Braintrust dashboard <span aria-hidden>↗</span>
+        </a>
+        <small>
+          Pre-computed aggregate benchmark, not a per-answer guarantee. Live, every displayed
+          number is computed and traceable.
+        </small>
+      </div>
+    </details>
   );
 }
 

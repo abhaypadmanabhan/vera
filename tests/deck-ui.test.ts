@@ -72,6 +72,13 @@ const finding: Extract<Finding, { verdict: "verified" }> = {
   attempts: 1,
 };
 
+const benchmark = {
+  veraPercent: 100,
+  baselinePercent: 47.6,
+  dashboardUrl: "https://www.braintrust.dev/app/vera-benchmark",
+  baselineMisses: ["What was total profit?"],
+};
+
 describe("deck slide presentation", () => {
   it("keeps the presenter clear of a focused figure when there is room beside it", () => {
     const position = presenterPosition(
@@ -92,6 +99,7 @@ describe("deck slide presentation", () => {
         deck,
         finding,
         dataset,
+        benchmark,
         isMock: false,
         onNewQuestion: () => undefined,
       }),
@@ -148,13 +156,16 @@ describe("deck slide presentation", () => {
         slide: summary!,
         finding,
         dataset,
+        benchmark,
         activeFocus: "proof",
       }),
     );
 
-    expect(markup).toContain("Pre-computed benchmark");
+    expect(markup).toContain("Pre-computed aggregate benchmark");
     expect(markup).toContain("100%");
     expect(markup).toContain("47.6%");
+    expect(markup).toContain("What was total profit?");
+    expect(markup).toContain("https://www.braintrust.dev/app/vera-benchmark");
     expect(markup).toContain("computed and traceable");
   });
 
