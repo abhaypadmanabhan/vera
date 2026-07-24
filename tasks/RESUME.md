@@ -1,7 +1,7 @@
 # RESUME PROMPT — paste this into a fresh Claude Code session
 
 Everything below the line is the handoff. It assumes zero conversation history. Regenerated at
-every checkpoint — last updated **CP-3, 2026-07-24 12:25 PDT**.
+every checkpoint — last updated **CP-4, 2026-07-24 13:00 PDT**.
 
 ---
 
@@ -45,25 +45,24 @@ Use the `superpowers` skill for all coding work. For anything touching UI, also 
   pass" is not proof the feature works. Never report done on someone else's say-so; check yourself.
 - Run locally with `next dev`. Do **not** deploy to Vercel.
 
-## Where things stand right now (CP-3)
+## Where things stand right now (CP-4)
 
-- **Phase 1 is done and PR #21 is MERGED into `dev`.**
-- **Phase 2 is in progress on branch `feat/p2-fireworks`.** Read CP-3 in `tasks/checkpoints.md`
-  for the full state before touching anything.
-- **MONEY: Fireworks is APPROVED. Daytona, Braintrust and ElevenLabs are NOT.** Phase 3 needs its
-  own explicit go from the builder.
-- The demo dataset is the real 9,994-row Superstore CSV at `data/superstore.csv`, served from the
-  **server** — the client sends a `datasetId` and never receives the file. `eval/` holds 21
-  questions, all recomputed and verified.
-- The **deterministic schema profiler** (`lib/profile/profiler.ts`) is the differentiator. It
-  proves `OrderDate` is `%d/%m/%Y` from the data (5,952 rows whose first component exceeds 12
-  cannot be months; 0 argue otherwise) and carries that proof into the grounding as
-  `SchemaEvidence`. Naive month-first parsing silently drops those rows and reports 2018 Q3 sales
-  as $50,517.26 instead of $143,787.36. **Use `isProven(evidence)`** — checking
-  `contradictingRows === 0` alone is a bug, because a fully-ambiguous column returns 0 and 0.
-- The Phase 1 UI was **rejected**. `DESIGN.md` v2 is the replacement direction: an auditor's
-  evidence document in paper/ink/red-pen, serif + mono with no sans, single column with a margin
-  rail. Any UI agent must read the Obsidian vault itself, not just `DESIGN.md`.
+- **Phases 1-4 are DONE and verified live.** PR #21 (Phase 1) is merged into `dev`.
+  **PR #22 (Phases 2-4) is OPEN against `dev` and unmerged** — branch `feat/p2-fireworks`.
+- **The full loop is real:** Fireworks writes pandas from a deterministic schema profile, Daytona
+  runs it in a warm sandbox, and `lib/verify.ts` gates the result. Live on the real 9,994-row
+  Superstore file: sandbox up in 0.3s, exit 0 in 828ms, `verified`, value **143787.36**, matching
+  the hand-verified answer key.
+- **MONEY: Fireworks and Daytona are APPROVED. Braintrust and ElevenLabs are NOT** — each needs its
+  own explicit go.
+- **Sandbox hygiene:** after any live session, delete the sandbox or it keeps burning.
+  `set -a; . ./.env.local; set +a; VERA_LIVE=1 VERA_SANDBOX_ID=<id> pnpm vitest run tests/reap.live.test.ts`
+- Live tests are gated behind `VERA_LIVE=1`; a plain `pnpm test` (69 pass, 3 skipped) never spends.
+- Read **CP-3 and CP-4 in `tasks/checkpoints.md`** for the profiler, the poisoned `Order Quarter`
+  column, and the safeguard — that is where the real reasoning lives.
+- What is left: Braintrust (#16), ElevenLabs (#17), cold open (#18), polish (#19), Devpost (#20).
+  **Submission is due 3:30pm PDT and PRD §10 reserves ~45 minutes for it.**
+
 
 ## Fleet
 
