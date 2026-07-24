@@ -1,9 +1,11 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import {
   buildCodegenPrompt,
   generatePandasCode,
   parseCodegenResponse,
 } from "@/lib/codegen/generate";
+import { profileDataset } from "@/lib/profile/profiler";
 import type { DatasetProfile } from "@/lib/types";
 
 const profile: DatasetProfile = {
@@ -170,8 +172,52 @@ describe("structured pandas codegen", () => {
     );
 
     expect(createChatCompletion).not.toHaveBeenCalled();
-    expect(result.code).toContain('format="%d/%m/%Y"');
-    expect(result.code).toContain('pd.read_csv("/workspace/data.csv")');
-    expect(result.columnsUsed).toEqual(["OrderDate", "Sales"]);
+    expect(result).toMatchInlineSnapshot(`
+      {
+        "code": "import json
+      import pandas as pd
+
+      df = pd.read_csv("/workspace/data.csv")
+      df["OrderDate"] = pd.to_datetime(df["OrderDate"], format="%d/%m/%Y")
+      df["Sales"] = pd.to_numeric(df["Sales"].astype(str).str.replace(r"[$,%]", "", regex=True), errors="coerce")
+      result = round(float(df["Sales"].sum()), 2)
+      print("VERA_RESULT:" + json.dumps(result, separators=(",", ":")))",
+        "columnsUsed": [
+          "OrderDate",
+          "Sales",
+        ],
+        "explanation": "Sums Sales after applying the profiled schema constraints.",
+      }
+    `);
+  });
+
+  it("uses the proven Superstore date format in mock mode with no key", async () => {
+    const csv = readFileSync("data/superstore.csv", "utf8");
+    const superstoreProfile = profileDataset(
+      "superstore",
+      "superstore.csv",
+      csv,
+    );
+    const originalKey = process.env.FIREWORKS_API_KEY;
+    delete process.env.FIREWORKS_API_KEY;
+
+    try {
+      const result = await generatePandasCode(
+        {
+          question: "What were 2018 sales?",
+          profile: superstoreProfile,
+          sampleRows: [["CA-2016-152156", "08/11/2017"]],
+          sandboxPath: "/workspace/data.csv",
+        },
+        { mockMode: true },
+      );
+
+      expect(result.code).toContain(
+        'pd.to_datetime(df["OrderDate"], format="%d/%m/%Y")',
+      );
+    } finally {
+      if (originalKey === undefined) delete process.env.FIREWORKS_API_KEY;
+      else process.env.FIREWORKS_API_KEY = originalKey;
+    }
   });
 });
