@@ -15,6 +15,33 @@ export function formatValue(value: number | string): string {
   return value.toLocaleString("en-US", { maximumFractionDigits: 4 });
 }
 
+/**
+ * The figure as it is set at 88px: sign, then unit, then digits — `-$17,725.48`.
+ * Never rounds and never invents precision; the sign stays in front of the unit
+ * so a loss reads as a loss at a glance.
+ */
+export function formatFigure(value: number | string, unit: string | null): string {
+  const digits = formatValue(value);
+  if (!unit) return digits;
+  if (unit === "%") return `${digits}%`;
+  if (unit.length <= 2 && /^[^\w\s]+$/.test(unit)) {
+    return digits.startsWith("-") ? `-${unit}${digits.slice(1)}` : `${unit}${digits}`;
+  }
+  return `${digits} ${unit}`;
+}
+
+/** Whole counts, grouped. Used for row counts, supporting/contradicting rows. */
+export function formatCount(count: number): string {
+  return count.toLocaleString("en-US");
+}
+
+/** "2.3 MB" — the size of the file on record, never guessed. */
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 /** Right-align a cell only when it really holds a number. */
 export function looksNumeric(value: string): boolean {
   return /^-?[$€£]?\s?[\d,]+(\.\d+)?%?$/.test(value.trim());

@@ -142,6 +142,29 @@ Never encode meaning in colour alone — the verdict always carries its word. Fu
 through the demo, visible focus (a red rule, not a glow). Live region announces stage changes.
 Wide exhibits scroll inside their own container; the page never scrolls sideways.
 
+## Departures recorded during the build (v2.1)
+
+Each of these moves *toward* the concept, not away from it. Measured in Chromium at 1440×900
+and 1280×800.
+
+1. **`--ink-muted` darkened `0.52 → 0.45`, and a second step added on the red ramp.**
+   At `0.52` muted body text measured 4.3:1 on paper — under AA. It now measures **6.89:1**.
+   `--mark` at `0.56` measures 4.77:1, fine for the stamp, rules and marks (UI, 3:1) but thin for
+   12px red text, so small red type uses **`--mark-ink: oklch(0.47 0.19 28)` (7.0:1)**. Same hue,
+   same pen — a ramp step, not a second accent.
+2. **The refusal placeholder is a struck *slot*, not struck glyphs.** `——,———.——` set at 88px mono
+   renders as disconnected dashes and reads as a rendering bug. It is now the figure's blank space,
+   ruled, with a red stroke corner to corner — the mark an auditor puts through space that must
+   stay empty — captioned "the figure's place, left blank".
+3. **Mock mode is stated on screen.** While the mock engine drives the run, the masthead carries
+   `MOCK ENGINE · NO SANDBOX CALL` and the colophon says which parts are scripted and which
+   (Exhibit C) are counted from the real file. The honesty rule outranks a clean masthead.
+4. **Exhibit B leads with the full column list, marked.** Quoting only the read columns made every
+   cell red and killed the contrast the red pen exists to create. The file's whole column list sits
+   above the quoted rows with the read ones washed — the "which cells" read happens at a glance.
+5. **Wide exhibits are keyboard-scrollable regions** (`tabindex="0"`, labelled), so the sideways
+   scroll the design relies on is reachable without a mouse.
+
 ## Never
 
 A second accent colour · a sans-serif · a card shadow · a green check · a dark mode · a filled
