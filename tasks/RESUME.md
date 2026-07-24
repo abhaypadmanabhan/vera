@@ -45,21 +45,25 @@ Use the `superpowers` skill for all coding work. For anything touching UI, also 
   pass" is not proof the feature works. Never report done on someone else's say-so; check yourself.
 - Run locally with `next dev`. Do **not** deploy to Vercel.
 
-## Where things stand right now (CP-2)
+## Where things stand right now (CP-3)
 
-- **Phase 1 is complete and verified.** PR **#21** (`feat/p1-scaffold-mock` → `dev`) is **OPEN and
-  UNMERGED**, awaiting builder review. Until it merges, branch new work off
-  `feat/p1-scaffold-mock`, not `dev`.
-- **Phase 2 (Fireworks) is APPROVED to spend credits.** Daytona/Phase 3 is **NOT** approved yet.
-- The builder supplied `Vera_data/` (untracked, repo root): the real 9,994-row Superstore CSV plus a
-  17-question answer key. All 17 were re-verified with pandas. Superstore replaces the Phase 1
-  synthetic CSV as the one demo dataset; the synthetic one is demoted to a test fixture.
-- The **date profiler** is the centrepiece of Phase 2 — see CP-2 in `tasks/checkpoints.md` for the
-  full reasoning and the exact numbers. Short version: `OrderDate` is uniformly DD/MM/YYYY; naive
-  parsing silently drops 5,952 of 9,994 rows and reports 2018 Q3 sales as $50,517.26 instead of
-  $143,787.36. A deterministic profiler proves the format from the data and shows that evidence.
-- The **Phase 1 UI was rejected by the builder.** A redesign is in scope, driven by the Obsidian
-  vault above.
+- **Phase 1 is done and PR #21 is MERGED into `dev`.**
+- **Phase 2 is in progress on branch `feat/p2-fireworks`.** Read CP-3 in `tasks/checkpoints.md`
+  for the full state before touching anything.
+- **MONEY: Fireworks is APPROVED. Daytona, Braintrust and ElevenLabs are NOT.** Phase 3 needs its
+  own explicit go from the builder.
+- The demo dataset is the real 9,994-row Superstore CSV at `data/superstore.csv`, served from the
+  **server** — the client sends a `datasetId` and never receives the file. `eval/` holds 21
+  questions, all recomputed and verified.
+- The **deterministic schema profiler** (`lib/profile/profiler.ts`) is the differentiator. It
+  proves `OrderDate` is `%d/%m/%Y` from the data (5,952 rows whose first component exceeds 12
+  cannot be months; 0 argue otherwise) and carries that proof into the grounding as
+  `SchemaEvidence`. Naive month-first parsing silently drops those rows and reports 2018 Q3 sales
+  as $50,517.26 instead of $143,787.36. **Use `isProven(evidence)`** — checking
+  `contradictingRows === 0` alone is a bug, because a fully-ambiguous column returns 0 and 0.
+- The Phase 1 UI was **rejected**. `DESIGN.md` v2 is the replacement direction: an auditor's
+  evidence document in paper/ink/red-pen, serif + mono with no sans, single column with a margin
+  rail. Any UI agent must read the Obsidian vault itself, not just `DESIGN.md`.
 
 ## Fleet
 
