@@ -182,7 +182,7 @@ against a no-execution baseline with identical context.
 - [ ] Problem + impact
 - [ ] Technical architecture
 - [ ] Sponsor tools + how each is integrated
-- [ ] Public GitHub repo (**flip the repo from private to public before submitting**)
+- [x] Public GitHub repo — https://github.com/abhaypadmanabhan/vera (made public 13:18 PDT)
 - [ ] Braintrust figures and dashboard link filled in (replace every `‹TBC›`)
 - [ ] Backup demo clip recorded in case live fails on stage
 - [ ] CodeRabbit comments on both PRs triaged
