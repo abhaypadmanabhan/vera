@@ -22,9 +22,9 @@ runs a full demo. Parallelisable across 3 agents (UI / API+types / data).
 
 ## Phase 2 — Fireworks brain · P0 · 💸 SPENDS CREDITS (needs explicit go)
 
-- [ ] #8 P2.1 — Fireworks client + model selection (from recommended-models, not a guess)
-- [ ] #9 P2.2 — Codegen: CSV schema + question → pandas (structured output)
-- [ ] #10 P2.3 — Retry loop: stderr fed back, max 2 attempts
+- [x] #8 P2.1 — Fireworks client + model selection (from recommended-models, not a guess)
+- [x] #9 P2.2 — Codegen: CSV schema + question → pandas (structured output)
+- [x] #10 P2.3 — Retry loop: stderr fed back, max 2 attempts
 
 ## Phase 3 — Daytona sandbox · P0 · 💸 SPENDS CREDITS
 

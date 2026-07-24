@@ -119,11 +119,51 @@ naive pd.to_datetime() → NaT (dropped):   5,952   (60% of the data, no error r
   the 2.3 MB file, so the no-execution baseline gets identical context and simply cannot run code.
   Agent torn down after merge.
 
+- **`p2/fireworks` (codex) — DONE, merged.** Issues #8/#9/#10: `lib/fireworks/client.ts`,
+  `lib/codegen/{generate,python-policy,retry}.ts`. It made **zero live calls** — worktrees have no
+  `.env.local` (gitignored), and it correctly refused to go hunting in the main repo for keys.
+  **Lesson for future phases: export the key into the pane env before starting an agent that needs
+  live verification.** Agent torn down after merge.
+
+### Live Fireworks verification, done by the orchestrator (builder had approved the spend)
+
+- `GET /v1/models` → only **6** models exist on this account. `accounts/fireworks/models/glm-5p2`
+  (ctx 1,048,576) **confirmed** — the pinned id is correct. Note the research doc's inferred
+  `kimi-k2p7-code` and `minimax-m2p7` **do not exist**; it is `kimi-k2p6`. Pinning the
+  doc-verified id was the right call.
+- Total live calls: 3 (one model list, two codegen). Cost: negligible, cents.
+
+### ⚠️ THE BIG FINDING — a poisoned convenience column
+
+The first live codegen answered "Q3 2018 sales" using the `Order Quarter` column and produced
+**131,098.53**. That is wrong, and it *ran perfectly cleanly*.
+
+```
+Q3 2018 sales, three ways:
+  "Order Quarter" column   131,098.53   <- what the model reached for first
+  proven OrderDate parse   143,787.36   <- correct, and what the answer key says
+  naive month-first parse   50,517.26
+```
+
+`Order Quarter` disagrees with the quarter of `OrderDate` on **2,889 of 9,994 rows (29%)**.
+`OrderYear` is clean (0 mismatches). This is exactly the runnable-but-wrong failure PRD §6 says we
+cannot catch after the fact — so the profiler now catches it **before**, deterministically.
+
+**`crossCheckPeriodColumns`** in `lib/profile/profiler.ts`: derive year/quarter/month from the
+proven date parse, compare against any stated period column, count the disagreements, emit
+`SchemaEvidence` plus a prompt note. Only same-subject columns are compared (`Order Quarter` is
+checked against `OrderDate`, never against `ShipDate` — an order shipping next quarter is normal).
+`DatasetProfile.crossChecks` carries the results.
+
+**Verified live end to end:** with those notes in the prompt, Fireworks now writes
+`pd.to_datetime(df['OrderDate'], format='%d/%m/%Y')` and derives the quarter from the date — its
+own explanation says *"not the unreliable Order Quarter column"*. Executing that generated code
+against the real file gives **143787.3622**, matching the answer key.
+
+`tests/live-fw.test.ts` is gated behind `VERA_LIVE=1` so `pnpm test` can never spend money.
+
 ### Still running
 
-- **`p2/fireworks` (codex) — SPENDING FIREWORKS CREDITS.** Issues #8/#9/#10: client + confirmed
-  model id, codegen with structured output driven by the profile, retry loop against an injected
-  fake executor. Explicitly forbidden from touching Daytona.
 - **`p2/ui` (claude-account-2, Opus) — zero spend.** Full redesign against `DESIGN.md` v2, with the
   vault reading made mandatory in its brief.
 
