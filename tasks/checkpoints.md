@@ -281,9 +281,76 @@ match), plus `high-end-visual-design` and `minimalist-ui`. `gpt-taste` is scoped
 spacing and motion **quality only** — its AIDA/scroll-pinning structure is for landing pages and
 would wreck a product surface. Claude agents were explicitly not given these skills.
 
-## CP-6 — submission · DUE 3:30pm PDT
+## CP-6 — ORCHESTRATOR HANDOVER · 2026-07-24 ~14:40 PDT
 
-`docs/submission.md` holds the Devpost draft, the demo video script, and the checklist. Braintrust
-figures are filled in. Repo is already public.
+The first orchestrator ran low on context and handed over here. **Everything below is current.**
+
+### Working, verified live by the previous orchestrator
+
+- **Full pipeline**: Fireworks writes pandas from the profile → Daytona warm sandbox executes →
+  `lib/verify.ts` gates it. Live run: sandbox up 0.3s, exit 0 in 828ms, `verified`,
+  **143787.36** (matches the answer key).
+- **Voice is live.** `POST /api/speak` returned 200 three times in a real browser run with real
+  ElevenLabs audio, ~450ms per beat after a 3.7s cold start.
+- **Braintrust**: Vera **100% (21/21)** vs baseline **47.6%**. `eval/results.json` has
+  `headline`, `dashboardUrl`, `baselineMisses`.
+- **Landing page** at `/welcome` — hero, three-answers, how-it-works, proof, powered-by, CTA.
+- **Deck** at `/` — 8 slides, warm white, presenter blob, progress rail, follow-up box.
+- **Cold open** at `/open` — deterministic, both real figures.
+- 83 tests pass, 5 skipped (live tests gated behind `VERA_LIVE=1`). Build and lint clean.
+
+### Fixed in the last half hour (do not regress these)
+
+1. **Chips did not run.** Clicking a suggestion set state, then submit read a stale value — the box
+   cleared and nothing happened. Chips now call `ask(value)` directly.
+2. **Theme followed the OS**, so the white design rendered dark. Light is now the default.
+3. **Duplicate evidence examples** collided as React keys (8 dev-overlay issues, visible on stage).
+4. **Hero showed 4 decimals** while the voice said 2. Display is 2dp everywhere now.
+5. **Hero showed code jargon** — "Parsed OrderDate as DD/MM/YYYY, filtered…". Codegen now returns a
+   separate plain-English `headline` field used for the hero claim; the technical line stays on the
+   code slide. **The builder was explicit: no code jargon on the presentation.**
+6. **The voice read the slides verbatim.** `lib/deck.ts` narration is now written separately in an
+   analyst's voice — she gives the gist while the exact counts stay on screen. **Do not "simplify"
+   this back to reading the slide text.**
+
+### In flight when the handover happened
+
+**Agent `polish` (codex, worktree `p7-polish`, branch `p7/polish`, workspace `wE`)** — strict
+priority order, committing after each item:
+1. **STOP/interrupt button** for the narration (highest value — there is currently no way to
+   interrupt Vera on stage)
+2. Fireworks + Daytona marks beside their stages on the working screen
+3. Alignment/spacing pass across every slide
+4. An ElevenLabs-style voice orb driven by `speaking`
+5. The benchmark surfaced in the app, read from `eval/results.json`, never hardcoded
+
+Merge whatever it pushes, verify in a browser yourself, and do not block on the later items.
+
+### Builder's outstanding asks, not yet done
+
+- Decide routing: landing is at `/welcome`; the builder was asked whether to swap it to `/` with the
+  demo at `/ask` so the URL matches his narration order. **No answer yet — ask before moving it.**
+- Powered-by strip currently uses typographic wordmarks, not vendor logos. Three of four official
+  SVGs could not be fetched, and the agent refused to mix one real logo with three fakes. Builder
+  was asked whether to retry; **no answer yet.**
+- "Solidify Braintrust evals — numbers/reports visible showing it did its job and made the analyst
+  better." Partly covered by polish item 5.
+- Future, explicitly not now: interrupt/follow-up **by voice**.
+
+### The two stump questions (answers computed and verified — use these on stage)
+
+- *"Are our discounts actually making us money?"* → orders discounted **>20% average −$97.18**
+  profit; **≤20% average +$49.04**. Money-losing orders carry an average **48.1%** discount vs
+  **8.1%** on profitable ones.
+- *"What percentage of orders shipped more than 5 days after they were ordered?"* → **18.25%**
+  (average lag 3.96 days). Requires parsing **both** date columns correctly.
+
+### Submission — due 3:30pm PDT
+
+`docs/submission.md` has the Devpost writeup and the demo script, with the real Braintrust figures
+filled in. Repo is already **public**. Remaining: record the demo video (<2 min), paste the writeup,
+triage CodeRabbit on PRs #21 (merged) and #22 (open).
+
+**PR #22 is open against `dev` and unmerged.** Branch `feat/p2-fireworks` holds everything.
 
 _(next entry appended here)_
