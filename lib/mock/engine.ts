@@ -35,10 +35,10 @@ df["revenue"] = (
 )
 df["cogs"] = pd.to_numeric(df["cogs"], errors="coerce")
 
-q3 = df[df["month"].str.contains("2025-0[789]", na=False)]
+q3 = df[df["region"].eq("EMEA") & df["month"].isin(["2025-07", "2025-08", "2025-09"])]
 margin = (q3["revenue"].sum() - q3["cogs"].sum()) / q3["revenue"].sum() * 100
 
-print(round(margin, 1))`;
+print(round(margin, 3))`;
 
 const MOCK_BROKEN_CODE = `import pandas as pd
 
@@ -58,9 +58,10 @@ function code(source: string, explanation: string): GeneratedCode {
 /** Quote back real cells from whatever CSV is loaded, so the mock still looks honest. */
 function groundingFrom(csvContent: string): Grounding {
   const schema = csvSchema(csvContent, 3);
-  const columns = schema.columns.length > 0 ? schema.columns : ["month", "revenue", "cogs"];
-  const used = columns.filter((c) => ["month", "revenue", "cogs"].includes(c));
-  const usedColumns = used.length > 0 ? used : columns.slice(0, 3);
+  const wanted = ["month", "region", "revenue", "cogs"];
+  const columns = schema.columns.length > 0 ? schema.columns : wanted;
+  const used = columns.filter((c) => wanted.includes(c));
+  const usedColumns = used.length > 0 ? used : columns.slice(0, 4);
 
   const sampleCells: SourceCell[] = [];
   schema.sampleRows.forEach((row, rowIndex) => {
@@ -82,15 +83,18 @@ function groundingFrom(csvContent: string): Grounding {
 
 const VERIFIED_FINDING = (csvContent: string, attempts: number): Finding => ({
   verdict: "verified",
-  value: 41.2,
+  value: 35.898,
   unit: "%",
-  claim: "Q3 2025 gross margin was 41.2%, down from 47.8% in Q2.",
-  code: code(MOCK_CODE, "Cleans the currency column, filters to Q3 2025, and computes gross margin."),
+  claim: "EMEA gross margin in Q3 2025 was 35.9%, down from 48.3% in Q2.",
+  code: code(
+    MOCK_CODE,
+    "Cleans the currency-formatted revenue cells, filters to EMEA in Q3 2025, and computes gross margin.",
+  ),
   execution: {
     exitCode: 0,
-    stdout: "41.2\n",
+    stdout: "35.898\n",
     stderr: "",
-    value: 41.2,
+    value: 35.898,
     durationMs: 1_284,
   },
   grounding: groundingFrom(csvContent),
@@ -198,14 +202,14 @@ export const mockAnalyst: Analyst = {
     yield stage({
       stage: "running_sandbox",
       status: "complete",
-      detail: "Exit 0 in 1.28s — stdout: 41.2",
+      detail: "Exit 0 in 1.28s — stdout: 35.898",
       attempt: 1,
     });
 
     yield stage({
       stage: "verifying",
       status: "active",
-      detail: "Tracing 41.2 back to source cells",
+      detail: "Tracing 35.898 back to source cells",
       attempt: 1,
     });
     await sleep(800);
