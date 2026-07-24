@@ -1,62 +1,29 @@
 #!/usr/bin/env python3
 """
-Dev-only answer-key checker for eval/questions.json.
+Dev-only answer-key checker for eval/questions.json (Superstore).
 
-Recomputes every expected value from data/demo-business.csv with the same
-cleaning rules documented in data/README.md and eval/README.md. Fails loudly
-on any mismatch (numeric-tolerant relative epsilon).
+Recomputes every expected value from data/superstore.csv. For date-trap
+questions, also recomputes naive_answer under month-first pd.to_datetime
+(errors='coerce') and fails loudly on any mismatch.
 
 This is local tooling — not app code. The app's only Python runs inside Daytona.
+No Braintrust / Fireworks / Daytona calls. Local pandas only.
 """
 from __future__ import annotations
 
 import json
-import re
 import sys
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
-CSV_PATH = ROOT / "data" / "demo-business.csv"
+CSV_PATH = ROOT / "data" / "superstore.csv"
 QUESTIONS_PATH = ROOT / "eval" / "questions.json"
 
 REL_EPS = 1e-6
 ABS_FLOOR = 1e-9
-
-
-def load_clean(path: Path) -> pd.DataFrame:
-    df = pd.read_csv(path, dtype=str, keep_default_na=False)
-    df = df.drop_duplicates()
-
-    def normalize_month(m: str) -> str:
-        m = m.strip()
-        if re.fullmatch(r"\d{4}-\d{2}", m):
-            return m
-        matched = re.fullmatch(r"(\d{1,2})/(\d{4})", m)
-        if matched:
-            return f"{matched.group(2)}-{int(matched.group(1)):02d}"
-        raise ValueError(f"Unrecognized month format: {m!r}")
-
-    def parse_money(v: str) -> float:
-        v = v.strip()
-        if v == "":
-            return float("nan")
-        return float(v.replace("$", "").replace(",", ""))
-
-    def parse_num(v: str) -> float:
-        v = v.strip()
-        if v == "":
-            return float("nan")
-        return float(v)
-
-    out = df.copy()
-    out["month"] = out["month"].map(normalize_month)
-    for col in ("revenue", "cogs", "marketing_spend"):
-        out[col] = out[col].map(parse_money)
-    for col in ("units", "headcount"):
-        out[col] = out[col].map(parse_num)
-    return out
 
 
 def nearly_equal(
@@ -69,74 +36,82 @@ def nearly_equal(
     return abs(actual - expected) <= max(abs_floor, rel_eps * abs(expected))
 
 
-def gross_margin_pct(frame: pd.DataFrame) -> float:
-    rev = float(frame["revenue"].sum())
-    cogs = float(frame["cogs"].sum())
-    if rev == 0:
-        raise ZeroDivisionError("revenue sum is 0")
-    return (rev - cogs) / rev * 100.0
+def values_match(actual: Any, expected: Any, *, rel_eps: float, abs_floor: float) -> bool:
+    if isinstance(expected, str):
+        return str(actual) == expected
+    return nearly_equal(float(actual), float(expected), rel_eps=rel_eps, abs_floor=abs_floor)
 
 
-def compute_answers(df: pd.DataFrame) -> dict[str, float]:
-    emea_q3 = df[
-        (df["region"] == "EMEA")
-        & (df["month"].isin(["2025-07", "2025-08", "2025-09"]))
-    ]
-    emea_q2 = df[
-        (df["region"] == "EMEA")
-        & (df["month"].isin(["2025-04", "2025-05", "2025-06"]))
-    ]
-    emea_core_q3 = emea_q3[emea_q3["product_line"] == "Core"]
-    co_q3 = float(
-        df[df["month"].isin(["2025-07", "2025-08", "2025-09"])]["revenue"].sum()
+def load_superstore(path: Path) -> pd.DataFrame:
+    df = pd.read_csv(path)
+    if len(df) != 9994:
+        raise ValueError(f"expected 9994 rows, got {len(df)}")
+    return df
+
+
+def compute_answers(df: pd.DataFrame) -> dict[str, Any]:
+    """Correct answers — OrderDate parsed day-first."""
+    dt = pd.to_datetime(df["OrderDate"], format="%d/%m/%Y")
+    sales_2018 = float(df.loc[df["OrderYear"] == 2018, "Sales"].sum())
+    sales_2019 = float(df.loc[df["OrderYear"] == 2019, "Sales"].sum())
+    margins = df.groupby("Category").apply(
+        lambda g: float(g["Profit"].sum()) / float(g["Sales"].sum()),
+        include_groups=False,
     )
-    co_q2 = float(
-        df[df["month"].isin(["2025-04", "2025-05", "2025-06"])]["revenue"].sum()
-    )
-    na_plus_jan = df[
-        (df["month"] == "2025-01")
-        & (df["region"] == "North America")
-        & (df["product_line"] == "Plus")
-    ]
-    apac_ent_mar = df[
-        (df["month"] == "2024-03")
-        & (df["region"] == "APAC")
-        & (df["product_line"] == "Enterprise")
-    ]
-    na_core_jun = df[
-        (df["month"] == "2024-06")
-        & (df["region"] == "North America")
-        & (df["product_line"] == "Core")
-    ]
-    df_2025 = df[df["month"].str.startswith("2025")]
-    top_rev = float(df_2025.groupby("region")["revenue"].sum().max())
-    df_2024 = df[df["month"].str.startswith("2024")]
-    emea_dec = df[(df["month"] == "2025-12") & (df["region"] == "EMEA")]
 
     return {
-        "q01_total_revenue": round(float(df["revenue"].sum()), 2),
-        "q02_total_units": round(float(df["units"].sum(skipna=True)), 2),
-        "q03_na_plus_jan_2025_revenue": round(float(na_plus_jan["revenue"].iloc[0]), 2),
-        "q04_emea_q3_2025_gross_margin_pct": round(gross_margin_pct(emea_q3), 4),
-        "q05_emea_core_q3_2025_gross_margin_pct": round(
-            gross_margin_pct(emea_core_q3), 4
+        "q01_total_sales": round(float(df["Sales"].sum()), 2),
+        "q02_total_profit": round(float(df["Profit"].sum()), 2),
+        "q03_profit_margin_pct": round(
+            float(df["Profit"].sum()) / float(df["Sales"].sum()) * 100.0, 2
         ),
-        "q06_emea_q2_2025_gross_margin_pct": round(gross_margin_pct(emea_q2), 4),
-        "q07_company_q3_vs_q2_2025_revenue_growth_pct": round(
-            (co_q3 - co_q2) / co_q2 * 100.0, 4
+        "q04_region_highest_sales": df.groupby("Region")["Sales"].sum().idxmax(),
+        "q05_region_lowest_sales": df.groupby("Region")["Sales"].sum().idxmin(),
+        "q06_west_sales": round(float(df.loc[df["Region"] == "West", "Sales"].sum()), 2),
+        "q07_most_profitable_category": df.groupby("Category")["Profit"].sum().idxmax(),
+        "q08_technology_profit": round(
+            float(df.loc[df["Category"] == "Technology", "Profit"].sum()), 2
         ),
-        "q08_apac_enterprise_mar_2024_revenue": round(
-            float(apac_ent_mar["revenue"].iloc[0]), 2
+        "q09_worst_subcategory": df.groupby("Sub-Category")["Profit"].sum().idxmin(),
+        "q10_tables_profit": round(
+            float(df.loc[df["Sub-Category"] == "Tables", "Profit"].sum()), 2
         ),
-        "q09_na_core_jun_2024_revenue": round(float(na_core_jun["revenue"].iloc[0]), 2),
-        "q10_total_cogs": round(float(df["cogs"].sum()), 2),
-        "q11_total_marketing_spend": round(
-            float(df["marketing_spend"].sum(skipna=True)), 2
+        "q11_top_segment": df.groupby("Segment")["Sales"].sum().idxmax(),
+        "q12_avg_discount": round(float(df["Discount"].mean()), 2),
+        "q13_total_quantity": int(df["Quantity"].sum()),
+        "q14_unique_orders": int(df["OrderID"].nunique()),
+        "q15_lowest_margin_category": margins.idxmin(),
+        "q16_sales_2019": round(sales_2019, 2),
+        "q17_sales_growth_2018_2019": round((sales_2019 / sales_2018 - 1.0) * 100.0, 2),
+        "q18_sales_2018_q3": round(
+            float(df.loc[(dt.dt.year == 2018) & (dt.dt.quarter == 3), "Sales"].sum()), 2
         ),
-        "q12_top_region_2025_revenue": round(top_rev, 2),
-        "q13_emea_core_q3_2025_units": round(float(emea_core_q3["units"].sum()), 2),
-        "q14_company_2024_gross_margin_pct": round(gross_margin_pct(df_2024), 4),
-        "q15_emea_dec_2025_headcount": round(float(emea_dec["headcount"].sum()), 2),
+        "q19_sales_july_2018": round(
+            float(df.loc[(dt.dt.year == 2018) & (dt.dt.month == 7), "Sales"].sum()), 2
+        ),
+        "q20_sales_2017_q4": round(
+            float(df.loc[(dt.dt.year == 2017) & (dt.dt.quarter == 4), "Sales"].sum()), 2
+        ),
+        "q21_row_count": int(len(df)),
+    }
+
+
+def compute_naive_answers(df: pd.DataFrame) -> dict[str, float]:
+    """Wrong answers from naive month-first parse (silently drops day>12 rows)."""
+    naive = pd.to_datetime(df["OrderDate"], errors="coerce")
+    return {
+        "q18_sales_2018_q3": round(
+            float(df.loc[(naive.dt.year == 2018) & (naive.dt.quarter == 3), "Sales"].sum()),
+            2,
+        ),
+        "q19_sales_july_2018": round(
+            float(df.loc[(naive.dt.year == 2018) & (naive.dt.month == 7), "Sales"].sum()),
+            2,
+        ),
+        "q20_sales_2017_q4": round(
+            float(df.loc[(naive.dt.year == 2017) & (naive.dt.quarter == 4), "Sales"].sum()),
+            2,
+        ),
     }
 
 
@@ -154,26 +129,37 @@ def main() -> int:
     rel = float(scoring.get("relative_epsilon", REL_EPS))
     abs_floor = float(scoring.get("absolute_floor", ABS_FLOOR))
 
-    df = load_clean(CSV_PATH)
-    if len(df) != 216:
-        print(f"FAIL: expected 216 clean rows after dedupe, got {len(df)}", file=sys.stderr)
-        return 1
-
+    df = load_superstore(CSV_PATH)
     computed = compute_answers(df)
+    naive_computed = compute_naive_answers(df)
     failures: list[str] = []
 
     for item in questions:
         qid = item["id"]
-        expected = float(item["expected"])
+        expected = item["expected"]
         if qid not in computed:
             failures.append(f"{qid}: no recomputation defined")
             continue
-        actual = float(computed[qid])
-        if not nearly_equal(actual, expected, rel_eps=rel, abs_floor=abs_floor):
+        actual = computed[qid]
+        if not values_match(actual, expected, rel_eps=rel, abs_floor=abs_floor):
             failures.append(
-                f"{qid}: expected {expected} but recomputed {actual} "
-                f"(tol max({abs_floor}, {rel}*|{expected}|))"
+                f"{qid}: expected {expected!r} but recomputed {actual!r} "
+                f"(tol max({abs_floor}, {rel}*|expected|) for numerics)"
             )
+
+        if "naive_answer" in item:
+            if qid not in naive_computed:
+                failures.append(f"{qid}: naive_answer present but no naive recomputation")
+            else:
+                naive_actual = naive_computed[qid]
+                naive_expected = item["naive_answer"]
+                if not values_match(
+                    naive_actual, naive_expected, rel_eps=rel, abs_floor=abs_floor
+                ):
+                    failures.append(
+                        f"{qid}: naive_answer expected {naive_expected!r} "
+                        f"but recomputed {naive_actual!r}"
+                    )
 
     extra = set(computed) - {q["id"] for q in questions}
     missing = {q["id"] for q in questions} - set(computed)
@@ -182,10 +168,16 @@ def main() -> int:
     if missing:
         failures.append(f"questions missing recomputation: {sorted(missing)}")
 
-    trap_count = sum(1 for q in questions if q.get("trap") or q.get("difficulty") == "trap")
-    print(f"dataset: {CSV_PATH.relative_to(ROOT)} ({len(df)} clean rows)")
-    print(f"questions: {len(questions)} ({trap_count} trap)")
+    trap_count = sum(
+        1 for q in questions if q.get("trap") or q.get("difficulty") == "trap"
+    )
+    date_traps = [q["id"] for q in questions if "naive_answer" in q]
+    print(f"dataset: {CSV_PATH.relative_to(ROOT)} ({len(df)} rows)")
+    print(f"questions: {len(questions)} ({trap_count} trap, {len(date_traps)} date-naive)")
     print(f"scoring: relative_epsilon={rel} absolute_floor={abs_floor}")
+    print(f"unique OrderIDs: {df['OrderID'].nunique()}")
+    print(f"null Postal Code: {int(df['Postal Code'].isna().sum())}")
+    print(f"duplicate rows: {int(df.duplicated().sum())}")
 
     if failures:
         print(f"FAIL: {len(failures)} mismatch(es)")
@@ -196,7 +188,10 @@ def main() -> int:
     print("OK: all expected answers match recomputation from CSV")
     for item in questions:
         qid = item["id"]
-        print(f"  ✓ {qid}: {computed[qid]}")
+        line = f"  ✓ {qid}: {computed[qid]!r}"
+        if "naive_answer" in item:
+            line += f"  (naive={naive_computed[qid]!r})"
+        print(line)
     return 0
 
 

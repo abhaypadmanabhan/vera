@@ -1,13 +1,14 @@
-# Eval — answer key (money-free groundwork)
+# Eval — Superstore answer key (money-free groundwork)
 
-Offline benchmark assets for issue #15. **No Braintrust, no Fireworks, no API keys.**
+Offline benchmark assets for issue #15 / CP-2. **No Braintrust, no Fireworks, no API keys.**
 
 ## Files
 
 | File | Role |
 | --- | --- |
-| `questions.json` | ~15 hand-verified Q&A over `data/demo-business.csv` |
-| `verify-answers.py` | Local pandas checker — recomputes every expected value |
+| `questions.json` | 21 hand-verified Q&A over `data/superstore.csv` (`input` / `expected`, Braintrust-ready) |
+| `verify-answers.py` | Local pandas checker — recomputes every expected value (and every `naive_answer`) |
+| `superstore-questions.json` / `.md` | Original 17 verified Q&A (answers unchanged; kept as provenance) |
 
 ## Run the checker
 
@@ -19,34 +20,49 @@ Requires local `pandas` only. Exits non-zero on any mismatch.
 
 ## Numeric-tolerant scoring
 
-Answers are floats. Do **not** compare with string equality.
-
-Rule (also stored under `questions.json` → `scoring`):
+Answers may be floats or strings. Strings compare exactly. Numerics use:
 
 ```
 pass if abs(actual - expected) <= max(absolute_floor, relative_epsilon * abs(expected))
 ```
 
-Defaults:
+Defaults (also under `questions.json` → `scoring`):
 
 - `relative_epsilon`: `1e-6`
 - `absolute_floor`: `1e-9` (guards expected ≈ 0)
 
 This is the scorer contract future Braintrust / autoevals wiring must use.
 
-## Trap questions
+## Question mix (21)
 
-At least three questions are marked `"difficulty": "trap"` / `"trap": true`. They target the planted messiness in the CSV (currency string, blanks, bad date, duplicate). A no-execution baseline is expected to miss these.
+| Kind | Count | Examples |
+| --- | --- | --- |
+| Original Superstore Q&A (unchanged answers) | 17 | totals, regions, categories, `OrderYear` sales |
+| Date-derived traps (`naive_answer` recorded) | 3 | 2018 Q3 sales, July 2018, 2017 Q4 |
+| Rows vs unique orders | 1 (+ q14 already) | 9,994 rows vs 5,009 `OrderID`s |
 
-## Baseline runner (defined, not executed here)
+Date traps only come out right if `OrderDate` is parsed with `format="%d/%m/%Y"`. A naive month-first `pd.to_datetime` silently drops 5,952 rows — the wrong figure is stored as `naive_answer` so the baseline comparison is concrete.
 
-Per PRD §7 — same `questions.json`, CSV text in-context, **no code execution**. That path spends Fireworks credits and is out of scope for this slice.
+Headline demo question: **What were total sales in Q3 2018?** → **143787.36** (naive: **50517.26**).
 
-Contract for the later credit-spending phase:
+## Why the baseline is fair
 
-1. For each question, prompt the model with the full CSV + question.
-2. Parse a single numeric answer from the completion.
-3. Score with the relative-epsilon rule above.
-4. Report accuracy vs Vera (code-execution) on the same key.
+Vera's model only ever sees the **schema profile plus sample rows** — never the 2.3 MB file. The no-execution baseline gets **identical context** and is simply not allowed to run code. Same prompt, one executes. A judge will ask; write that down.
+
+## Braintrust mapping (defined, not executed)
+
+Fields map cleanly:
+
+- `input` → Braintrust `input` (the question string)
+- `expected` → Braintrust `expected` (number or label)
+
+**Do not install or call Braintrust here.** That is a later, credit-spending phase.
+
+Contract for the later spend-approved phase:
+
+1. For each question, prompt the model with the schema profile + sample rows + question (same context Vera gets).
+2. Baseline path: no code execution. Vera path: write + run pandas in Daytona.
+3. Score with the relative-epsilon rule above (exact match for labels).
+4. Report accuracy vs the no-execution baseline on the same key.
 
 Do not implement or call that runner until the builder explicitly approves spend.
