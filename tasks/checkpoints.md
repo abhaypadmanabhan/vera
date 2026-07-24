@@ -220,9 +220,70 @@ plain `pnpm test` can never spend money. 69 tests pass, 3 skipped.
 
 **Sandbox hygiene: always run the teardown test after a live session, or a sandbox keeps burning.**
 
-## CP-5 — remaining · P1/P2
+## CP-5 — Braintrust, UI v3, and the keynote pivot · 2026-07-24 ~13:55 PDT
 
-Braintrust (#16) and ElevenLabs (#17) are stretch and BOTH still need explicit money approval.
-Submission (#20) is due **3:30pm PDT** and PRD §10 reserves ~45 min for it.
+**Money: Braintrust and ElevenLabs both APPROVED by the builder.** All four sponsor APIs are now
+cleared. **The repo is PUBLIC** (audited first: `.env.local` never tracked, no secrets in history)
+— done because CodeRabbit's free tier only reviews public repos, and it had been silently skipping
+every PR ("auto reviews disabled on base branches other than the default branch"). `.coderabbit.yaml`
+now enables `dev`.
+
+### Braintrust — DONE, merged (#16)
+
+**Vera 100% (21/21) vs baseline 47.6%.** 102 live Fireworks calls across two runs.
+Dashboard URL is in `eval/results.json` (`dashboardUrl`).
+
+The baseline, on **identical context**, missed: all three date-derived questions, total profit,
+profit margin, West sales, Technology profit, the Tables loss, average discount, 2019 sales,
+2018→2019 growth. It got rows-vs-unique-orders right.
+
+**On stage, do not lead with the 100%** — it invites "of course, you executed code." Lead with what
+the baseline missed and why. Vera's 100% means the model wrote code and the code ran on real cells;
+it is not a claim that the model is clever.
+
+### UI v3 — merged, then superseded within the hour
+
+The Apple-clean rebuild landed (Ask → Working → Finding, charts, cold open at `/open`). The builder
+then redirected again, to a **keynote** model. v3's screens remain the base; the Finding screen is
+being replaced by the deck.
+
+### THE KEYNOTE PIVOT — the current product shape
+
+Builder's words: *"minimalesque, clean, white, smooth fading transitions from presentation
+switches, dashboards like how Apple does its keynotes, with the finale being the summary
+dashboard… once voice works it takes you around that information and the blob moves around like a
+presenter moves around and shows a pointer to highlight specific parts."*
+
+Orchestrator built the model so the agent only writes the player — **`lib/deck.ts`**:
+
+- `buildDeck(question, finding, profile)` → question · headline · one slide per **proven** schema
+  fact · code · cells · **summary dashboard finale**.
+- Each slide carries `beats: { focus, spoken }[]`. `focus` matches a `data-focus="..."` attribute on
+  the slide, so the presenter blob has real targets and **one `activeBeat` index drives both the
+  blob and the audio** — when ElevenLabs drives it, no rewrite is needed.
+- `matchSlide(question, deck)` routes a covered follow-up back to the slide that answered it, and
+  returns **null** for a genuinely new question rather than faking a match.
+- **An unverified finding produces ZERO slides.** Nothing to present, nothing to speak. The honesty
+  rule expressed structurally — keep it that way.
+
+**`/api/speak`** speaks one beat per call. **204 in mock mode**, so the mocked demo never calls out
+and never fakes audio.
+
+### Design history — three rejected directions, do not regress
+
+1. v1 dark dashboard — rejected as generic.
+2. v2 auditor / red-pen evidence document — rejected.
+3. v3 Apple-clean — the base, but the builder still called the result "AI slop".
+
+The builder asked specifically that a **GPT/Codex** agent do the taste pass using its **image
+generation** and **`image-to-code`** skills (generate design images first, analyse, then build to
+match), plus `high-end-visual-design` and `minimalist-ui`. `gpt-taste` is scoped to typography,
+spacing and motion **quality only** — its AIDA/scroll-pinning structure is for landing pages and
+would wreck a product surface. Claude agents were explicitly not given these skills.
+
+## CP-6 — submission · DUE 3:30pm PDT
+
+`docs/submission.md` holds the Devpost draft, the demo video script, and the checklist. Braintrust
+figures are filled in. Repo is already public.
 
 _(next entry appended here)_
