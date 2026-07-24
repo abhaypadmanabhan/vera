@@ -27,9 +27,15 @@
   mask-size: contain;
 }
 
+/*
+ * Daytona ships a glyph, not a wordmark — the other three are lockups that
+ * already carry their name. The glyph is set square and slightly shorter than
+ * the wordmarks' cap height so it does not out-weigh them, and the name is set
+ * beside it in our own type.
+ */
 .daytonaLogo {
-  width: 8.8125rem;
-  height: 1.5rem;
+  width: 1.4375rem;
+  height: 1.4375rem;
   mask-image: url("/logos/daytona.svg");
 }
 

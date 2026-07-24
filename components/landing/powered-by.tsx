@@ -14,6 +14,8 @@ const SPONSORS = [
   {
     name: "Daytona",
     logoClass: styles.daytonaLogo,
+    // Their official mark is a glyph alone, so the name is set beside it.
+    setsOwnName: false,
     role: "The isolated sandbox that runs model-written code safely",
   },
   {
@@ -44,11 +46,19 @@ function Track({ ariaHidden }: { ariaHidden: boolean }) {
           key={sponsor.name}
           className="flex w-[22rem] shrink-0 flex-col justify-between gap-6 border-r border-line px-10 py-2 sm:w-[26rem]"
         >
-          <span
-            aria-label={sponsor.name}
-            className={`${styles.logo} ${sponsor.logoClass} text-ink-muted`}
-            role="img"
-          />
+          <div className="flex items-center gap-3 text-ink-muted">
+            <span
+              aria-label={"setsOwnName" in sponsor ? undefined : sponsor.name}
+              aria-hidden={"setsOwnName" in sponsor || undefined}
+              className={`${styles.logo} ${sponsor.logoClass}`}
+              role={"setsOwnName" in sponsor ? undefined : "img"}
+            />
+            {"setsOwnName" in sponsor && (
+              <span className="font-mono text-[1.375rem] font-medium tracking-[-0.02em]">
+                {sponsor.name}
+              </span>
+            )}
+          </div>
           <p className="max-w-[30ch] text-small text-ink-muted">{sponsor.role}</p>
         </li>
       ))}
