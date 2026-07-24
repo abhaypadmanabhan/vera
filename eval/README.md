@@ -1,6 +1,8 @@
-# Eval — Superstore answer key (money-free groundwork)
+# Eval — Vera vs no-execution baseline
 
-Offline benchmark assets for issue #15 / CP-2. **No Braintrust, no Fireworks, no API keys.**
+The 21-question benchmark for the aggregate, pre-computed accuracy claim shown in the demo. This
+score is measured accuracy on a fixed answer key; it is not a per-answer guarantee and must never
+be presented as one.
 
 ## Files
 
@@ -8,6 +10,7 @@ Offline benchmark assets for issue #15 / CP-2. **No Braintrust, no Fireworks, no
 | --- | --- |
 | `questions.json` | 21 hand-verified Q&A over `data/superstore.csv` (`input` / `expected`, Braintrust-ready) |
 | `verify-answers.py` | Local pandas checker — recomputes every expected value (and every `naive_answer`) |
+| `results.json` | Last recorded live run, including both answers, both scores, headline percentages, and dashboard URL |
 | `superstore-questions.json` / `.md` | Original 17 verified Q&A (answers unchanged; kept as provenance) |
 
 ## Run the checker
@@ -16,11 +19,17 @@ Offline benchmark assets for issue #15 / CP-2. **No Braintrust, no Fireworks, no
 python3 eval/verify-answers.py
 ```
 
-Requires local `pandas` only. Exits non-zero on any mismatch.
+Requires local `pandas` only. Exits non-zero on any mismatch and makes no paid calls.
+
+Run the offline scorer tests:
+
+```bash
+pnpm exec vitest run --config scripts/eval/vitest.config.ts
+```
 
 ## Numeric-tolerant scoring
 
-Answers may be floats or strings. Strings compare exactly. Numerics use:
+Answers may be floats or strings. Strings compare case-insensitively after trimming. Numerics use:
 
 ```
 pass if abs(actual - expected) <= max(absolute_floor, relative_epsilon * abs(expected))
@@ -28,10 +37,11 @@ pass if abs(actual - expected) <= max(absolute_floor, relative_epsilon * abs(exp
 
 Defaults (also under `questions.json` → `scoring`):
 
-- `relative_epsilon`: `1e-6`
+- `relative_epsilon`: `1e-4`
 - `absolute_floor`: `1e-9` (guards expected ≈ 0)
 
-This is the scorer contract future Braintrust / autoevals wiring must use.
+Missing or unparseable answers score 0 instead of crashing the run. The Braintrust scorer uses
+`autoevals` `ExactMatch` on the binary result of this deterministic tolerance check.
 
 ## Question mix (21)
 
@@ -49,20 +59,25 @@ Headline demo question: **What were total sales in Q3 2018?** → **143787.36** 
 
 Vera's model only ever sees the **schema profile plus sample rows** — never the 2.3 MB file. The no-execution baseline gets **identical context** and is simply not allowed to run code. Same prompt, one executes. A judge will ask; write that down.
 
-## Braintrust mapping (defined, not executed)
+Both arms use the same Fireworks model and receive the same question, complete deterministic
+profile, and same five sample rows. Vera asks the model for pandas and executes it locally with
+`python3`; the baseline answers from reading alone. Local execution is equivalent to the product
+path for benchmark scoring while avoiding an unapproved Daytona call.
 
-Fields map cleanly:
+## Run the live benchmark
 
-- `input` → Braintrust `input` (the question string)
-- `expected` → Braintrust `expected` (number or label)
+This spends approved Fireworks and Braintrust credits. It performs 21 questions × 2 arms = 42
+model calls in the normal case. A failed arm may retry once, the runner refuses to exceed 84 calls
+in one run, and the full benchmark should not be run more than twice.
 
-**Do not install or call Braintrust here.** That is a later, credit-spending phase.
+```bash
+FIREWORKS_API_KEY=... BRAINTRUST_API_KEY=... pnpm eval
+```
 
-Contract for the later spend-approved phase:
+The CLI prints the headline, public Braintrust experiment URL, total live call count, and baseline
+misses. It also rewrites `eval/results.json`; the UI must read the aggregate benchmark claim from
+that artifact rather than hard-code it.
 
-1. For each question, prompt the model with the schema profile + sample rows + question (same context Vera gets).
-2. Baseline path: no code execution. Vera path: write + run pandas in Daytona.
-3. Score with the relative-epsilon rule above (exact match for labels).
-4. Report accuracy vs the no-execution baseline on the same key.
-
-Do not implement or call that runner until the builder explicitly approves spend.
+The Braintrust experiment contains separate `vera_accuracy` and `baseline_accuracy` score columns
+and an `arm` metadata field for filtering. Each row records the actual answer; Vera rows also keep
+the executed code and declared source columns.

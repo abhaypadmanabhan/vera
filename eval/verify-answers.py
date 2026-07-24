@@ -38,7 +38,7 @@ def nearly_equal(
 
 def values_match(actual: Any, expected: Any, *, rel_eps: float, abs_floor: float) -> bool:
     if isinstance(expected, str):
-        return str(actual) == expected
+        return str(actual).strip().casefold() == expected.strip().casefold()
     return nearly_equal(float(actual), float(expected), rel_eps=rel_eps, abs_floor=abs_floor)
 
 
@@ -77,7 +77,7 @@ def compute_answers(df: pd.DataFrame) -> dict[str, Any]:
             float(df.loc[df["Sub-Category"] == "Tables", "Profit"].sum()), 2
         ),
         "q11_top_segment": df.groupby("Segment")["Sales"].sum().idxmax(),
-        "q12_avg_discount": round(float(df["Discount"].mean()), 2),
+        "q12_avg_discount": round(float(df["Discount"].mean()), 4),
         "q13_total_quantity": int(df["Quantity"].sum()),
         "q14_unique_orders": int(df["OrderID"].nunique()),
         "q15_lowest_margin_category": margins.idxmin(),

@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "eval": "braintrust eval scripts/eval/vera.eval.ts"
   },
   "dependencies": {
     "@daytona/sdk": "^0.200.1",
@@ -29,6 +30,8 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "autoevals": "0.3.0",
+    "braintrust": "3.24.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.11",
     "tailwindcss": "^4",
