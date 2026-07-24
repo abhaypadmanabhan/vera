@@ -88,7 +88,7 @@ export function ColdOpen() {
 
   return (
     <main className="flex min-h-dvh flex-col">
-      <header className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-6 py-5">
+      <header className="mx-auto flex w-full max-w-[90rem] items-center justify-between gap-4 px-[5.4vw] py-5">
         <div className="flex items-center gap-3">
           <Wordmark />
           <span className="v-label">Cold open</span>
@@ -104,7 +104,7 @@ export function ColdOpen() {
         </div>
       </header>
 
-      <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col justify-center px-6 pb-10">
+      <div className="mx-auto flex w-full max-w-[90rem] flex-1 flex-col justify-center px-[5.4vw] pb-10">
         <div className="text-center">
           <p className="v-label">One question, two answers</p>
           <h1 className="mt-3 text-title font-medium text-balance text-ink">{QUESTION}</h1>
@@ -185,7 +185,7 @@ export function ColdOpen() {
         )}
       </div>
 
-      <footer className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-6">
+      <footer className="mx-auto flex w-full max-w-[90rem] flex-wrap items-center justify-between gap-4 px-[5.4vw] py-6">
         <p className="max-w-[68ch] text-micro text-ink-muted">
           Scripted replay. Both figures are recorded results computed from the real file — the
           left-hand one is what a month-first date parse actually returns.

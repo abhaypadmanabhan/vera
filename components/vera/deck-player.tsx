@@ -17,6 +17,26 @@ const NARRATION_TIMING = {
 
 type VerifiedFinding = Extract<Finding, { verdict: "verified" }>;
 
+const PRESENTER_RADIUS = 60;
+const PRESENTER_GAP = 16;
+const PRESENTER_EDGE = 16;
+
+export function presenterPosition(
+  stage: { left: number; top: number; width: number; height: number },
+  target: { left: number; right: number; top: number; height: number },
+): { x: number; y: number } {
+  const targetLeft = target.left - stage.left;
+  const targetRight = target.right - stage.left;
+  const right = targetRight + PRESENTER_RADIUS + PRESENTER_GAP;
+  const left = targetLeft - PRESENTER_RADIUS - PRESENTER_GAP;
+  const min = PRESENTER_RADIUS + PRESENTER_EDGE;
+  const maxX = stage.width - min;
+  const maxY = stage.height - min;
+  const x = right <= maxX ? right : left >= min ? left : maxX;
+  const y = Math.max(min, Math.min(target.top - stage.top + target.height * 0.5, maxY));
+  return { x, y };
+}
+
 export function DeckPlayer({
   deck,
   finding,
@@ -309,9 +329,10 @@ export function DeckSlide({
     const update = () => {
       const stageBox = stage.getBoundingClientRect();
       const targetBox = target.getBoundingClientRect();
+      const position = presenterPosition(stageBox, targetBox);
       setHalo({
-        x: targetBox.right - stageBox.left - Math.min(targetBox.width * 0.12, 38),
-        y: targetBox.top - stageBox.top + targetBox.height * 0.52,
+        x: position.x,
+        y: position.y,
         visible: true,
       });
     };

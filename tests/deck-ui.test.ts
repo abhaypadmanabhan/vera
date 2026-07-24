@@ -1,7 +1,11 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { DeckPlayer, DeckSlide } from "@/components/vera/deck-player";
+import {
+  DeckPlayer,
+  DeckSlide,
+  presenterPosition,
+} from "@/components/vera/deck-player";
 import { buildDeck } from "@/lib/deck";
 import type { DatasetProfile, DatasetSummary, Finding } from "@/lib/types";
 
@@ -69,6 +73,18 @@ const finding: Extract<Finding, { verdict: "verified" }> = {
 };
 
 describe("deck slide presentation", () => {
+  it("keeps the presenter clear of a focused figure when there is room beside it", () => {
+    const position = presenterPosition(
+      { left: 0, top: 0, width: 1440, height: 708 },
+      { left: 80, right: 1180, top: 180, height: 180 },
+    );
+
+    expect(position.x).toBeGreaterThanOrEqual(1256);
+    expect(position.x + 60).toBeLessThanOrEqual(1424);
+    expect(position.y).toBeGreaterThanOrEqual(76);
+    expect(position.y).toBeLessThanOrEqual(632);
+  });
+
   it("offers an accessible narration stop control with its keyboard shortcuts", () => {
     const deck = buildDeck("What were sales in Q3 2018?", finding, profile);
     const markup = renderToStaticMarkup(
