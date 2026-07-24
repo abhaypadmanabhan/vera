@@ -172,6 +172,57 @@ against the real file gives **143787.3622**, matching the answer key.
 `data/demo.ts` survives as a thin stub because the old `app/page.tsx` still imports it. The UI agent
 is removing that import; **delete `data/demo.ts` at the p2/ui merge.**
 
-## CP-4 — Phase 3 · NOT STARTED · ⚠️ Daytona NOT approved yet
+## CP-4 — Phases 3 + 4 · DONE, VERIFIED LIVE · 2026-07-24 ~12:55 PDT
+
+Builder approved Daytona for Phase 3 **and** the safeguard together, priority "working live demo
+above all". Both landed on `feat/p2-fireworks`.
+
+- **`lib/daytona/sandbox.ts`** — warm sandbox in a `globalThis` singleton (survives Next dev
+  hot-reload), dataset uploaded once per sandbox lifetime, liveness probe with one recreate on a
+  dead handle, explicit `teardownSandbox()`, `autoStopInterval: 30`. `MOCK_MODE` hard-blocks every
+  entry point.
+- **`lib/verify.ts`** — THE SAFEGUARD. Pure and exhaustively testable. Verified only if exit 0 AND
+  a finite non-null value AND every column the model claims to have read exists in the real schema.
+  It checks **provenance, not correctness** — deciding whether a clean number is the *right* answer
+  is exactly what PRD §6 says we do not claim. Do not let anyone reword this.
+- **`lib/real-analyst.ts`** — composes Fireworks + Daytona + the safeguard behind the same
+  `Analyst` interface as the mock, so route/hook/UI are untouched. `lib/analyst.ts` lazily requires
+  it so mock mode never loads a paid SDK.
+- Retry loop widened to return `RetryOutcome` (execution + code + declared columns + attempts).
+
+### The first live run FAILED, and that was the safeguard working
+
+Fireworks printed `VERA_RESULT:{"total_sales_q3_2018": 143787.3622}` — a labelled object. The
+parser only accepted a bare scalar, so it blocked, retried twice, and returned `unverified` rather
+than shipping a number it could not parse. Correct behaviour, wrong contract. Fixed both ends:
+the prompt now demands a bare value, and `parseResultValue` unwraps a **single-entry** object or
+array (unambiguous) while still blocking multi-entry wrappers (genuinely ambiguous — which entry is
+the answer?).
+
+### Live proof, on the real 9,994-row file
+
+```
+[     0ms] writing_code     active    Warming the sandbox
+[  2167ms] writing_code     active    Sandbox created in 0.3s · uploaded 2.4 MB
+[  2801ms] writing_code     complete  Generated 6 lines of pandas
+[  3761ms] running_sandbox  complete  Exit 0 in 828ms
+[  5956ms] verifying        active    Tracing 143787.36 back to source cells
+[  5985ms] verifying        complete  Grounded in OrderDate, Sales across 9,994 rows
+[  5985ms] done             complete  Verified
+```
+
+`verdict: verified`, `value: 143787.36` (answer key: 143787.36). Real cells quoted. Schema evidence
+attached. Sandbox torn down. Also confirmed in the browser with `VERA_MOCK=0` — the UI's
+"MOCK ENGINE · NO SANDBOX CALL" masthead flag correctly disappears when live.
+
+Live tests are gated behind `VERA_LIVE=1` (`tests/live-e2e.test.ts`, `tests/live-fw.test.ts`) so a
+plain `pnpm test` can never spend money. 69 tests pass, 3 skipped.
+
+**Sandbox hygiene: always run the teardown test after a live session, or a sandbox keeps burning.**
+
+## CP-5 — remaining · P1/P2
+
+Braintrust (#16) and ElevenLabs (#17) are stretch and BOTH still need explicit money approval.
+Submission (#20) is due **3:30pm PDT** and PRD §10 reserves ~45 min for it.
 
 _(next entry appended here)_

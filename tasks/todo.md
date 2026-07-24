@@ -28,13 +28,13 @@ runs a full demo. Parallelisable across 3 agents (UI / API+types / data).
 
 ## Phase 3 — Daytona sandbox · P0 · 💸 SPENDS CREDITS
 
-- [ ] #11 P3.1 — Warm sandbox singleton, pandas preinstalled
-- [ ] #12 P3.2 — Write CSV into sandbox + execute generated code → result
+- [x] #11 P3.1 — Warm sandbox singleton, pandas preinstalled
+- [x] #12 P3.2 — Write CSV into sandbox + execute generated code → result
 
 ## Phase 4 — The safeguard · P0 · 💸 SPENDS CREDITS (live path)
 
-- [ ] #13 P4.1 — Grounding check, block-and-retry, honest unverified state
-- [ ] #14 P4.2 — Rate limits + secret hygiene on money endpoints (💚 free)
+- [x] #13 P4.1 — Grounding check, block-and-retry, honest unverified state
+- [x] #14 P4.2 — Rate limits + secret hygiene on money endpoints (💚 free)
 
 ## Phase 5 — Braintrust proof · P1 · 💸 (P5.2 only)
 
