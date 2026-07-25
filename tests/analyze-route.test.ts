@@ -1,8 +1,53 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
+import { realAnalyst } from "@/lib/real-analyst";
 import { readEventStream } from "@/lib/stream";
-import type { StageEvent } from "@/lib/types";
+import { resolveUpload } from "@/lib/datasets";
+import type { Finding, StageEvent } from "@/lib/types";
 import { POST, runtime } from "@/app/api/analyze/route";
+
+vi.mock("@/lib/codegen/generate", () => ({
+  generatePandasCode: vi.fn(async () => ({
+    code: 'print("VERA_RESULT:100")',
+    explanation: "Sums Sales.",
+    headline: "Sales came to {value}.",
+    columnsUsed: ["Sales"],
+    context: [
+      {
+        name: "prior",
+        description: "the quarter before",
+        columnsUsed: ["Sales"],
+      },
+      {
+        name: "ghost",
+        description: "never computed",
+        columnsUsed: ["Sales"],
+      },
+    ],
+    valence: "bad",
+  })),
+}));
+
+vi.mock("@/lib/daytona/sandbox", () => ({
+  SANDBOX_CSV_PATH: "/workspace/data.csv",
+  getWarmSandbox: vi.fn(async () => ({
+    sandboxId: "stub",
+    reused: true,
+    readyMs: 0,
+  })),
+  ensureDatasetLoaded: vi.fn(async () => ({ uploaded: false, bytes: 13 })),
+  daytonaExecutor: {
+    execute: vi.fn(async () => ({
+      exitCode: 0,
+      stdout:
+        'VERA_RESULT:{"value":100,"context":{"prior":99,"smuggled":1234}}',
+      stderr: "",
+      value: 100,
+      contextValues: { prior: 99, smuggled: 1234 },
+      durationMs: 1,
+    })),
+  },
+}));
 
 function analyzeRequest(
   body: unknown,
@@ -30,6 +75,24 @@ const validBody = {
 };
 
 describe("POST /api/analyze", () => {
+  it("attaches only grounded context figures to the finding", async () => {
+    let finding: Finding | null = null;
+    for await (const event of realAnalyst.run({
+      question: "What were total sales?",
+      dataset: resolveUpload({
+        filename: "business.csv",
+        content: "Sales\n100\n",
+      }),
+    })) {
+      if (event.type === "finding") finding = event.finding;
+    }
+
+    expect(finding?.verdict).toBe("verified");
+    if (!finding || finding.verdict !== "verified") return;
+    expect(finding.context.map((figure) => figure.name)).toEqual(["prior"]);
+    expect(finding.valence).toBe("bad");
+  });
+
   it("keeps paid SDKs outside the mock analyst import boundary", () => {
     const analystSource = readFileSync(
       new URL("../lib/analyst.ts", import.meta.url),

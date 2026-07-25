@@ -8,7 +8,7 @@ import {
   ensureDatasetLoaded,
   getWarmSandbox,
 } from "./daytona/sandbox";
-import { verifyGrounding } from "./verify";
+import { verifyContextFigures, verifyGrounding } from "./verify";
 import type { AnalysisRequest, Analyst, StageEvent } from "./types";
 
 /**
@@ -170,8 +170,12 @@ export const realAnalyst: Analyst = {
         code: result.code,
         execution: result.execution,
         grounding: verdict.grounding,
-        context: [],
-        valence: "neutral",
+        context: verifyContextFigures({
+          declared: result.context,
+          executed: result.execution.contextValues,
+          profile: dataset.profile,
+        }),
+        valence: result.valence,
         attempts: result.attempts,
       },
       elapsedMs: elapsed(),

@@ -1,9 +1,11 @@
 import { LIMITS } from "../config";
 import type {
+  ContextFigure,
   DatasetProfile,
   ExecutionResult,
   GeneratedCode,
   StageEvent,
+  Valence,
 } from "../types";
 import type { CodegenOutput, CodegenRequest } from "./generate";
 
@@ -81,6 +83,9 @@ export interface RetryOutcome {
   headline: string;
   /** Columns the model said it used — checked against the real schema downstream. */
   columnsUsed: string[];
+  /** Context declarations awaiting executed-value grounding. */
+  context: Array<Omit<ContextFigure, "value">>;
+  valence: Valence;
   attempts: number;
 }
 
@@ -260,6 +265,8 @@ export async function* runCodegenWithRetries(
         code: lastCode,
         headline: output.headline,
         columnsUsed: output.columnsUsed,
+        context: output.context,
+        valence: output.valence,
         attempts: attempt,
       };
     }
