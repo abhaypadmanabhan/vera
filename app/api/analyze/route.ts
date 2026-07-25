@@ -5,7 +5,8 @@ import { LIMITS } from "@/lib/config";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { resolveDataset, resolveUpload } from "@/lib/datasets";
 import { encodeEvent } from "@/lib/stream";
-import type { AnalysisRequest, StageEvent } from "@/lib/types";
+import { logAnalysis } from "@/lib/braintrust/logger";
+import type { AnalysisRequest, Finding, StageEvent } from "@/lib/types";
 
 export const runtime = "nodejs";
 
@@ -94,6 +95,22 @@ export async function POST(request: Request): Promise<Response> {
   let aborted = false;
   let iteratorClosed = false;
 
+  // Braintrust Logs: one trace per real run, written once the stream settles.
+  // Telemetry only — it is never awaited by the response and never fails it.
+  let finding: Finding | null = null;
+  let traced = false;
+  const trace = (error?: string): void => {
+    if (traced || aborted) return;
+    traced = true;
+    logAnalysis({
+      question: analysisRequest.question,
+      datasetId: parsed.data.datasetId,
+      finding,
+      error,
+      durationMs: Date.now() - startedAt,
+    });
+  };
+
   const closeIterator = async (): Promise<void> => {
     if (iteratorClosed || !iterator) return;
     iteratorClosed = true;
@@ -130,10 +147,12 @@ export async function POST(request: Request): Promise<Response> {
         }
         if (result.done) {
           iteratorClosed = true;
+          trace();
           controller.close();
           request.signal.removeEventListener("abort", onAbort);
           return;
         }
+        if (result.value.type === "finding") finding = result.value.finding;
         controller.enqueue(encoder.encode(encodeEvent(result.value)));
       } catch (error) {
         if (!aborted) {
@@ -142,6 +161,7 @@ export async function POST(request: Request): Promise<Response> {
             message: error instanceof Error ? error.message : "Analysis failed.",
             elapsedMs: Date.now() - startedAt,
           };
+          trace(event.message);
           controller.enqueue(encoder.encode(encodeEvent(event)));
         }
         controller.close();

@@ -44,3 +44,5 @@ yarn-error.log*
 # local agent scratch
 tasks/scratch/
 .claude/settings.local.json
+# Added by Braintrust Wizard
+.braintrust.json
