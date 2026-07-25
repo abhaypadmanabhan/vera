@@ -384,7 +384,23 @@
   opacity: 0.24;
 }
 
+/*
+ * The presenter orb — ElevenLabs' `Orb` from their shadcn registry
+ * (components/ui/orb.tsx), driven by components/vera/presenter-orb.tsx.
+ *
+ * The shader takes hex, not oklch, so the accent reaches it through
+ * --deck-orb-*: two stops on --v-accent's own hue (250), no second hue, no
+ * glow, no drop shadow. They are deliberately softer than --v-accent itself —
+ * the shader's colour ramp lands most of the orb near the midpoint of the two
+ * stops, so feeding it the full accent paints a saturated pinwheel instead of
+ * the calm wash DESIGN.md asks for. The static ring underneath is the whole orb
+ * whenever the shader is not running — reduced motion, no WebGL, or on the
+ * server.
+ */
 .presenter-orb {
+  --deck-orb-1: #73a3d5; /* oklch(0.70 0.090 250) */
+  --deck-orb-2: #caddf2; /* oklch(0.89 0.035 250) */
+
   position: absolute;
   z-index: 8;
   top: -3.75rem;
@@ -400,83 +416,63 @@
   will-change: transform;
 }
 
-.presenter-orb-wave,
-.presenter-orb-core {
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) .presenter-orb {
+    --deck-orb-1: #5590cc; /* oklch(0.64 0.110 250) */
+    --deck-orb-2: #b1d2f4; /* oklch(0.85 0.060 250) */
+  }
+}
+
+:root[data-theme="dark"] .presenter-orb {
+  --deck-orb-1: #5590cc;
+  --deck-orb-2: #b1d2f4;
+}
+
+.presenter-orb-still {
   position: absolute;
   left: 50%;
   top: 50%;
-  border-radius: 50%;
-  transform: translate3d(-50%, -50%, 0);
-}
-
-.presenter-orb-wave {
   width: 5.5rem;
   height: 5.5rem;
-  border: 1px solid color-mix(in oklch, var(--v-accent), transparent 76%);
-  background: color-mix(in oklch, var(--v-accent-wash), transparent 38%);
-  box-shadow:
-    0 0 0 0.9rem color-mix(in oklch, var(--v-accent-wash), transparent 62%),
-    0 0 2.5rem color-mix(in oklch, var(--v-accent), transparent 82%);
-  animation: presenter-orb-idle 3.6s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  border-radius: 50%;
+  transform: translate3d(-50%, -50%, 0);
+  border: 1px solid color-mix(in oklch, var(--v-accent), transparent 84%);
+  transition:
+    border-color 260ms var(--ease-settle),
+    background-color 260ms var(--ease-settle);
 }
 
-.presenter-orb-core {
-  width: 1.15rem;
-  height: 1.15rem;
-  background: var(--v-accent);
-  box-shadow: 0 0 0 0.45rem color-mix(in oklch, var(--v-accent), transparent 84%);
+.presenter-orb-canvas {
+  position: absolute;
+  inset: 0;
+  /* Softens the shader disc's rim into an orb instead of a cut circle. */
+  mask-image: radial-gradient(circle at 50% 50%, #000 44%, transparent 68%);
 }
 
 .presenter-orb-visible {
   opacity: 1;
 }
 
-.presenter-orb-speaking .presenter-orb-wave {
-  animation: presenter-orb-speaking 1.25s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+/* Three states, told with static properties so they survive reduced motion. */
+.presenter-orb-visible[data-state="speaking"] {
+  opacity: 1;
 }
 
-.presenter-orb-speaking .presenter-orb-core {
-  animation: presenter-orb-core 1.25s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+.presenter-orb-visible[data-state="idle"] {
+  opacity: 0.62;
 }
 
-@keyframes presenter-orb-idle {
-  0%,
-  100% {
-    opacity: 0.7;
-    transform: translate3d(-50%, -50%, 0) scale(0.96);
-  }
-  50% {
-    opacity: 1;
-    transform: translate3d(-50%, -50%, 0) scale(1);
-  }
+.presenter-orb-visible[data-state="stopped"] {
+  opacity: 0.34;
 }
 
-@keyframes presenter-orb-speaking {
-  0%,
-  100% {
-    opacity: 0.74;
-    transform: translate3d(-50%, -50%, 0) scale(0.94);
-  }
-  42% {
-    opacity: 1;
-    transform: translate3d(-50%, -50%, 0) scale(1.08);
-  }
-  68% {
-    opacity: 0.86;
-    transform: translate3d(-50%, -50%, 0) scale(1.01);
-  }
+.presenter-orb[data-state="speaking"] .presenter-orb-still {
+  border-color: color-mix(in oklch, var(--v-accent), transparent 64%);
+  background-color: color-mix(in oklch, var(--v-accent-wash), transparent 58%);
 }
 
-@keyframes presenter-orb-core {
-  0%,
-  100% {
-    opacity: 0.82;
-    transform: translate3d(-50%, -50%, 0) scale(0.9);
-  }
-  42% {
-    opacity: 1;
-    transform: translate3d(-50%, -50%, 0) scale(1.12);
-  }
+.presenter-orb[data-state="stopped"] .presenter-orb-still {
+  border-color: color-mix(in oklch, var(--v-line-strong), transparent 24%);
 }
 
 .deck-question {
@@ -1213,8 +1209,15 @@
     transition: none;
   }
 
-  .presenter-orb-wave,
-  .presenter-orb-core {
-    animation: none;
+  /*
+   * presenter-orb.tsx never mounts the shader canvas under reduced motion; this
+   * is the belt to that pair of braces. What is left is the static ring.
+   */
+  .presenter-orb-canvas {
+    display: none;
+  }
+
+  .presenter-orb-still {
+    transition: none;
   }
 }
