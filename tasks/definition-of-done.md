@@ -40,16 +40,22 @@ This is the product. If any box here is unticked, nothing else matters.
 - [x] `/api/transcribe` has a rate limit and a size cap. Proven over HTTP: 413 size, 413
       duration, 400 no audio, 415 format, 422 too short, 429 on the 11th request.
 
-## 3. Voice
+## 3. Voice and follow-through
 
 - [x] Vera narrates the deck through ElevenLabs, one beat at a time.
 - [x] Narration can be **interrupted** — the STOP button kills it immediately.
 - [x] Narration is written in an analyst's voice, not the slide text read aloud.
-- [ ] The speaking indicator is the real ElevenLabs orb, retinted to our tokens.
-      *(in flight — `p9/orb`)*
+- [x] The speaking indicator is the real ElevenLabs orb, retinted to our tokens. The registry
+      was behind bot protection (429), so the component was verified byte-identical by sha256
+      against the published `elevenlabs/ui` copy and installed from that — nothing hand-written
+      standing in for it.
 - [x] The user can **speak** a question instead of typing it. One live Scribe call returned
       the spoken words verbatim.
 - [x] Transcribed speech lands in the box for confirmation and is **never auto-submitted**.
+- [x] Vera **proposes the next question** after a finding, derived from the columns the code
+      actually read and filtered through the guardrail so every suggestion is answerable.
+- [x] A follow-up only routes back to an existing slide when it is genuinely deictic — one
+      stray keyword no longer hijacks a new question.
 
 ## 4. Observability
 
@@ -80,7 +86,8 @@ This is the product. If any box here is unticked, nothing else matters.
 - [x] The hero carries a plain-English headline, not the technical line.
 - [x] `prefers-reduced-motion` is honoured by every animation: reveals, marquee, benchmark
       bars, count-ups, background drift.
-- [ ] The voice orb honours `prefers-reduced-motion`. *(in flight — `p9/orb`)*
+- [x] The voice orb honours `prefers-reduced-motion` — no canvas in any state, static ring
+      still legible and still distinct between idle, speaking and stopped.
 - [x] Landing at `/`, live demo at `/ask`, cold open at `/open`.
 - [x] Official vendor marks in the powered-by strip, all four genuine.
 
@@ -95,20 +102,21 @@ This is the product. If any box here is unticked, nothing else matters.
       `set this to true or false` placeholders, so pnpm's dependency check failed every lint,
       test and build. Three agents each burned time proving it was pre-existing.
 - [x] Every branch merged into `dev` via PR so CodeRabbit reviews it.
-- [ ] All four `p9/*` branches merged, verified in a browser, and their worktrees torn down.
+- [x] All four `p9/*` branches merged, verified in a browser, and their worktrees torn down.
 - [ ] `dev` merged to `main` — **requires the builder's explicit approval.**
 
 ## 8. Known gaps, deliberately not done
 
 Named here so nobody mistakes them for oversights.
 
-- **Vera does not propose her own follow-up questions.** The user types them. Building her a
-  "you might also ask…" off the columns she just read needs no extra model call.
-- **`matchSlide` keyword collision.** The matcher scores single keywords, and the headline
-  slide owns "total" while the code slide owns "run". So *"what were total sales by region?"*
-  jumps back to an old slide instead of running fresh. Avoid those two words in a follow-up
-  you want answered live, or fix the matcher.
-- **Interrupt and follow-up by voice** — out of scope by decision, not by accident.
+- **Interrupt and follow-up by voice** — out of scope by decision, not by accident. You can
+  now *ask* by voice, but you cannot interrupt her by voice.
+- **The orb's speaking state has never been driven by real audio.** Mock mode returns 204 from
+  `/api/speak`, so `speaking` is only ever true during a paid ElevenLabs run. The wiring is
+  verified; the live pairing is not.
+- **Suggested follow-ups are schema-shaped, not insight-shaped.** They propose a breakdown, a
+  trend and a share — sound questions, but not the ones a domain expert would ask. Making them
+  smarter means a model call, and that would put a cost on every finding.
 - **Not deployed.** The static surfaces (`/`, `/open`, and the deck) could ship to Vercel for
   a shareable link at zero cost. The live `/ask` route must not be public without auth: a
   stranger clicking a chip spends real Fireworks, Daytona and ElevenLabs credit. PRD §5's
