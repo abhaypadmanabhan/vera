@@ -354,3 +354,82 @@ triage CodeRabbit on PRs #21 (merged) and #22 (open).
 **PR #22 is open against `dev` and unmerged.** Branch `feat/p2-fireworks` holds everything.
 
 _(next entry appended here)_
+
+## CP-7 — PRODUCT PHASE · 2026-07-24 ~18:20 PDT · handover to a new orchestrator
+
+The hackathon is over. This checkpoint closes the demo phase and opens the product phase.
+
+### Landed since CP-6
+
+Four agents (`p9/bt`, `p9/guard`, `p9/orb`, `p9/mic`), all merged into `feat/p2-fireworks`,
+all verified in a real browser by the orchestrator, all worktrees torn down.
+
+- **Guardrails** — `lib/guardrails/classify.ts`, a deterministic schema-aware classifier that
+  runs BEFORE any spend. Refuses general knowledge, missing columns, opinion/prediction/causal
+  questions, and requests to guess. Deliberately conservative: ambiguous wording passes, and
+  the execution gate stays the final arbiter. Refusal renders as a choice, in plain English.
+- **Braintrust Logs** — `lib/braintrust/logger.ts` + `instrumentation.ts`. One trace per live
+  analysis: `analysis` (task) root with a nested `fireworks.chat` (llm) child carrying tokens,
+  latency and cost. Fireworks is called over raw fetch, so auto-instrumentation has nothing to
+  patch — the span is manual and deliberate.
+- **Voice input** — `/api/transcribe` (ElevenLabs Scribe, server-side, rate limited, size and
+  duration capped) plus a mic button. Transcript lands in the box; it is NEVER auto-submitted.
+- **The orb** — the real ElevenLabs component. Registry was behind bot protection (429), so it
+  was verified byte-identical by sha256 against the published `elevenlabs/ui` copy and installed
+  from there. Retinted, glow stripped, three distinct states, no canvas under reduced motion.
+
+### The honesty defect that mattered more than any of it
+
+Tracing caught it live: the sandbox returned **143787.36** while the model's headline read
+**"281,420 dollars"**. The hero and the voice both read the headline, so Vera would have
+stated a number no code produced — the exact failure PRD §6 exists to prevent.
+
+Cause: the model writes the code AND the plain-English sentence in one response, before the
+code has run, and was authoring the figure into the sentence.
+
+Fix: `lib/claim.ts`. The model emits a `{value}` slot; the executed value is substituted. If
+the model ignores the instruction, the sentence survives only when every figure in it is either
+the computed value or a number the user themselves wrote. Otherwise it is discarded for a
+plainer true one. It always fails toward the executed value.
+
+### Also fixed by the orchestrator
+
+- `matchSlide` no longer lets one stray keyword hijack a new question. "total" and "run" are
+  common English; a question now routes back only when it is deictic.
+- `lib/follow-ups.ts` — Vera proposes the next question, derived from the columns the executed
+  code read, every candidate filtered through the guardrail first. No model call.
+- `pnpm-workspace.yaml` carried literal `set this to true or false` placeholders, so every
+  lint/test/build exited non-zero. Three agents each burned time proving it was pre-existing.
+
+### State
+
+- **176 tests pass**, 5 skipped. Lint, `tsc --noEmit`, and build all clean, exit zero.
+- Branch `feat/p2-fireworks`, pushed. PR #22 merged into `dev`. **`main` untouched.**
+- `tasks/definition-of-done.md` — 48 proven, 2 open, both needing the builder.
+
+### Braintrust dashboard — LIKELY A NON-ISSUE, CHECK THIS FIRST
+
+The builder reports he cannot see traces. The traces exist and were verified through the REST
+API (6 events, correct parent/child nesting). They are in:
+
+- org **Padzy** · project **Vera Accuracy Benchmark**
+- `https://www.braintrust.dev/app/Padzy/p/Vera%20Accuracy%20Benchmark/logs`
+
+His screenshot showed **My Project** — a different, empty project created by the setup wizard.
+Before diagnosing anything, open the URL above. If traces are visible there, the only real
+decision is which project the app should log to, and `PROJECT_NAME` in
+`lib/braintrust/logger.ts` plus `instrumentation.ts` must agree.
+
+### What the builder asked for next — the product phase
+
+1. **Vera must sound like an analyst, not a parser.** Narration and slides still surface
+   "the dates were day-first", row counts and parsing detail. That was scaffolding to prove
+   grounding; it is not analysis. She should lead with the finding and what it means — the
+   number, the comparison, the "so what" — and keep provenance available but secondary.
+2. **Upload any dataset.** Today the demo CSV is the centre of gravity. Vera should take an
+   arbitrary file (a Netflix report was the example) and produce a data-backed presentation
+   with real insights, not one figure per question.
+3. **Insight decks, not single answers.** Multiple findings composed into a narrative.
+
+These are product-shaped, not task-shaped. The next orchestrator should brainstorm and write a
+plan before cutting any agents.
