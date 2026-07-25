@@ -1,9 +1,11 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
+import { generatePandasCode } from "@/lib/codegen/generate";
+import { SANDBOX_CSV_PATH } from "@/lib/daytona/sandbox";
 import { realAnalyst } from "@/lib/real-analyst";
 import { readEventStream } from "@/lib/stream";
 import { resolveUpload } from "@/lib/datasets";
-import type { Finding, StageEvent } from "@/lib/types";
+import type { AnalysisRequest, Finding, StageEvent } from "@/lib/types";
 import { POST, runtime } from "@/app/api/analyze/route";
 
 vi.mock("@/lib/codegen/generate", () => ({
@@ -74,7 +76,46 @@ const validBody = {
   },
 };
 
+const analysisDataset = resolveUpload({
+  filename: "business.csv",
+  content: "Sales\n100\n",
+});
+
+async function codegenRequestFor(
+  request: AnalysisRequest,
+): Promise<Parameters<typeof generatePandasCode>[0]> {
+  const generate = vi.mocked(generatePandasCode);
+  generate.mockClear();
+  for await (const event of realAnalyst.run(request)) {
+    if (event.type === "error") {
+      throw new Error(event.message);
+    }
+  }
+  const codegenRequest = generate.mock.calls[0]?.[0];
+  if (!codegenRequest) throw new Error("Expected code generation to run.");
+  return codegenRequest;
+}
+
 describe("POST /api/analyze", () => {
+  it("answers from the prepared file when prep succeeded", async () => {
+    const codegenRequest = await codegenRequestFor({
+      question: "What were total sales?",
+      dataset: analysisDataset,
+      analysisPath: "/workspace/clean-abc.csv",
+    });
+
+    expect(codegenRequest.sandboxPath).toBe("/workspace/clean-abc.csv");
+  });
+
+  it("answers from the raw file when prep never ran", async () => {
+    const codegenRequest = await codegenRequestFor({
+      question: "What were total sales?",
+      dataset: analysisDataset,
+    });
+
+    expect(codegenRequest.sandboxPath).toBe(SANDBOX_CSV_PATH);
+  });
+
   it("attaches only grounded context figures to the finding", async () => {
     let finding: Finding | null = null;
     for await (const event of realAnalyst.run({

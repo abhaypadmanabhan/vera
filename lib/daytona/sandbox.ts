@@ -21,6 +21,7 @@ import type { ExecutionResult } from "../types";
 
 const SANDBOX_LABEL = { app: "vera" } as const;
 export const SANDBOX_CSV_PATH = "/home/daytona/data.csv";
+export const CLEAN_CSV_PATH = "/home/daytona/clean.csv";
 
 /** The result contract with the generated code. Anything else is treated as no value. */
 const RESULT_PREFIX = "VERA_RESULT:";
@@ -31,6 +32,8 @@ interface WarmState {
   /** Which dataset's bytes are currently sitting in the sandbox. */
   loadedDatasetId: string | null;
   createdAtMs: number | null;
+  /** Changes whenever sandbox-local files can no longer be assumed to exist. */
+  generation: number;
 }
 
 /** Survive Next dev hot-reload, which re-evaluates modules but keeps globalThis. */
@@ -43,8 +46,15 @@ function state(): WarmState {
     sandbox: null,
     loadedDatasetId: null,
     createdAtMs: null,
+    generation: 0,
   };
-  return globalState[STATE_KEY];
+  const current = globalState[STATE_KEY];
+  current.generation ??= 0;
+  return current;
+}
+
+export function getSandboxIdentity(): number {
+  return state().generation;
 }
 
 function assertLive(): void {
@@ -89,6 +99,7 @@ export async function getWarmSandbox(): Promise<WarmSandboxInfo> {
       // Dead or expired — fall through and recreate.
       s.sandbox = null;
       s.loadedDatasetId = null;
+      s.generation++;
     }
   }
 
@@ -100,6 +111,7 @@ export async function getWarmSandbox(): Promise<WarmSandboxInfo> {
   s.sandbox = sandbox;
   s.createdAtMs = Date.now();
   s.loadedDatasetId = null;
+  s.generation++;
   return { sandboxId: sandbox.id, reused: false, readyMs: Date.now() - startedAt };
 }
 
@@ -279,12 +291,16 @@ export const daytonaExecutor: CodeExecutor = {
 /** Explicit teardown so no sandbox is left burning credits after the demo. */
 export async function teardownSandbox(): Promise<string | null> {
   const s = state();
-  if (!s.sandbox) return null;
+  if (!s.sandbox) {
+    s.generation++;
+    return null;
+  }
   const id = s.sandbox.id;
   await s.sandbox.delete(60);
   s.sandbox = null;
   s.loadedDatasetId = null;
   s.createdAtMs = null;
+  s.generation++;
   return id;
 }
 

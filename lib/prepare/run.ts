@@ -3,6 +3,7 @@ import { LIMITS, MOCK_MODE } from "../config";
 import { parseCsv } from "../csv";
 import { contentHash } from "../datasets";
 import {
+  CLEAN_CSV_PATH,
   SANDBOX_CSV_PATH,
   daytonaExecutor,
   ensureDatasetLoaded,
@@ -16,11 +17,10 @@ import {
 } from "./audit";
 import {
   generatePrep,
+  PREP_FIXES,
   type PrepOutput,
   type PrepRequest,
 } from "./generate";
-
-export const CLEAN_CSV_PATH = "/home/daytona/clean.csv";
 
 const FAILURE_DETAIL =
   "Vera could not tidy this file, so she is working from it as it came.";
@@ -234,7 +234,9 @@ export async function prepareDataset(
     return {
       ok: true,
       analysisPath: cleanPath,
-      fixes: generated.fixes,
+      fixes: counts
+        ? generated.fixes
+        : generated.fixes.filter((fix) => fix !== PREP_FIXES[7]),
       questions,
       counts,
     };

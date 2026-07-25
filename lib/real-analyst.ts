@@ -77,7 +77,7 @@ export const realAnalyst: Analyst = {
       question: request.question,
       profile: dataset.profile,
       sampleRows: schema.sampleRows,
-      sandboxPath: SANDBOX_CSV_PATH,
+      sandboxPath: request.analysisPath ?? SANDBOX_CSV_PATH,
       generator: {
         generate: (req) => generatePandasCode(req, { mockMode: false }),
       },
