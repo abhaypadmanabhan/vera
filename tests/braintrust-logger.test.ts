@@ -46,6 +46,7 @@ const verifiedFinding: Finding = {
     stdout: "100",
     stderr: "",
     value: 100,
+    contextValues: {},
     durationMs: 12,
   },
   grounding: {

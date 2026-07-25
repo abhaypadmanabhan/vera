@@ -138,6 +138,76 @@ function coerceValue(parsed: unknown): number | string | null {
   return null;
 }
 
+const MAX_CONTEXT_FIGURES = 3;
+
+export interface ResultPayload {
+  value: number | string | null;
+  /** Raw executed context values, keyed by name. Empty when none. */
+  contextValues: Record<string, number | string>;
+}
+
+function isEnvelope(parsed: unknown): parsed is { value: unknown; context?: unknown } {
+  return (
+    parsed !== null &&
+    typeof parsed === "object" &&
+    !Array.isArray(parsed) &&
+    "value" in parsed
+  );
+}
+
+/** A context figure is held to the same bar as the primary value: usable, or gone. */
+function coerceContext(raw: unknown): Record<string, number | string> {
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: Record<string, number | string> = {};
+  for (const [name, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (Object.keys(out).length >= MAX_CONTEXT_FIGURES) break;
+    if (typeof value === "number") {
+      if (Number.isFinite(value)) out[name] = value;
+      continue;
+    }
+    if (typeof value !== "string") continue;
+    const trimmed = value.trim();
+    if (trimmed === "") continue;
+    if (/^(nan|-?inf(inity)?|none|null|na|n\/a)$/i.test(trimmed)) continue;
+    out[name] = trimmed;
+  }
+  return out;
+}
+
+export function parseResultPayload(output: string): ResultPayload {
+  const line = output
+    .split("\n")
+    .reverse()
+    .find((candidate) => candidate.trim().startsWith(RESULT_PREFIX));
+  if (!line) return { value: null, contextValues: {} };
+  const raw = line.trim().slice(RESULT_PREFIX.length).trim();
+  if (raw === "") return { value: null, contextValues: {} };
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { value: parseResultValue(output), contextValues: {} };
+  }
+
+  if (
+    parsed !== null &&
+    typeof parsed === "object" &&
+    !Array.isArray(parsed) &&
+    "context" in parsed &&
+    !("value" in parsed)
+  ) {
+    return { value: null, contextValues: {} };
+  }
+  if (isEnvelope(parsed)) {
+    return {
+      value: coerceValue(parsed.value),
+      contextValues: coerceContext(parsed.context),
+    };
+  }
+  return { value: parseResultValue(output), contextValues: {} };
+}
+
 /** Pull the single machine-readable value the generated code is required to print. */
 export function parseResultValue(output: string): number | string | null {
   const line = output
@@ -153,6 +223,7 @@ export function parseResultValue(output: string): number | string | null {
 
   try {
     const parsed: unknown = JSON.parse(raw);
+    if (isEnvelope(parsed)) return coerceValue(parsed.value);
     return coerceValue(parsed);
   } catch {
     const asNumber = Number(raw);
@@ -175,12 +246,17 @@ export const daytonaExecutor: CodeExecutor = {
       const response = await s.sandbox.process.codeRun(code, undefined, timeoutSeconds);
       const output = response.result ?? "";
       const exitCode = response.exitCode ?? 0;
+      const payload =
+        exitCode === 0
+          ? parseResultPayload(output)
+          : { value: null, contextValues: {} };
       return {
         exitCode,
         // There is no stderr field. On failure `result` IS the error text.
         stdout: exitCode === 0 ? output : "",
         stderr: exitCode === 0 ? "" : output,
-        value: exitCode === 0 ? parseResultValue(output) : null,
+        value: payload.value,
+        contextValues: payload.contextValues,
         durationMs: Date.now() - startedAt,
       };
     } catch (error) {
@@ -193,6 +269,7 @@ export const daytonaExecutor: CodeExecutor = {
         stdout: "",
         stderr: message,
         value: null,
+        contextValues: {},
         durationMs: Date.now() - startedAt,
       };
     }

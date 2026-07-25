@@ -33,6 +33,18 @@ export type StageStatus = "pending" | "active" | "complete" | "failed";
  */
 export type Verdict = "verified" | "unverified";
 
+export type Valence = "good" | "bad" | "neutral";
+
+export interface ContextFigure {
+  /** Machine key matching the executed payload, for example "prior_period". */
+  name: string;
+  /** Plain-English description suitable for narration. */
+  description: string;
+  value: number | string;
+  /** Columns this figure was computed from. */
+  columnsUsed: string[];
+}
+
 /** A single cell of the real CSV, quoted back as evidence. */
 export interface SourceCell {
   /** 0-based row index in the parsed CSV, excluding the header. */
@@ -138,6 +150,8 @@ export interface ExecutionResult {
   stderr: string;
   /** Parsed single result value, or null when the code produced nothing usable. */
   value: number | string | null;
+  /** Extra executed figures from the same result line. Empty when none. */
+  contextValues: Record<string, number | string>;
   durationMs: number;
 }
 

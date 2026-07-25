@@ -100,6 +100,7 @@ const VERIFIED_FINDING = (dataset: ResolvedDataset, attempts: number): Finding =
     stdout: "-17725.48\n",
     stderr: "",
     value: -17725.48,
+    contextValues: {},
     durationMs: 1_284,
   },
   grounding: groundingFrom(dataset),

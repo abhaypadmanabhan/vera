@@ -36,7 +36,14 @@ const verified: Finding = {
   unit: null,
   claim: "Sales came to 143,787.36 dollars.",
   code: { language: "python", source: "print(1)", explanation: "Sums Sales.", lineCount: 3 },
-  execution: { exitCode: 0, stdout: "", stderr: "", value: 143787.36, durationMs: 820 },
+  execution: {
+    exitCode: 0,
+    stdout: "",
+    stderr: "",
+    value: 143787.36,
+    contextValues: {},
+    durationMs: 820,
+  },
   grounding: {
     columns: ["Sales", "OrderDate"],
     rowCount: 9994,
