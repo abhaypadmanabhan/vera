@@ -3,10 +3,20 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import type { CodeExecutor } from "@/lib/codegen/retry";
+import { contentHash } from "@/lib/datasets";
 import {
   buildAuditProgram,
   parseAuditOutput,
 } from "@/lib/prepare/audit";
+import type { PrepOutput, PrepRequest } from "@/lib/prepare/generate";
+import {
+  CLEAN_CSV_PATH,
+  prepareDataset,
+} from "@/lib/prepare/run";
+import { getPrep, setPrep } from "@/lib/prepare/store";
+import type { ExecutionResult, ResolvedDataset } from "@/lib/types";
+import { SANDBOX_CSV_PATH } from "@/lib/daytona/sandbox";
 
 async function executeAudit(
   sourceCsv: string,
@@ -190,5 +200,452 @@ describe("the audit program", () => {
     ],
   ])("rejects %s", (_case, payload) => {
     expect(parseAuditOutput(`VERA_AUDIT:${payload}`)).toBeNull();
+  });
+});
+
+const DATASET: ResolvedDataset = {
+  id: "tiny-sales",
+  filename: "tiny-sales.csv",
+  content: [
+    "Region,Sales",
+    "West,10",
+    "East,20",
+    "North,30",
+    "South,40",
+    "Central,50",
+    "Other,60",
+  ].join("\n"),
+  profile: {
+    datasetId: "tiny-sales",
+    filename: "tiny-sales.csv",
+    rowCount: 6,
+    duplicateRowCount: 0,
+    crossChecks: [],
+    columns: [
+      {
+        name: "Region",
+        kind: "category",
+        nullCount: 0,
+        distinctCount: 6,
+        sampleValues: ["West", "East"],
+        dateFormat: null,
+        evidence: null,
+      },
+      {
+        name: "Sales",
+        kind: "number",
+        nullCount: 0,
+        distinctCount: 6,
+        sampleValues: ["10", "20"],
+        dateFormat: null,
+        evidence: null,
+      },
+    ],
+    notes: [],
+  },
+};
+
+function cleanPathFor(dataset: ResolvedDataset): string {
+  return CLEAN_CSV_PATH.replace(
+    /\.csv$/,
+    `-${contentHash(dataset.content)}.csv`,
+  );
+}
+
+function execution(
+  overrides: Partial<ExecutionResult> = {},
+): ExecutionResult {
+  return {
+    exitCode: 0,
+    stdout: "",
+    stderr: "",
+    value: null,
+    durationMs: 1,
+    ...overrides,
+  };
+}
+
+function successfulExecutor(
+  requests: Parameters<CodeExecutor["execute"]>[0][] = [],
+): CodeExecutor {
+  let call = 0;
+  return {
+    async execute(request) {
+      requests.push(request);
+      call++;
+      return call === 1
+        ? execution()
+        : execution({
+            stdout:
+              'VERA_AUDIT:{"rowsBefore":6,"rowsAfter":6,"duplicatesDropped":0,"cellsCoerced":0}',
+          });
+    },
+  };
+}
+
+describe("prepareDataset", () => {
+  it("returns the clean path and measured counts on the happy path", async () => {
+    const requests: Parameters<CodeExecutor["execute"]>[0][] = [];
+
+    const report = await prepareDataset(DATASET, {
+      mockMode: true,
+      executor: successfulExecutor(requests),
+    });
+
+    expect(report).toMatchObject({
+      ok: true,
+      analysisPath: cleanPathFor(DATASET),
+      counts: {
+        rowsBefore: 6,
+        rowsAfter: 6,
+        duplicatesDropped: 0,
+        cellsCoerced: 0,
+      },
+    });
+    expect(report.questions.length).toBeGreaterThan(0);
+    expect(requests).toHaveLength(2);
+    expect(requests[0]).toMatchObject({
+      csvPath: SANDBOX_CSV_PATH,
+    });
+    expect(requests[1]?.code).toBe(
+      buildAuditProgram(SANDBOX_CSV_PATH, cleanPathFor(DATASET)),
+    );
+    expect(requests.every((request) => request.signal instanceof AbortSignal)).toBe(
+      true,
+    );
+  });
+
+  it("uses only the first five parsed data rows when generating prep", async () => {
+    let received: PrepRequest | undefined;
+    const generator = async (request: PrepRequest): Promise<PrepOutput> => {
+      received = request;
+      return {
+        prepCode: "clean()",
+        fixes: ["Tidied the file."],
+        questions: ["What is the total Sales?"],
+      };
+    };
+
+    await prepareDataset(DATASET, {
+      mockMode: true,
+      executor: successfulExecutor(),
+      generator,
+    });
+
+    expect(received).toMatchObject({
+      profile: DATASET.profile,
+      sampleRows: [
+        ["West", "10"],
+        ["East", "20"],
+        ["North", "30"],
+        ["South", "40"],
+        ["Central", "50"],
+      ],
+      sourcePath: SANDBOX_CSV_PATH,
+      cleanPath: cleanPathFor(DATASET),
+    });
+  });
+
+  it("drops every proposed question the guardrail refuses", async () => {
+    const generator = async (): Promise<PrepOutput> => ({
+      prepCode: "clean()",
+      fixes: ["Tidied the file."],
+      questions: [
+        "Why did sales drop in the West?",
+        "What is the total Sales?",
+      ],
+    });
+
+    const report = await prepareDataset(DATASET, {
+      mockMode: true,
+      executor: successfulExecutor(),
+      generator,
+    });
+
+    expect(report.questions).toEqual(["What is the total Sales?"]);
+  });
+
+  it("fails open without leaking executor errors when cleaning fails", async () => {
+    const executor: CodeExecutor = {
+      async execute() {
+        return execution({
+          exitCode: 1,
+          stderr: "Traceback: pandas dtype exploded",
+        });
+      },
+    };
+
+    const report = await prepareDataset(DATASET, {
+      mockMode: true,
+      executor,
+    });
+
+    expect(report).toEqual({
+      ok: false,
+      analysisPath: SANDBOX_CSV_PATH,
+      fixes: [],
+      questions: [],
+      counts: null,
+      detail:
+        "Vera could not tidy this file, so she is working from it as it came.",
+    });
+    expect(report.detail).not.toMatch(/traceback|pandas|dtype/i);
+  });
+
+  it("keeps cleaning successful when the audit output is unreadable", async () => {
+    let call = 0;
+    const executor: CodeExecutor = {
+      async execute() {
+        call++;
+        return call === 1
+          ? execution()
+          : execution({ stdout: "not an audit" });
+      },
+    };
+
+    const report = await prepareDataset(DATASET, {
+      mockMode: true,
+      executor,
+    });
+
+    expect(report.ok).toBe(true);
+    expect(report.analysisPath).toBe(cleanPathFor(DATASET));
+    expect(report.counts).toBeNull();
+  });
+
+  it("skips the external loader and uses a zero-key stub in mock mode", async () => {
+    let loadCalls = 0;
+
+    const report = await prepareDataset(DATASET, {
+      mockMode: true,
+      loader: async () => {
+        loadCalls++;
+        throw new Error("the live loader must not run");
+      },
+    });
+
+    expect(loadCalls).toBe(0);
+    expect(report.ok).toBe(true);
+    expect(report.counts).toBeNull();
+  });
+
+  it("fails open when loading or generation throws", async () => {
+    const loadFailure = await prepareDataset(DATASET, {
+      mockMode: false,
+      loader: async () => {
+        throw new Error("Daytona traceback");
+      },
+      executor: successfulExecutor(),
+    });
+    const generationFailure = await prepareDataset(DATASET, {
+      mockMode: true,
+      generator: async () => {
+        throw new Error("Fireworks pandas dtype");
+      },
+      executor: successfulExecutor(),
+    });
+
+    for (const report of [loadFailure, generationFailure]) {
+      expect(report.ok).toBe(false);
+      expect(report.analysisPath).toBe(SANDBOX_CSV_PATH);
+      expect(report.counts).toBeNull();
+      expect(report.detail).toBe(
+        "Vera could not tidy this file, so she is working from it as it came.",
+      );
+    }
+  });
+
+  it("uses a content-aware loader key for sequential uploads", async () => {
+    const loadedIds: string[] = [];
+    const generator = async (): Promise<PrepOutput> => ({
+      prepCode: "clean()",
+      fixes: ["Tidied the file."],
+      questions: ["What is the total Sales?"],
+    });
+    const executor: CodeExecutor = {
+      async execute(request) {
+        return request.code.includes("VERA_AUDIT:")
+          ? execution({
+              stdout:
+                'VERA_AUDIT:{"rowsBefore":6,"rowsAfter":6,"duplicatesDropped":0,"cellsCoerced":0}',
+            })
+          : execution();
+      },
+    };
+    const secondUpload: ResolvedDataset = {
+      ...DATASET,
+      content: DATASET.content.replace("West,10", "West,11"),
+    };
+    const loader = async (datasetId: string) => {
+      loadedIds.push(datasetId);
+    };
+
+    await prepareDataset(DATASET, {
+      mockMode: false,
+      loader,
+      executor,
+      generator,
+    });
+    await prepareDataset(secondUpload, {
+      mockMode: false,
+      loader,
+      executor,
+      generator,
+    });
+
+    expect(loadedIds).toEqual([
+      `${DATASET.id}:${contentHash(DATASET.content)}`,
+      `${secondUpload.id}:${contentHash(secondUpload.content)}`,
+    ]);
+  });
+
+  it("uses a content-addressed clean artifact for each dataset", async () => {
+    const generatedCleanPaths: string[] = [];
+    const auditPrograms: string[] = [];
+    const generator = async (request: PrepRequest): Promise<PrepOutput> => {
+      generatedCleanPaths.push(request.cleanPath);
+      return {
+        prepCode: "clean()",
+        fixes: ["Tidied the file."],
+        questions: ["What is the total Sales?"],
+      };
+    };
+    const executor: CodeExecutor = {
+      async execute(request) {
+        if (request.code.includes("VERA_AUDIT:")) {
+          auditPrograms.push(request.code);
+          return execution({
+            stdout:
+              'VERA_AUDIT:{"rowsBefore":6,"rowsAfter":6,"duplicatesDropped":0,"cellsCoerced":0}',
+          });
+        }
+        return execution();
+      },
+    };
+    const secondDataset: ResolvedDataset = {
+      ...DATASET,
+      content: DATASET.content.replace("West,10", "West,99"),
+    };
+
+    const firstReport = await prepareDataset(DATASET, {
+      mockMode: true,
+      executor,
+      generator,
+    });
+    const secondReport = await prepareDataset(secondDataset, {
+      mockMode: true,
+      executor,
+      generator,
+    });
+
+    expect(generatedCleanPaths[0]).not.toBe(generatedCleanPaths[1]);
+    expect(firstReport.analysisPath).toBe(generatedCleanPaths[0]);
+    expect(secondReport.analysisPath).toBe(generatedCleanPaths[1]);
+    expect(auditPrograms[0]).toContain(generatedCleanPaths[0]);
+    expect(auditPrograms[1]).toContain(generatedCleanPaths[1]);
+  });
+
+  it("runs each real shared-sandbox preparation as one exclusive sequence", async () => {
+    const events: string[] = [];
+    let loadedId = "";
+    const first = {
+      ...DATASET,
+      id: "upload",
+      filename: "first.csv",
+      content: DATASET.content.replace("West,10", "West,101"),
+      profile: { ...DATASET.profile, filename: "first.csv" },
+    };
+    const second = {
+      ...DATASET,
+      id: "upload",
+      filename: "second.csv",
+      content: DATASET.content.replace("West,10", "West,202"),
+      profile: { ...DATASET.profile, filename: "second.csv" },
+    };
+    const loader = async (datasetId: string) => {
+      loadedId = datasetId;
+      events.push(`load:${datasetId}`);
+    };
+    const generator = async (request: PrepRequest): Promise<PrepOutput> => {
+      events.push(`generate:${request.profile.filename}`);
+      return {
+        prepCode: `clean:${request.profile.filename}`,
+        fixes: ["Tidied the file."],
+        questions: ["What is the total Sales?"],
+      };
+    };
+    const executor: CodeExecutor = {
+      async execute(request) {
+        const stage = request.code.includes("VERA_AUDIT:")
+          ? "audit"
+          : request.code;
+        events.push(`${stage}:${loadedId}`);
+        await Promise.resolve();
+        return stage === "audit"
+          ? execution({
+              stdout:
+                'VERA_AUDIT:{"rowsBefore":6,"rowsAfter":6,"duplicatesDropped":0,"cellsCoerced":0}',
+            })
+          : execution();
+      },
+    };
+
+    await Promise.all([
+      prepareDataset(first, {
+        mockMode: false,
+        loader,
+        executor,
+        generator,
+      }),
+      prepareDataset(second, {
+        mockMode: false,
+        loader,
+        executor,
+        generator,
+      }),
+    ]);
+
+    const firstKey = `${first.id}:${contentHash(first.content)}`;
+    const secondKey = `${second.id}:${contentHash(second.content)}`;
+    expect(events).toEqual([
+      `load:${firstKey}`,
+      `generate:${first.filename}`,
+      `clean:${first.filename}:${firstKey}`,
+      `audit:${firstKey}`,
+      `load:${secondKey}`,
+      `generate:${second.filename}`,
+      `clean:${second.filename}:${secondKey}`,
+      `audit:${secondKey}`,
+    ]);
+  });
+});
+
+describe("the prep report store", () => {
+  it("evicts the oldest report after eight entries", () => {
+    const report = {
+      ok: true,
+      analysisPath: CLEAN_CSV_PATH,
+      fixes: [],
+      questions: [],
+      counts: null,
+    };
+
+    for (let index = 0; index < 9; index++) {
+      setPrep(`eviction-${index}`, report);
+    }
+
+    expect(getPrep("eviction-0")).toBeUndefined();
+    expect(getPrep("eviction-1")).toBe(report);
+    expect(getPrep("eviction-8")).toBe(report);
+  });
+});
+
+describe("contentHash", () => {
+  it("is deterministic SHA-256 over the content bytes", () => {
+    expect(contentHash("Vera")).toBe(contentHash("Vera"));
+    expect(contentHash("Vera")).toBe(
+      "e4ace1dfe147e67d82295838786749431bd7c608b13932a87847ddebf6e1ea9d",
+    );
+    expect(contentHash("vera")).not.toBe(contentHash("Vera"));
   });
 });

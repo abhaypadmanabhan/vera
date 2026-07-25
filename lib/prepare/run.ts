@@ -1,0 +1,178 @@
+import type { CodeExecutor } from "../codegen/retry";
+import { LIMITS, MOCK_MODE } from "../config";
+import { parseCsv } from "../csv";
+import { contentHash } from "../datasets";
+import {
+  SANDBOX_CSV_PATH,
+  daytonaExecutor,
+  ensureDatasetLoaded,
+} from "../daytona/sandbox";
+import { classifyQuestion } from "../guardrails/classify";
+import type { ExecutionResult, ResolvedDataset } from "../types";
+import {
+  buildAuditProgram,
+  parseAuditOutput,
+  type AuditCounts,
+} from "./audit";
+import {
+  generatePrep,
+  type PrepOutput,
+  type PrepRequest,
+} from "./generate";
+
+export const CLEAN_CSV_PATH = "/home/daytona/clean.csv";
+
+const FAILURE_DETAIL =
+  "Vera could not tidy this file, so she is working from it as it came.";
+
+export interface PrepReport {
+  ok: boolean;
+  analysisPath: string;
+  fixes: string[];
+  questions: string[];
+  counts: AuditCounts | null;
+  detail?: string;
+}
+
+type PrepGenerator = (
+  request: PrepRequest,
+  dependencies: { mockMode: boolean },
+) => Promise<PrepOutput>;
+
+type DatasetLoader = (
+  datasetId: string,
+  content: string,
+) => Promise<unknown>;
+
+interface PrepareDependencies {
+  executor?: CodeExecutor;
+  mockMode?: boolean;
+  generator?: PrepGenerator;
+  loader?: DatasetLoader;
+}
+
+let livePrepTail = Promise.resolve();
+
+async function withLivePrepLock<T>(run: () => Promise<T>): Promise<T> {
+  const previous = livePrepTail;
+  let release = () => {};
+  livePrepTail = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+
+  await previous;
+  try {
+    return await run();
+  } finally {
+    release();
+  }
+}
+
+function failOpen(): PrepReport {
+  return {
+    ok: false,
+    analysisPath: SANDBOX_CSV_PATH,
+    fixes: [],
+    questions: [],
+    counts: null,
+    detail: FAILURE_DETAIL,
+  };
+}
+
+function mockExecution(stdout = ""): ExecutionResult {
+  return {
+    exitCode: 0,
+    stdout,
+    stderr: "",
+    value: null,
+    durationMs: 0,
+  };
+}
+
+function createMockExecutor(): CodeExecutor {
+  return {
+    async execute() {
+      return mockExecution();
+    },
+  };
+}
+
+function execute(
+  executor: CodeExecutor,
+  code: string,
+): Promise<ExecutionResult> {
+  return executor.execute({
+    code,
+    csvPath: SANDBOX_CSV_PATH,
+    timeoutMs: LIMITS.runBudgetMs,
+    signal: new AbortController().signal,
+  });
+}
+
+function cleanPathFor(content: string): string {
+  return CLEAN_CSV_PATH.replace(
+    /\.csv$/,
+    `-${contentHash(content)}.csv`,
+  );
+}
+
+export async function prepareDataset(
+  dataset: ResolvedDataset,
+  dependencies: PrepareDependencies = {},
+): Promise<PrepReport> {
+  const mockMode = dependencies.mockMode ?? MOCK_MODE;
+  const generator = dependencies.generator ?? generatePrep;
+  const loader = dependencies.loader ?? ensureDatasetLoaded;
+  const executor =
+    dependencies.executor ??
+    (mockMode
+      ? createMockExecutor()
+      : daytonaExecutor);
+  const cleanPath = cleanPathFor(dataset.content);
+
+  const run = async (): Promise<PrepReport> => {
+    if (!mockMode) {
+      await loader(
+        `${dataset.id}:${contentHash(dataset.content)}`,
+        dataset.content,
+      );
+    }
+
+    const rows = parseCsv(dataset.content);
+    const generated = await generator(
+      {
+        profile: dataset.profile,
+        sampleRows: rows.slice(1, 6),
+        sourcePath: SANDBOX_CSV_PATH,
+        cleanPath,
+      },
+      { mockMode },
+    );
+
+    const cleaning = await execute(executor, generated.prepCode);
+    if (cleaning.exitCode !== 0) return failOpen();
+
+    const audit = await execute(
+      executor,
+      buildAuditProgram(SANDBOX_CSV_PATH, cleanPath),
+    );
+    const counts = parseAuditOutput(audit.stdout);
+    const questions = generated.questions.filter(
+      (question) => classifyQuestion(question, dataset.profile).allowed,
+    );
+
+    return {
+      ok: true,
+      analysisPath: cleanPath,
+      fixes: generated.fixes,
+      questions,
+      counts,
+    };
+  };
+
+  try {
+    return mockMode ? await run() : await withLivePrepLock(run);
+  } catch {
+    return failOpen();
+  }
+}

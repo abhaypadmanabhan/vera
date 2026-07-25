@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { profileDataset } from "./profile/profiler";
@@ -13,6 +14,10 @@ import type { CsvPayload, DatasetSummary, ResolvedDataset } from "./types";
  */
 
 export const DEFAULT_DATASET_ID = "superstore";
+
+export function contentHash(content: string): string {
+  return createHash("sha256").update(content).digest("hex");
+}
 
 interface DatasetSource {
   id: string;
