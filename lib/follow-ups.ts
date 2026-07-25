@@ -86,17 +86,27 @@ export function suggestFollowUps(
     .filter((column) => isGroupable(column) && !used.has(column.name))
     .slice(0, 3);
 
+  /*
+   * Interleaved on purpose. Three breakdowns in a row read as one question
+   * asked three ways; a breakdown, a trend and a share read as three different
+   * things worth knowing.
+   */
   const candidates: string[] = [];
-  for (const grouping of groupings) {
-    candidates.push(`Which ${spoken(grouping.name)} had the highest ${measureName}?`);
+  if (groupings[0]) {
+    candidates.push(`Which ${spoken(groupings[0].name)} had the highest ${measureName}?`);
   }
   if (dateColumn) {
     candidates.push(`How did ${measureName} change year over year?`);
   }
-  if (groupings[0]) {
+  if (groupings[1]) {
     candidates.push(
-      `What share of ${measureName} came from the top ${spoken(groupings[0].name)}?`,
+      `What share of ${measureName} came from the top ${spoken(groupings[1].name)}?`,
     );
+  }
+  // Only if the richer shapes were unavailable does a second plain breakdown
+  // get a turn.
+  for (const grouping of groupings.slice(1)) {
+    candidates.push(`Which ${spoken(grouping.name)} had the highest ${measureName}?`);
   }
 
   // A suggestion is a promise. Anything the guardrail would refuse never ships.

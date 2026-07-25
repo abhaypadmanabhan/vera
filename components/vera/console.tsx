@@ -7,6 +7,7 @@ import type { DatasetSummary } from "@/lib/types";
 import { AskScreen } from "./ask-screen";
 import { TopBar } from "./chrome";
 import { DeckPlayer, type DeckBenchmark } from "./deck-player";
+import { suggestFollowUps } from "@/lib/follow-ups";
 import { FindingScreen } from "./finding-screen";
 import { WorkingScreen } from "./working-screen";
 
@@ -65,20 +66,30 @@ export function Console({
 
   const settled = finding !== null || error !== null;
   const phase = !submitted ? "ask" : settled ? "finding" : "working";
+  const profile = useMemo(
+    () => ({
+      datasetId: dataset.id,
+      filename: dataset.filename,
+      rowCount: dataset.rowCount,
+      columns: dataset.columns,
+      duplicateRowCount: dataset.duplicateRowCount,
+      crossChecks: [],
+      notes: dataset.notes,
+    }),
+    [dataset],
+  );
+
   const deck = useMemo(
     () =>
-      finding?.verdict === "verified"
-        ? buildDeck(asked, finding, {
-            datasetId: dataset.id,
-            filename: dataset.filename,
-            rowCount: dataset.rowCount,
-            columns: dataset.columns,
-            duplicateRowCount: dataset.duplicateRowCount,
-            crossChecks: [],
-            notes: dataset.notes,
-          })
-        : null,
-    [asked, dataset, finding],
+      finding?.verdict === "verified" ? buildDeck(asked, finding, profile) : null,
+    [asked, finding, profile],
+  );
+
+  // "You might also ask..." — derived from the columns the code actually read,
+  // and filtered through the guardrail so every suggestion is answerable.
+  const suggestedFollowUps = useMemo(
+    () => (finding ? suggestFollowUps(finding, profile) : []),
+    [finding, profile],
   );
 
   const askFollowUp = useCallback(
@@ -125,6 +136,7 @@ export function Console({
           dataset={dataset}
           benchmark={benchmark}
           isMock={isMock}
+          suggestedFollowUps={suggestedFollowUps}
           onNewQuestion={askFollowUp}
         />
       )}

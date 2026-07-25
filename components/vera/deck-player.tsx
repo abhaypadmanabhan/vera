@@ -51,6 +51,7 @@ export function DeckPlayer({
   dataset,
   benchmark,
   isMock,
+  suggestedFollowUps = [],
   onNewQuestion,
 }: {
   deck: Deck;
@@ -58,6 +59,8 @@ export function DeckPlayer({
   dataset: DatasetSummary;
   benchmark: DeckBenchmark;
   isMock: boolean;
+  /** Questions Vera can answer next, derived from the columns she just read. */
+  suggestedFollowUps?: string[];
   onNewQuestion: (question: string) => void;
 }) {
   const [slideIndex, setSlideIndex] = useState(0);
@@ -286,12 +289,34 @@ export function DeckPlayer({
           />
         </nav>
 
-        <div className="deck-status" aria-live="polite" aria-atomic="true">
-          <span className="font-mono tabular-nums">
-            {String(slideIndex + 1).padStart(2, "0")} / {String(deck.slides.length).padStart(2, "0")}
-          </span>
-          <span>{narrating ? slide.beats[activeBeat]?.spoken : "Use ← → or the rail to revisit"}</span>
-          {veraSpeaking ? <span className="sr-only">Vera is speaking</span> : null}
+        <div className="deck-footer-left">
+          <div className="deck-status" aria-live="polite" aria-atomic="true">
+            <span className="font-mono tabular-nums">
+              {String(slideIndex + 1).padStart(2, "0")} / {String(deck.slides.length).padStart(2, "0")}
+            </span>
+            <span>{narrating ? slide.beats[activeBeat]?.spoken : "Use ← → or the rail to revisit"}</span>
+            {veraSpeaking ? <span className="sr-only">Vera is speaking</span> : null}
+          </div>
+
+          {/*
+            Suggestions, not answers. Each one is already checked against the
+            guardrail, so clicking it always runs — a suggestion Vera then
+            refuses would be worse than none at all.
+          */}
+          {!narrating && suggestedFollowUps.length > 0 && (
+            <div className="deck-suggestions">
+              <span className="deck-suggestions-label">You might also ask</span>
+              {suggestedFollowUps.map((suggestion) => (
+                <button
+                  key={suggestion}
+                  type="button"
+                  onClick={() => onNewQuestion(suggestion)}
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {!narrating && (
@@ -314,6 +339,7 @@ export function DeckPlayer({
             <button type="submit">Ask</button>
           </form>
         )}
+
       </footer>
     </main>
   );

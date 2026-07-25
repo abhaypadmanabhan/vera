@@ -240,7 +240,7 @@
   --deck-gutter: clamp(2.75rem, 5.4vw, 5.5rem);
   position: relative;
   display: grid;
-  grid-template-rows: 4.5rem minmax(0, 1fr) 7.5rem;
+  grid-template-rows: 4.5rem minmax(0, 1fr) 9.25rem;
   min-height: 100dvh;
   overflow: hidden;
   background: var(--v-bg);
@@ -1058,6 +1058,51 @@
   color: var(--v-ink-muted);
 }
 
+/*
+ * "You might also ask" — quiet chips under the follow-up field. Deliberately
+ * lighter than the field itself: an offer, not the primary action.
+ */
+.deck-footer-left {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.deck-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: min(42rem, 62vw);
+}
+
+.deck-suggestions-label {
+  color: var(--v-ink-muted);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.deck-suggestions button {
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--v-line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--v-ink-muted);
+  font-size: 0.74rem;
+  text-align: left;
+  transition:
+    border-color 150ms var(--ease-settle),
+    color 150ms var(--ease-settle);
+}
+
+.deck-suggestions button:hover,
+.deck-suggestions button:focus-visible {
+  border-color: var(--v-accent);
+  color: var(--v-accent);
+}
+
 .deck-follow-up button {
   padding-left: 1rem;
   color: var(--v-accent);
@@ -1100,7 +1145,7 @@
 
 @media (max-width: 760px) {
   .deck-shell {
-    grid-template-rows: 3.75rem minmax(0, 1fr) 7.25rem;
+    grid-template-rows: 3.75rem minmax(0, 1fr) 9rem;
   }
 
   .deck-topbar,
@@ -1193,6 +1238,10 @@
 
   .deck-follow-up {
     width: 100%;
+  }
+
+  .deck-suggestions {
+    max-width: 100%;
   }
 }
 
