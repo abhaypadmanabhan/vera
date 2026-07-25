@@ -17,12 +17,17 @@ This is the product. If any box here is unticked, nothing else matters.
 - [x] The 100% is presented as a **separate, pre-computed** aggregate benchmark.
 - [x] No UI copy, README, or demo script implies Vera catches a subtly-wrong-but-runnable
       answer live.
-- [ ] Asking something the data cannot answer produces a **clean refusal with a reason**, not
-      a raw stderr. *(in flight — `p9/guard`)*
-- [ ] A refusal is presented as a deliberate choice, and offers what she *can* answer.
-      *(in flight — `p9/guard`)*
+- [x] Asking something the data cannot answer produces a **clean refusal with a reason**, not
+      a raw stderr. Verified in-browser: "Why did sales drop in the West?" refuses; the
+      discount stump question still runs.
+- [x] A refusal is presented as a deliberate choice, and offers what she *can* answer.
 - [x] No code jargon on any presentation surface. Column names, date formats and pandas terms
       live on the code slide only.
+- [x] **Vera never states a figure the code did not produce.** The model writes the headline
+      before the code runs, and was authoring guessed figures into it — caught live, sandbox
+      returned 143787.36 while the headline read "281,420 dollars". It now emits a `{value}`
+      slot and `lib/claim.ts` substitutes the executed value, discarding any sentence quoting
+      a number that is neither the computed value nor one the user wrote.
 
 ## 2. The pipeline works, live
 
@@ -32,7 +37,8 @@ This is the product. If any box here is unticked, nothing else matters.
 - [x] Proven end to end on the real 9,994-row file: **143,787.36**, exit 0.
 - [x] The retry loop is visible in the UI when code fails once.
 - [x] Every money-spending endpoint has a rate limit.
-- [ ] `/api/transcribe` has a rate limit and a size cap. *(in flight — `p9/mic`)*
+- [x] `/api/transcribe` has a rate limit and a size cap. Proven over HTTP: 413 size, 413
+      duration, 400 no audio, 415 format, 422 too short, 429 on the 11th request.
 
 ## 3. Voice
 
@@ -41,18 +47,18 @@ This is the product. If any box here is unticked, nothing else matters.
 - [x] Narration is written in an analyst's voice, not the slide text read aloud.
 - [ ] The speaking indicator is the real ElevenLabs orb, retinted to our tokens.
       *(in flight — `p9/orb`)*
-- [ ] The user can **speak** a question instead of typing it. *(in flight — `p9/mic`)*
-- [ ] Transcribed speech lands in the box for confirmation and is **never auto-submitted**.
-      *(in flight — `p9/mic`)*
+- [x] The user can **speak** a question instead of typing it. One live Scribe call returned
+      the spoken words verbatim.
+- [x] Transcribed speech lands in the box for confirmation and is **never auto-submitted**.
 
 ## 4. Observability
 
 - [x] Braintrust **experiments** hold the benchmark: 21 questions, Vera 100% vs baseline 47.6%.
-- [~] Braintrust **logs** receive one trace per live analysis. *Root event lands in
-      `Vera Accuracy Benchmark`; the model call is not yet a child span, and `My Project` is
-      empty. In flight — `p9/bt`.*
-- [ ] Opening one trace shows the whole run: question in, model call with tokens and latency,
-      verdict out. *(in flight — `p9/bt`)*
+- [x] Braintrust **logs** receive one trace per live analysis, in `Vera Accuracy Benchmark`
+      alongside the experiments.
+- [x] Opening one trace shows the whole run. Verified by REST query, not by reading code:
+      `analysis` (task) root with a nested `fireworks.chat` (llm) child carrying token counts
+      and latency.
 - [x] A logging failure can never fail an analysis.
 
 ## 5. Money discipline
@@ -83,8 +89,11 @@ This is the product. If any box here is unticked, nothing else matters.
 - [x] `pnpm lint` clean.
 - [x] `npx tsc --noEmit` clean. TypeScript strict, no `any`.
 - [x] `pnpm build` clean.
-- [x] `pnpm test` — 87 passing, 5 skipped. Live tests gated behind `VERA_LIVE=1` and never
+- [x] `pnpm test` — 167 passing, 5 skipped. Live tests gated behind `VERA_LIVE=1` and never
       spend on a normal `pnpm test`.
+- [x] The gates exit **zero**. `pnpm-workspace.yaml` shipped literal
+      `set this to true or false` placeholders, so pnpm's dependency check failed every lint,
+      test and build. Three agents each burned time proving it was pre-existing.
 - [x] Every branch merged into `dev` via PR so CodeRabbit reviews it.
 - [ ] All four `p9/*` branches merged, verified in a browser, and their worktrees torn down.
 - [ ] `dev` merged to `main` — **requires the builder's explicit approval.**

@@ -219,15 +219,48 @@ export function buildDeck(
 }
 
 /**
+ * Words that carry no subject. Stripped before measuring how much the question
+ * is actually asking about, so "which cells did you read" counts as two words,
+ * not five.
+ */
+const FILLER = new Set([
+  "the", "and", "for", "you", "did", "does", "was", "were", "are", "can",
+  "could", "would", "should", "what", "which", "that", "this", "there", "here",
+  "how", "show", "tell", "give", "please", "just", "again", "your", "with",
+  "from", "into", "about", "more", "much", "many", "any", "some", "have", "has",
+  "had", "get", "got", "put", "let", "see", "look", "back", "over", "then",
+]);
+
+function contentWords(words: Set<string>): Set<string> {
+  return new Set([...words].filter((word) => !FILLER.has(word)));
+}
+
+/**
+ * A follow-up carrying at most this much subject is deictic — it is pointing at
+ * what is already on screen ("show me the code", "which cells?"). Above it, the
+ * question brings its own subject, and one stray keyword is not enough to prove
+ * an existing slide already answered it.
+ */
+const DEICTIC_WORD_LIMIT = 2;
+
+/**
  * Route a follow-up question back to the slide that already covered it.
  *
  * Deliberately simple and deterministic — token overlap against each slide's
  * `covers` list. Returns null when nothing clearly matches, and the caller should
  * run a fresh analysis rather than pretend an old slide answers it.
+ *
+ * The length guard exists because single-word topics are common English. The
+ * headline slide claims "total" and the code slide claims "run", so without it
+ * "what were total sales by region?" scored a match and jumped back to a slide
+ * that never answered it — on stage that reads as Vera ignoring the question.
+ * A long question needs a phrase hit or two separate topics; a three-word one
+ * still routes on a single keyword, which is the whole point of asking it.
  */
 export function matchSlide(question: string, deck: Deck): Slide | null {
   const asked = question.toLowerCase();
   const words = new Set(asked.split(/[^a-z0-9]+/).filter((w) => w.length > 2));
+  const deictic = contentWords(words).size <= DEICTIC_WORD_LIMIT;
 
   let best: { slide: Slide; score: number } | null = null;
   for (const slide of deck.slides) {
@@ -236,12 +269,12 @@ export function matchSlide(question: string, deck: Deck): Slide | null {
       if (topic.includes(" ")) {
         if (asked.includes(topic)) score += 3;
       } else if (words.has(topic)) {
-        // Single-word topics are curated and distinctive, so one hit is a real signal.
         score += 2;
       }
     }
     if (score > 0 && (!best || score > best.score)) best = { slide, score };
   }
 
-  return best && best.score >= 2 ? best.slide : null;
+  if (!best) return null;
+  return best.score >= (deictic ? 2 : 3) ? best.slide : null;
 }
