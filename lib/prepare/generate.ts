@@ -351,6 +351,26 @@ function booleanishColumn(column: ProfileColumn): boolean {
   );
 }
 
+function multiValueSplitOffered(column: ProfileColumn): boolean {
+  return !mixedUnitColumn(column) && multiValueSeparator(column) !== null;
+}
+
+function booleanNormalisationOffered(column: ProfileColumn): boolean {
+  return (
+    !mixedUnitColumn(column) &&
+    multiValueSeparator(column) === null &&
+    booleanishColumn(column)
+  );
+}
+
+function categoryNormalisationOffered(column: ProfileColumn): boolean {
+  return (
+    multiValueSeparator(column) === null &&
+    !booleanishColumn(column) &&
+    categoryNeedsNormalisation(column)
+  );
+}
+
 function transformFor(
   column: ProfileColumn,
 ): string | null {
@@ -369,18 +389,18 @@ function transformFor(
     return `df[[${amountName},${unitName}]] = df[${name}].astype("string").str.extract(r"^\\s*(\\d+(?:\\.\\d+)?)\\s+(\\S+)\\s*$").rename(columns={0:${amountName},1:${unitName}}).assign(**{${amountName}:lambda split:pd.to_numeric(split[${amountName}], errors="coerce")})`;
   }
   const separator = multiValueSeparator(column);
-  if (separator) {
+  if (multiValueSplitOffered(column) && separator) {
     const listName = JSON.stringify(`${column.name}_list`);
     const separatorLiteral = JSON.stringify(separator);
     return `df[${listName}] = df[${name}].apply(lambda value:[part.strip() for part in value.split(${separatorLiteral})] if isinstance(value, str) and ${separatorLiteral} in value else pd.NA)`;
   }
-  if (booleanishColumn(column)) {
+  if (booleanNormalisationOffered(column)) {
     return `df[${name}] = df[${name}].apply(lambda value:{"yes":True,"true":True,"y":True,"1":True,"no":False,"false":False,"n":False,"0":False}.get(str(value).strip().lower(), pd.NA) if pd.notna(value) else pd.NA).astype("boolean")`;
   }
   if (column.kind === "number" || column.kind === "integer") {
     return `df[${name}] = pd.to_numeric(df[${name}].astype(str).str.replace(r"[$,%]", "", regex=True), errors="coerce")`;
   }
-  if (categoryNeedsNormalisation(column)) {
+  if (categoryNormalisationOffered(column)) {
     return `df[${name}] = df[${name}].astype("string").str.strip().str.replace(r"\\s+", " ", regex=True)`;
   }
   if (
@@ -467,13 +487,13 @@ function allowedFixes(profile: DatasetProfile): Set<PrepFix> {
   if (profile.columns.some(mixedUnitColumn)) {
     allowed.add(PREP_FIXES[3]);
   }
-  if (profile.columns.some((column) => multiValueSeparator(column) !== null)) {
+  if (profile.columns.some(multiValueSplitOffered)) {
     allowed.add(PREP_FIXES[4]);
   }
-  if (profile.columns.some(categoryNeedsNormalisation)) {
+  if (profile.columns.some(categoryNormalisationOffered)) {
     allowed.add(PREP_FIXES[5]);
   }
-  if (profile.columns.some(booleanishColumn)) {
+  if (profile.columns.some(booleanNormalisationOffered)) {
     allowed.add(PREP_FIXES[6]);
   }
   return allowed;

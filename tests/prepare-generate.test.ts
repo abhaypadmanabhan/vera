@@ -672,6 +672,34 @@ describe("the canonical transform menu", () => {
     expect(output.prepCode).not.toContain("explode");
   });
 
+  it("does not advertise a category transform shadowed by list splitting", async () => {
+    const multiValueProfile = profileWithColumn({
+      name: "listed_in",
+      kind: "category",
+      nullCount: 0,
+      distinctCount: 3,
+      sampleValues: [
+        "Drama,  Sci   Fi",
+        "Action, Drama",
+        "Comedy, Documentaries",
+      ],
+      dateFormat: null,
+      evidence: null,
+    });
+
+    const output = await generatePrep(
+      { ...request, profile: multiValueProfile },
+      { mockMode: true },
+    );
+
+    expect(output.fixes).toContain(
+      "Several values stored together will be separated without adding records.",
+    );
+    expect(output.fixes).not.toContain(
+      "Stray spaces within category values will be made consistent.",
+    );
+  });
+
   it("normalises category whitespace without lowercasing or merging values", async () => {
     const raggedCategoryProfile = profileWithColumn({
       name: "genre",
