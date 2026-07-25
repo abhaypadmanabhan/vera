@@ -44,11 +44,18 @@ type DatasetLoader = (
   content: string,
 ) => Promise<unknown>;
 
+export interface PrepProgressEvent {
+  stage: "cleaning" | "checking";
+  status: "active" | "complete" | "failed";
+  detail: string;
+}
+
 interface PrepareDependencies {
   executor?: CodeExecutor;
   mockMode?: boolean;
   generator?: PrepGenerator;
   loader?: DatasetLoader;
+  onProgress?: (event: PrepProgressEvent) => void;
 }
 
 let livePrepTail = Promise.resolve();
@@ -129,8 +136,44 @@ export async function prepareDataset(
       ? createMockExecutor()
       : daytonaExecutor);
   const cleanPath = cleanPathFor(dataset.content);
+  let activeStage: PrepProgressEvent["stage"] | null = null;
+
+  const notify = (event: PrepProgressEvent): void => {
+    try {
+      dependencies.onProgress?.(event);
+    } catch {
+      // Progress delivery is observational and must never change prep results.
+    }
+  };
+  const startStage = (
+    stage: PrepProgressEvent["stage"],
+    detail: string,
+  ): void => {
+    activeStage = stage;
+    notify({ stage, status: "active", detail });
+  };
+  const finishStage = (
+    stage: PrepProgressEvent["stage"],
+    detail: string,
+  ): void => {
+    notify({ stage, status: "complete", detail });
+    activeStage = null;
+  };
+  const failActiveStage = (): void => {
+    if (!activeStage) return;
+    notify({
+      stage: activeStage,
+      status: "failed",
+      detail: FAILURE_DETAIL,
+    });
+    activeStage = null;
+  };
 
   const run = async (): Promise<PrepReport> => {
+    startStage(
+      "cleaning",
+      "Tidying only the issues the data can prove.",
+    );
     if (!mockMode) {
       await loader(
         `${dataset.id}:${contentHash(dataset.content)}`,
@@ -150,13 +193,38 @@ export async function prepareDataset(
     );
 
     const cleaning = await execute(executor, generated.prepCode);
-    if (cleaning.exitCode !== 0) return failOpen();
+    if (cleaning.exitCode !== 0) {
+      failActiveStage();
+      return failOpen();
+    }
+    finishStage("cleaning", "Prepared the file without inventing values.");
 
-    const audit = await execute(
-      executor,
-      buildAuditProgram(SANDBOX_CSV_PATH, cleanPath),
+    startStage(
+      "checking",
+      "Checking the prepared file against the original.",
     );
-    const counts = parseAuditOutput(audit.stdout);
+    let counts: AuditCounts | null = null;
+    try {
+      const audit = await execute(
+        executor,
+        buildAuditProgram(SANDBOX_CSV_PATH, cleanPath),
+      );
+      if (audit.exitCode !== 0) {
+        failActiveStage();
+      } else {
+        counts = parseAuditOutput(audit.stdout);
+        if (counts) {
+          finishStage(
+            "checking",
+            "Checked the prepared file against the original.",
+          );
+        } else {
+          failActiveStage();
+        }
+      }
+    } catch {
+      failActiveStage();
+    }
     const questions = generated.questions.filter(
       (question) => classifyQuestion(question, dataset.profile).allowed,
     );
@@ -173,6 +241,7 @@ export async function prepareDataset(
   try {
     return mockMode ? await run() : await withLivePrepLock(run);
   } catch {
+    failActiveStage();
     return failOpen();
   }
 }

@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -13,6 +13,7 @@ import type { PrepOutput, PrepRequest } from "@/lib/prepare/generate";
 import {
   CLEAN_CSV_PATH,
   prepareDataset,
+  type PrepProgressEvent,
 } from "@/lib/prepare/run";
 import { getPrep, setPrep } from "@/lib/prepare/store";
 import type { ExecutionResult, ResolvedDataset } from "@/lib/types";
@@ -51,6 +52,45 @@ async function executeAudit(
   }
 }
 
+async function executeAuditAndReadClean(
+  sourceCsv: string,
+  cleanCsv: string,
+): Promise<{
+  counts: ReturnType<typeof parseAuditOutput>;
+  clean: string;
+}> {
+  const directory = await mkdtemp(join(tmpdir(), "vera-audit-result-"));
+  const sourcePath = join(directory, "source.csv");
+  const cleanPath = join(directory, "clean.csv");
+
+  try {
+    await Promise.all([
+      writeFile(sourcePath, sourceCsv, "utf8"),
+      writeFile(cleanPath, cleanCsv, "utf8"),
+    ]);
+    const stdout = await new Promise<string>((resolve, reject) => {
+      execFile(
+        "python3",
+        ["-c", buildAuditProgram(sourcePath, cleanPath)],
+        { encoding: "utf8" },
+        (error, output) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve(output);
+        },
+      );
+    });
+    return {
+      counts: parseAuditOutput(stdout),
+      clean: await readFile(cleanPath, "utf8"),
+    };
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
 describe("the audit program", () => {
   it("reads both files and emits the audit prefix", () => {
     const program = buildAuditProgram(
@@ -78,14 +118,29 @@ describe("the audit program", () => {
     });
   });
 
-  it("does not report an unchanged duplicate as dropped", async () => {
+  it("removes exact duplicates and reports the positive count", async () => {
     const csv = "name,amount\nAlpha,10\nAlpha,10\nBeta,20\n";
 
-    await expect(executeAudit(csv, csv)).resolves.toEqual({
-      rowsBefore: 3,
-      rowsAfter: 3,
+    await expect(executeAuditAndReadClean(csv, csv)).resolves.toEqual({
+      counts: {
+        rowsBefore: 3,
+        rowsAfter: 2,
+        duplicatesDropped: 1,
+        cellsCoerced: 0,
+      },
+      clean: "name,amount\nAlpha,10\nBeta,20\n",
+    });
+  });
+
+  it("counts row-preserving whitespace and numeric coercions positionally", async () => {
+    const source = "id,name,amount\n1, Alpha ,$10\n2,Beta,20\n";
+    const prepared = "id,name,amount\n1,Alpha,10\n2,Beta,20\n";
+
+    await expect(executeAudit(source, prepared)).resolves.toEqual({
+      rowsBefore: 2,
+      rowsAfter: 2,
       duplicatesDropped: 0,
-      cellsCoerced: 0,
+      cellsCoerced: 2,
     });
   });
 
@@ -103,23 +158,23 @@ describe("the audit program", () => {
     await expect(executeAudit(source, clean)).resolves.toBeNull();
   });
 
-  it("does not count reordered rows as coercion", async () => {
+  it("withholds counts for reordered rows", async () => {
     const source = "name,amount\nAlpha,10\nBeta,20\nGamma,30\n";
     const clean = "name,amount\nGamma,30\nAlpha,10\nBeta,20\n";
 
-    await expect(executeAudit(source, clean)).resolves.toEqual({
-      rowsBefore: 3,
-      rowsAfter: 3,
-      duplicatesDropped: 0,
-      cellsCoerced: 0,
-    });
+    await expect(executeAudit(source, clean)).resolves.toBeNull();
   });
 
-  it("withholds counts for whitespace normalization without immutable identity", async () => {
+  it("counts whitespace normalization in row order", async () => {
     const source = "id,name,amount\n1, Alpha ,10\n2,Beta,20\n";
     const clean = "id,name,amount\n1,Alpha,10\n2,Beta,20\n";
 
-    await expect(executeAudit(source, clean)).resolves.toBeNull();
+    await expect(executeAudit(source, clean)).resolves.toEqual({
+      rowsBefore: 2,
+      rowsAfter: 2,
+      duplicatesDropped: 0,
+      cellsCoerced: 1,
+    });
   });
 
   it("withholds counts when normalization and duplicate removal are ambiguous", async () => {
@@ -150,11 +205,16 @@ describe("the audit program", () => {
     await expect(executeAudit(source, clean)).resolves.toBeNull();
   });
 
-  it("withholds counts for changed rows without stable identity", async () => {
+  it("counts positional changes that the prep whitelist controls", async () => {
     const source = "group,value\nA,10\nA,20\n";
     const clean = "group,value\nA,11\nA,20\n";
 
-    await expect(executeAudit(source, clean)).resolves.toBeNull();
+    await expect(executeAudit(source, clean)).resolves.toEqual({
+      rowsBefore: 2,
+      rowsAfter: 2,
+      duplicatesDropped: 0,
+      cellsCoerced: 1,
+    });
   });
 
   it.each([
@@ -284,6 +344,131 @@ function successfulExecutor(
 }
 
 describe("prepareDataset", () => {
+  it("reports truthful cleaning and checking boundaries", async () => {
+    const timeline: string[] = [];
+    let executions = 0;
+
+    await prepareDataset(DATASET, {
+      mockMode: false,
+      loader: async () => {
+        timeline.push("load");
+      },
+      generator: async () => {
+        timeline.push("generate");
+        return {
+          prepCode: "clean()",
+          fixes: ["Tidied the file."],
+          questions: ["What is the total Sales?"],
+        };
+      },
+      executor: {
+        async execute() {
+          executions++;
+          timeline.push(executions === 1 ? "execute:clean" : "execute:audit");
+          return executions === 1
+            ? execution()
+            : execution({
+                stdout:
+                  'VERA_AUDIT:{"rowsBefore":6,"rowsAfter":6,"duplicatesDropped":0,"cellsCoerced":0}',
+              });
+        },
+      },
+      onProgress: ({ stage, status }: PrepProgressEvent) => {
+        timeline.push(`${stage}:${status}`);
+      },
+    });
+
+    expect(timeline).toEqual([
+      "cleaning:active",
+      "load",
+      "generate",
+      "execute:clean",
+      "cleaning:complete",
+      "checking:active",
+      "execute:audit",
+      "checking:complete",
+    ]);
+  });
+
+  it("reports cleaning failed without starting checks when cleaning fails", async () => {
+    const progress: PrepProgressEvent[] = [];
+
+    const report = await prepareDataset(DATASET, {
+      mockMode: true,
+      executor: {
+        async execute() {
+          return execution({ exitCode: 1 });
+        },
+      },
+      onProgress: (event: PrepProgressEvent) => progress.push(event),
+    });
+
+    expect(report.ok).toBe(false);
+    expect(progress.map(({ stage, status }) => [stage, status])).toEqual([
+      ["cleaning", "active"],
+      ["cleaning", "failed"],
+    ]);
+  });
+
+  it("reports checking failed when the fixed audit throws", async () => {
+    const progress: PrepProgressEvent[] = [];
+    let calls = 0;
+
+    const report = await prepareDataset(DATASET, {
+      mockMode: true,
+      executor: {
+        async execute() {
+          calls++;
+          if (calls === 1) return execution();
+          throw new Error("audit failed");
+        },
+      },
+      onProgress: (event: PrepProgressEvent) => progress.push(event),
+    });
+
+    expect(report).toMatchObject({
+      ok: true,
+      analysisPath: cleanPathFor(DATASET),
+      counts: null,
+    });
+    expect(progress.map(({ stage, status }) => [stage, status])).toEqual([
+      ["cleaning", "active"],
+      ["cleaning", "complete"],
+      ["checking", "active"],
+      ["checking", "failed"],
+    ]);
+  });
+
+  it("reports checking failed when the fixed audit exits unsuccessfully", async () => {
+    const progress: PrepProgressEvent[] = [];
+    let calls = 0;
+
+    const report = await prepareDataset(DATASET, {
+      mockMode: true,
+      executor: {
+        async execute() {
+          calls++;
+          return calls === 1
+            ? execution()
+            : execution({ exitCode: 1 });
+        },
+      },
+      onProgress: (event: PrepProgressEvent) => progress.push(event),
+    });
+
+    expect(report).toMatchObject({
+      ok: true,
+      analysisPath: cleanPathFor(DATASET),
+      counts: null,
+    });
+    expect(progress.map(({ stage, status }) => [stage, status])).toEqual([
+      ["cleaning", "active"],
+      ["cleaning", "complete"],
+      ["checking", "active"],
+      ["checking", "failed"],
+    ]);
+  });
+
   it("returns the clean path and measured counts on the happy path", async () => {
     const requests: Parameters<CodeExecutor["execute"]>[0][] = [];
 
@@ -394,6 +579,7 @@ describe("prepareDataset", () => {
 
   it("keeps cleaning successful when the audit output is unreadable", async () => {
     let call = 0;
+    const progress: PrepProgressEvent[] = [];
     const executor: CodeExecutor = {
       async execute() {
         call++;
@@ -406,11 +592,18 @@ describe("prepareDataset", () => {
     const report = await prepareDataset(DATASET, {
       mockMode: true,
       executor,
+      onProgress: (event) => progress.push(event),
     });
 
     expect(report.ok).toBe(true);
     expect(report.analysisPath).toBe(cleanPathFor(DATASET));
     expect(report.counts).toBeNull();
+    expect(progress.map(({ stage, status }) => [stage, status])).toEqual([
+      ["cleaning", "active"],
+      ["cleaning", "complete"],
+      ["checking", "active"],
+      ["checking", "failed"],
+    ]);
   });
 
   it("skips the external loader and uses a zero-key stub in mock mode", async () => {

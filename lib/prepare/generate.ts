@@ -26,6 +26,18 @@ interface GenerateDependencies {
   client?: FireworksClient;
 }
 
+export const PREP_FIXES = [
+  "Dates with a proven order will be made consistent.",
+  "Symbols and separators around amounts will be removed.",
+  "Extra spaces around text will be removed.",
+  "Exact duplicate records will be removed.",
+  "Missing values will be left empty rather than guessed.",
+  "Unusual records will be kept rather than removed.",
+  "Only exact repeats will be eligible for removal.",
+] as const;
+
+type PrepFix = (typeof PREP_FIXES)[number];
+
 const PREP_JSON_SCHEMA = {
   type: "object",
   properties: {
@@ -34,7 +46,7 @@ const PREP_JSON_SCHEMA = {
       type: "array",
       minItems: 1,
       maxItems: 20,
-      items: { type: "string", minLength: 1, maxLength: 240 },
+      items: { type: "string", enum: PREP_FIXES },
     },
     questions: {
       type: "array",
@@ -50,61 +62,20 @@ const PREP_JSON_SCHEMA = {
 const prepSchema = z
   .object({
     prepCode: z.string().min(1).max(16_000),
-    fixes: z.array(z.string().min(1).max(240)).min(1).max(20),
+    fixes: z.array(z.enum(PREP_FIXES)).min(1).max(20),
     questions: z.array(z.string().min(1).max(72)).min(1).max(5),
   })
   .strict();
 
 const MAX_PROMPT_CHARS = 64_000;
-const FIX_JARGON =
-  /\b(pandas|pd\.|dataframe|df\[|to_datetime|to_numeric|dtype|astype|NaN|regex|%[dmY])\b/i;
-const FIX_JARGON_BOUNDARY_GAPS = /(?:pd\.|df\[|%[dmY])/i;
-const FORBIDDEN_CALLS = new Set([
-  "__import__",
-  "compile",
-  "eval",
-  "exec",
-  "open",
-]);
-const PANDAS_IO_METHODS = new Set([
-  "read_clipboard",
-  "read_csv",
-  "read_excel",
-  "read_feather",
-  "read_fwf",
-  "read_gbq",
-  "read_hdf",
-  "read_html",
-  "read_json",
-  "read_orc",
-  "read_parquet",
-  "read_pickle",
-  "read_sas",
-  "read_spss",
-  "read_sql",
-  "read_stata",
-  "read_table",
-  "read_xml",
-  "to_clipboard",
-  "to_csv",
-  "to_excel",
-  "to_feather",
-  "to_gbq",
-  "to_hdf",
-  "to_html",
-  "to_json",
-  "to_orc",
-  "to_parquet",
-  "to_pickle",
-  "to_sql",
-  "to_stata",
-  "to_xml",
-]);
 
 interface PythonToken {
   kind: "identifier" | "string" | "punct";
   value: string;
 }
+
+const PREP_POLICY_ERROR =
+  "Prep code contains a statement that is not allowed: use only exact read_csv and clean to_csv path calls with index=False and no aliases.";
 
 export function buildPrepPrompt(request: PrepRequest): string {
   const safeContext = {
@@ -118,15 +89,15 @@ ${JSON.stringify(PREP_JSON_SCHEMA, null, 2)}
 
 Rules for "prepCode":
 - Read ONLY from ${JSON.stringify(request.sourcePath)} with pandas.read_csv, and write the cleaned frame to ${JSON.stringify(request.cleanPath)} with df.to_csv(index=False). Touch no other path.
-- Fix only what is defensibly wrong: parse dates with the proven format, strip currency symbols, percent signs, and thousands separators from numeric columns, coerce numeric columns with errors="coerce", trim whitespace, and drop exactly-duplicated rows.
+- Fix only what is defensibly wrong: parse dates with the proven format, strip currency symbols, percent signs, and thousands separators from numeric columns, coerce numeric columns with errors="coerce", and trim whitespace.
+- Do NOT drop duplicates in prepCode. Vera's fixed checker measures and removes exact duplicates after your row-preserving cleanup.
 - NEVER fill, impute, interpolate or invent a value. NEVER drop a row for being an outlier. Removing real data or inventing missing data would make every later figure a lie.
 - Do not import or use network libraries. No environment or filesystem access beyond the two paths above.
 
 Rules for "fixes":
-- Write one short plain-English sentence for each intended fix, as if telling a colleague what you tidied.
-- NEVER name a column, a date format, a pandas function, or any code concept.
-- Good: "Some amounts were stored as text with dollar signs, so they would not have added up."
-- Bad: "Applied pd.to_numeric to the Sales column."
+- Choose exact sentences only from this list: ${JSON.stringify(PREP_FIXES)}.
+- Include only sentences supported by this profile. Date, symbol, spacing, and duplicate sentences require matching evidence.
+- The three safeguard sentences about missing values, unusual records, and exact repeats are always applicable, so return at least one fix.
 
 Rules for "questions":
 - Return five domain-expert opening questions worth asking of THIS file.
@@ -272,152 +243,145 @@ function tokenizePython(code: string): PythonToken[] {
   return tokens;
 }
 
-function findClosingParen(tokens: PythonToken[], opening: number): number {
+function splitStatements(tokens: PythonToken[]): PythonToken[][] {
+  const statements: PythonToken[][] = [];
+  let statement: PythonToken[] = [];
   let depth = 0;
-  for (let index = opening; index < tokens.length; index++) {
-    if (tokens[index]?.value === "(") depth++;
-    else if (tokens[index]?.value === ")") {
-      depth--;
-      if (depth === 0) return index;
-    }
-  }
-  return -1;
-}
 
-function findMethodCalls(
-  tokens: PythonToken[],
-  objectName: string,
-  methodName: string,
-): PythonToken[][] {
-  const calls: PythonToken[][] = [];
-  for (let index = 0; index < tokens.length - 3; index++) {
-    if (
-      tokens[index]?.value !== objectName ||
-      tokens[index + 1]?.value !== "." ||
-      tokens[index + 2]?.value !== methodName ||
-      tokens[index + 3]?.value !== "("
-    ) {
+  for (const token of tokens) {
+    if (token.value === ";") {
+      throw new Error(PREP_POLICY_ERROR);
+    }
+    if (token.value === "(" || token.value === "[") depth++;
+    if (token.value === ")" || token.value === "]") depth--;
+    if (depth < 0) {
+      throw new Error("Prep code has unbalanced syntax.");
+    }
+    if (token.value === "\n") {
+      if (depth === 0 && statement.length > 0) {
+        statements.push(statement);
+        statement = [];
+      }
       continue;
     }
-    const closing = findClosingParen(tokens, index + 3);
-    if (closing >= 0) calls.push(tokens.slice(index + 4, closing));
+    statement.push(token);
   }
-  return calls;
+  if (depth !== 0) throw new Error("Prep code has unbalanced syntax.");
+  if (statement.length > 0) statements.push(statement);
+  return statements;
 }
 
-function validateResources(
-  tokens: PythonToken[],
+function sameTokens(left: PythonToken[], rightCode: string): boolean {
+  const right = tokenizePython(rightCode).filter(
+    (token) => token.value !== "\n",
+  );
+  return (
+    left.length === right.length &&
+    left.every(
+      (token, index) =>
+        token.kind === right[index]?.kind &&
+        token.value === right[index]?.value,
+    )
+  );
+}
+
+function transformFor(
+  column: DatasetProfile["columns"][number],
+): string | null {
+  const name = JSON.stringify(column.name);
+  if (
+    column.kind === "date" &&
+    column.dateFormat &&
+    (column.evidence?.supportingRows ?? 0) > 0 &&
+    column.evidence?.contradictingRows === 0
+  ) {
+    return `df[${name}] = pd.to_datetime(df[${name}], format=${JSON.stringify(column.dateFormat)})`;
+  }
+  if (column.kind === "number" || column.kind === "integer") {
+    return `df[${name}] = pd.to_numeric(df[${name}].astype(str).str.replace(r"[$,%]", "", regex=True), errors="coerce")`;
+  }
+  if (
+    column.kind === "category" ||
+    column.kind === "text" ||
+    column.kind === "id"
+  ) {
+    return `df[${name}] = df[${name}].apply(lambda value: value.strip() if isinstance(value, str) else value)`;
+  }
+  return null;
+}
+
+function canonicalizePrepCode(
+  code: string,
   request: PrepRequest,
-): void {
-  const allowedPaths = new Set([request.sourcePath, request.cleanPath]);
-  const outsideResource = tokens.find(
-    (token) =>
-      token.kind === "string" &&
-      !allowedPaths.has(token.value) &&
-      (token.value.startsWith("/") ||
-        /(^|[\\/])\.\.([\\/]|$)/.test(token.value) ||
-        /^[a-z][a-z0-9+.-]*:\/\//i.test(token.value) ||
-        /^[a-z]:[\\/]/i.test(token.value) ||
-        token.value.startsWith("\\\\")),
-  );
-  if (outsideResource) {
-    throw new Error(
-      "Prep code must not access a path or resource outside the two CSV files.",
-    );
-  }
-}
-
-function validateImportsAndForbiddenCalls(tokens: PythonToken[]): void {
-  for (let index = 0; index < tokens.length; index++) {
-    const token = tokens[index];
-    if (token?.value === "from") {
-      throw new Error("Prep code must not use from-imports.");
-    }
-    if (token?.value === "import") {
-      const line: string[] = [];
-      for (let cursor = index + 1; cursor < tokens.length; cursor++) {
-        const current = tokens[cursor];
-        if (!current || current.value === "\n" || current.value === ";") break;
-        line.push(current.value);
-      }
-      if (line.join(" ") !== "pandas as pd") {
-        throw new Error("Prep code may import only pandas as pd.");
-      }
-    }
-    if (
-      token?.kind === "identifier" &&
-      FORBIDDEN_CALLS.has(token.value)
-    ) {
-      throw new Error(`Prep code must not call ${token.value}.`);
-    }
-    if (
-      token?.value === "." &&
-      tokens[index + 1]?.kind === "identifier" &&
-      PANDAS_IO_METHODS.has(tokens[index + 1]?.value ?? "")
-    ) {
-      const method = tokens[index + 1]?.value;
-      if (tokens[index + 2]?.value !== "(") {
-        throw new Error(`Prep code must not alias ${method}.`);
-      }
-      const allowedRead =
-        tokens[index - 1]?.value === "pd" && method === "read_csv";
-      const allowedWrite =
-        tokens[index - 1]?.value === "df" && method === "to_csv";
-      if (!allowedRead && !allowedWrite) {
-        throw new Error(`Prep code must not call ${method}.`);
-      }
-    }
-  }
-}
-
-function validateCsvCalls(tokens: PythonToken[], request: PrepRequest): void {
-  const readCalls = findMethodCalls(tokens, "pd", "read_csv").map((call) =>
-    call.filter((token) => token.value !== "\n"),
-  );
+): string {
+  const statements = splitStatements(tokenizePython(code));
+  const importLine = "import pandas as pd";
+  const readLine = `df = pd.read_csv(${JSON.stringify(request.sourcePath)})`;
+  const writeLine = `df.to_csv(${JSON.stringify(request.cleanPath)}, index=False)`;
   if (
-    readCalls.length !== 1 ||
-    readCalls[0]?.length !== 1 ||
-    readCalls[0]?.[0]?.kind !== "string" ||
-    readCalls[0]?.[0]?.value !== request.sourcePath
+    statements.length < 3 ||
+    !sameTokens(statements[0] ?? [], importLine) ||
+    !sameTokens(statements[1] ?? [], readLine) ||
+    !sameTokens(statements.at(-1) ?? [], writeLine)
   ) {
     throw new Error(
-      "Prep code must call pd.read_csv with the exact source path once.",
+      PREP_POLICY_ERROR,
     );
   }
 
-  const writeCalls = findMethodCalls(tokens, "df", "to_csv").map((call) =>
-    call.filter((token) => token.value !== "\n"),
-  );
-  const write = writeCalls[0];
-  if (
-    writeCalls.length !== 1 ||
-    write?.length !== 5 ||
-    write[0]?.kind !== "string" ||
-    write[0].value !== request.cleanPath ||
-    write[1]?.value !== "," ||
-    write[2]?.value !== "index" ||
-    write[3]?.value !== "=" ||
-    write[4]?.value !== "False"
-  ) {
-    throw new Error(
-      "Prep code must call df.to_csv with the exact clean path and index=False once.",
+  const available = request.profile.columns
+    .map(transformFor)
+    .filter((line): line is string => line !== null);
+  const used = new Set<number>();
+  const canonicalTransforms: string[] = [];
+  for (const statement of statements.slice(2, -1)) {
+    const match = available.findIndex(
+      (line, index) => !used.has(index) && sameTokens(statement, line),
     );
+    if (match < 0) {
+      throw new Error(PREP_POLICY_ERROR);
+    }
+    used.add(match);
+    canonicalTransforms.push(available[match] ?? "");
   }
+  return [importLine, readLine, ...canonicalTransforms, writeLine].join("\n");
 }
 
-function assertPrepPolicy(output: PrepOutput, request: PrepRequest): void {
-  const tokens = tokenizePython(output.prepCode);
-  validateResources(tokens, request);
-  validateImportsAndForbiddenCalls(tokens);
-  validateCsvCalls(tokens, request);
-
+function allowedFixes(profile: DatasetProfile): Set<PrepFix> {
+  const allowed = new Set<PrepFix>(PREP_FIXES.slice(4));
+  if (profile.duplicateRowCount > 0) allowed.add(PREP_FIXES[3]);
   if (
-    output.fixes.some(
-      (fix) => FIX_JARGON.test(fix) || FIX_JARGON_BOUNDARY_GAPS.test(fix),
+    profile.columns.some(
+      (column) =>
+        column.kind === "date" &&
+        column.dateFormat &&
+        (column.evidence?.supportingRows ?? 0) > 0 &&
+        column.evidence?.contradictingRows === 0,
     )
   ) {
-    throw new Error("A fix must be written in plain English.");
+    allowed.add(PREP_FIXES[0]);
   }
+  if (
+    profile.columns.some(
+      (column) =>
+        (column.kind === "number" || column.kind === "integer") &&
+        column.sampleValues.some((value) => /[$%]|\d,\d/.test(value)),
+    )
+  ) {
+    allowed.add(PREP_FIXES[1]);
+  }
+  if (
+    profile.columns.some(
+      (column) =>
+        (column.kind === "category" ||
+          column.kind === "text" ||
+          column.kind === "id") &&
+        column.sampleValues.some((value) => value.trim() !== value),
+    )
+  ) {
+    allowed.add(PREP_FIXES[2]);
+  }
+  return allowed;
 }
 
 export function parsePrepResponse(
@@ -432,8 +396,16 @@ export function parsePrepResponse(
   }
 
   const output = prepSchema.parse(parsedJson);
-  assertPrepPolicy(output, request);
-  return output;
+  const applicable = allowedFixes(request.profile);
+  if (output.fixes.some((fix) => !applicable.has(fix))) {
+    throw new Error(
+      "A proposed fix is not supported by this dataset profile.",
+    );
+  }
+  return {
+    ...output,
+    prepCode: canonicalizePrepCode(output.prepCode, request),
+  };
 }
 
 function pythonString(value: string): string {
@@ -488,47 +460,8 @@ function mockQuestions(profile: DatasetProfile): string[] {
 }
 
 function mockFixes(profile: DatasetProfile): string[] {
-  const fixes: string[] = [];
-  if (profile.duplicateRowCount > 0) {
-    fixes.push("Exact duplicate records will be removed.");
-  }
-  if (
-    profile.columns.some(
-      (column) =>
-        column.kind === "date" &&
-        column.dateFormat &&
-        (column.evidence?.supportingRows ?? 0) > 0 &&
-        column.evidence?.contradictingRows === 0,
-    )
-  ) {
-    fixes.push("Dates with a proven order will be made consistent.");
-  }
-  if (
-    profile.columns.some(
-      (column) =>
-        (column.kind === "number" || column.kind === "integer") &&
-        column.sampleValues.some((value) => /[$%]|\d,\d/.test(value)),
-    )
-  ) {
-    fixes.push("Symbols and separators around amounts will be removed.");
-  }
-  if (
-    profile.columns.some(
-      (column) =>
-        (column.kind === "category" ||
-          column.kind === "text" ||
-          column.kind === "id") &&
-        column.sampleValues.some((value) => value.trim() !== value),
-    )
-  ) {
-    fixes.push("Extra spaces around text will be removed.");
-  }
-  fixes.push(
-    "Missing values will be left empty rather than guessed.",
-    "Unusual records will be kept rather than removed.",
-    "Only exact repeats will be eligible for removal.",
-  );
-  return fixes.slice(0, 3);
+  const applicable = allowedFixes(profile);
+  return PREP_FIXES.filter((fix) => applicable.has(fix)).slice(0, 3);
 }
 
 function mockResponse(request: PrepRequest): string {
@@ -566,10 +499,7 @@ function mockResponse(request: PrepRequest): string {
     }
   }
 
-  lines.push(
-    "df = df.drop_duplicates()",
-    `df.to_csv(${pythonString(request.cleanPath)}, index=False)`,
-  );
+  lines.push(`df.to_csv(${pythonString(request.cleanPath)}, index=False)`);
 
   return JSON.stringify({
     prepCode: lines.join("\n"),

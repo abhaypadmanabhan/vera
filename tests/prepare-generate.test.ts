@@ -63,7 +63,10 @@ const request = {
   cleanPath: "/workspace/clean.csv",
 };
 
-function responseWith(prepCode: string, fixes = ["Tidied the file."]): string {
+function responseWith(
+  prepCode: string,
+  fixes = ["Missing values will be left empty rather than guessed."],
+): string {
   return JSON.stringify({
     prepCode,
     fixes,
@@ -91,6 +94,7 @@ describe("prep generation", () => {
     expect(output.prepCode).toContain(
       'df.to_csv("/workspace/clean.csv", index=False)',
     );
+    expect(output.prepCode).not.toContain("drop_duplicates");
     expect(output.fixes).toHaveLength(3);
     expect(output.questions).toHaveLength(5);
     expect(output.questions.join(" ")).toMatch(/Revenue|Region/);
@@ -351,7 +355,7 @@ df.to_csv(
 )`;
 
     expect(parsePrepResponse(responseWith(multiline), request).prepCode).toBe(
-      multiline,
+      validPrepCode,
     );
   });
 
@@ -410,7 +414,132 @@ df.to_csv("/workspace/clean.csv", index=False)`,
       ["Ran pd.to_datetime with format %d/%m/%Y."],
     );
 
-    expect(() => parsePrepResponse(raw, request)).toThrow(/plain english/i);
+    expect(() => parsePrepResponse(raw, request)).toThrow();
+  });
+
+  it("rejects a fix that names a profiled column", () => {
+    expect(() =>
+      parsePrepResponse(
+        responseWith(validPrepCode, ["Revenue values were tidied."]),
+        request,
+      ),
+    ).toThrow();
+  });
+
+  it("rejects arbitrary prose outside the fixed fix vocabulary", () => {
+    expect(() =>
+      parsePrepResponse(
+        responseWith(validPrepCode, ["Completely polished the file."]),
+        request,
+      ),
+    ).toThrow();
+  });
+
+  it("rejects an evidence-specific fix when the profile does not support it", () => {
+    const unsupportedProfile: DatasetProfile = {
+      ...profile,
+      duplicateRowCount: 0,
+      columns: [
+        {
+          name: "Region",
+          kind: "category",
+          nullCount: 0,
+          distinctCount: 2,
+          sampleValues: ["West", "East"],
+          dateFormat: null,
+          evidence: null,
+        },
+      ],
+      notes: [],
+    };
+
+    expect(() =>
+      parsePrepResponse(
+        responseWith(validPrepCode, [
+          "Dates with a proven order will be made consistent.",
+        ]),
+        { ...request, profile: unsupportedProfile },
+      ),
+    ).toThrow(/support|profile|applicable/i);
+  });
+
+  it.each([
+    ["a", "a was tidied"],
+    ["id", "the id was tidied"],
+    ["date", "date was tidied"],
+  ])(
+    "matches column %j as a whole phrase without rejecting canned prose",
+    async (columnName, namedFix) => {
+    const shortNameProfile: DatasetProfile = {
+      ...profile,
+      columns: [
+        {
+          name: columnName,
+          kind: "text",
+          nullCount: 0,
+          distinctCount: 2,
+          sampleValues: ["One", "Two"],
+          dateFormat: null,
+          evidence: null,
+        },
+      ],
+      notes: [],
+    };
+
+    await expect(
+      generatePrep(
+        { ...request, profile: shortNameProfile },
+        { mockMode: true },
+      ),
+    ).resolves.toMatchObject({
+      prepCode: expect.stringContaining(
+        `df[${JSON.stringify(columnName)}]`,
+      ),
+    });
+    expect(
+      parsePrepResponse(
+        responseWith(validPrepCode, [
+          "Missing values will be left empty rather than guessed.",
+        ]),
+        { ...request, profile: shortNameProfile },
+      ).fixes,
+    ).toEqual([
+      "Missing values will be left empty rather than guessed.",
+    ]);
+    expect(() =>
+      parsePrepResponse(
+        responseWith(validPrepCode, [namedFix]),
+        { ...request, profile: shortNameProfile },
+      ),
+    ).toThrow();
+  },
+  );
+
+  it.each([
+    ['df = pd.DataFrame({"Revenue": [1]})', "dataframe replacement"],
+    ['df["Revenue"] = df["Revenue"].fillna(0)', "fillna"],
+    ['df["Revenue"] = df["Revenue"].interpolate()', "interpolate"],
+    ['df = df[df["Revenue"] < 1000000]', "row filter"],
+    ['df["Revenue"] = 7', "constant assignment"],
+    [
+      'df = getattr(pd, "read_csv")("/workspace/data.csv")',
+      "dynamic read",
+    ],
+    [
+      'df = pd.read_csv(chr(47) + "workspace/data.csv")',
+      "constructed resource",
+    ],
+    ['print("prepared")', "extra statement"],
+    ["df = df.drop_duplicates()", "model deduplication"],
+  ])("rejects non-whitelisted prep code: %s (%s)", (statement) => {
+    const raw = responseWith(`import pandas as pd
+df = pd.read_csv("/workspace/data.csv")
+${statement}
+df.to_csv("/workspace/clean.csv", index=False)`);
+
+    expect(() => parsePrepResponse(raw, request)).toThrow(
+      /allowed|statement|prep code|read_csv/i,
+    );
   });
 
   it.each(["Used pd.", "Cleaned df[ values.", "Used %d/%m/%Y."])(
@@ -418,7 +547,7 @@ df.to_csv("/workspace/clean.csv", index=False)`,
     (fix) => {
       expect(() =>
         parsePrepResponse(responseWith(validPrepCode, [fix]), request),
-      ).toThrow(/plain english/i);
+      ).toThrow();
     },
   );
 
