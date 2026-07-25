@@ -1,9 +1,12 @@
 "use client";
 
-import { useRef } from "react";
+import { useCallback, useRef } from "react";
 import { ArrowUp } from "lucide-react";
 import type { DatasetSummary } from "@/lib/types";
 import { formatBytes, formatCount } from "./format";
+import { MicButton, MicStatus } from "./mic-button";
+import { useMicrophone } from "./use-microphone";
+import { useReducedMotion } from "./use-reduced-motion";
 
 /**
  * Screen 1 — Ask. Calm and near-empty (DESIGN.md v3 "Layout"). One question box,
@@ -28,10 +31,26 @@ export function AskScreen({
 }) {
   const boxRef = useRef<HTMLTextAreaElement>(null);
   const ready = question.trim().length > 0;
+  const reducedMotion = useReducedMotion();
 
   const submit = () => {
     if (ready) onSubmit();
   };
+
+  /**
+   * Speech lands in the box and stops there. Vera never runs a question she only heard —
+   * the user reads it back and presses Enter. Appending rather than replacing means a
+   * half-typed question survives being finished out loud.
+   */
+  const acceptTranscript = useCallback(
+    (text: string) => {
+      onQuestionChange(question.trim().length > 0 ? `${question.trim()} ${text}` : text);
+      boxRef.current?.focus();
+    },
+    [onQuestionChange, question],
+  );
+
+  const mic = useMicrophone(acceptTranscript);
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center px-6 pb-24">
@@ -75,17 +94,18 @@ export function AskScreen({
             className="w-full resize-none bg-transparent px-5 pt-5 pb-2 text-body text-ink outline-none placeholder:text-ink-muted"
           />
           <div className="flex items-center justify-between gap-3 px-5 pb-4">
-            <span className="text-micro text-ink-muted">
-              Enter to ask · Shift + Enter for a new line
-            </span>
-            <button
-              type="submit"
-              disabled={!ready}
-              aria-label="Ask Vera"
-              className="grid size-9 place-items-center rounded-full bg-accent text-white transition-[opacity,transform] duration-150 hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:bg-line disabled:text-ink-muted disabled:hover:opacity-100"
-            >
-              <ArrowUp className="size-4" aria-hidden />
-            </button>
+            <MicStatus mic={mic} idleHint="Enter to ask · Shift + Enter for a new line" />
+            <div className="flex shrink-0 items-center gap-2">
+              <MicButton mic={mic} reducedMotion={reducedMotion} />
+              <button
+                type="submit"
+                disabled={!ready}
+                aria-label="Ask Vera"
+                className="grid size-9 place-items-center rounded-full bg-accent text-white transition-[opacity,transform] duration-150 hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:bg-line disabled:text-ink-muted disabled:hover:opacity-100"
+              >
+                <ArrowUp className="size-4" aria-hidden />
+              </button>
+            </div>
           </div>
         </div>
       </form>
