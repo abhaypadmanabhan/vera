@@ -92,6 +92,8 @@ function mockExecution(stdout = ""): ExecutionResult {
     stdout,
     stderr: "",
     value: null,
+    // Prep computes no figure of its own — the counts come from the audit.
+    contextValues: {},
     durationMs: 0,
   };
 }

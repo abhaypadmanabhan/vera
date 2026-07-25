@@ -320,6 +320,7 @@ function execution(
     stdout: "",
     stderr: "",
     value: null,
+    contextValues: {},
     durationMs: 1,
     ...overrides,
   };
