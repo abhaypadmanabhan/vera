@@ -29,6 +29,13 @@ const PRESENTER_RADIUS = 60;
 const PRESENTER_GAP = 16;
 const PRESENTER_EDGE = 16;
 
+export function needsFallbackPacing(
+  slide: Slide | undefined,
+  voiceAvailable: boolean,
+): boolean {
+  return slide !== undefined && (slide.beats.length === 0 || !voiceAvailable);
+}
+
 export function presenterPosition(
   stage: { left: number; top: number; width: number; height: number },
   target: { left: number; right: number; top: number; height: number },
@@ -153,7 +160,7 @@ export function DeckPlayer({
 
   // Fallback pacing when there is no audio (mock mode, blocked autoplay, failure).
   useEffect(() => {
-    if (!narrating || !slide || voiceAvailable) return;
+    if (!narrating || !needsFallbackPacing(slide, voiceAvailable)) return;
     const id = window.setTimeout(advance, NARRATION_TIMING.beatMs);
     return () => window.clearTimeout(id);
   }, [advance, narrating, slide, voiceAvailable]);
@@ -428,25 +435,25 @@ function SlideContent({
   benchmark?: DeckBenchmark;
   focusClass: (id: string) => string;
 }) {
-  const evidenceIndex = slide.kind === "trap" ? Number(slide.id.split("-")[1] ?? 0) : 0;
+  const evidenceIndex = slide.kind === "caveat" ? Number(slide.id.split("-")[1] ?? 0) : 0;
   const provenEvidence = finding.grounding.schemaEvidence.filter(isProven);
   const evidence = provenEvidence[evidenceIndex] ?? null;
 
-  if (slide.kind === "question") {
+  if (slide.kind === "opener") {
     return (
       <section className="deck-question">
         <h1 data-focus="question" className={focusClass("question")}>
           {slide.title}
         </h1>
         <div data-focus="file" className={cn("deck-question-meta", focusClass("file"))}>
-          <p>I checked the shape of the data before touching the total.</p>
+          <p>{slide.spoken}</p>
           <span>{slide.subtitle}</span>
         </div>
       </section>
     );
   }
 
-  if (slide.kind === "headline") {
+  if (slide.kind === "finding") {
     return (
       <section className="deck-headline">
         <p className="deck-verified">Verified finding</p>
@@ -461,11 +468,38 @@ function SlideContent({
     );
   }
 
-  if (slide.kind === "trap" && evidence) {
-    return <TrapSlide evidence={evidence} focusClass={focusClass} />;
+  if (slide.kind === "meaning") {
+    const focusNames = ["primary", "secondary", "tertiary"] as const;
+    return (
+      <section className="deck-summary">
+        <div className="deck-summary-head">
+          <p className="deck-verified">Grounded comparison</p>
+          <h1>{slide.title}</h1>
+        </div>
+        <div className="deck-proof-counts">
+          {finding.context.map((figure, index) => {
+            const focus = focusNames[index] ?? "tertiary";
+            return (
+              <div
+                key={figure.name}
+                data-focus={focus}
+                className={focusClass(focus)}
+              >
+                <strong>{formatFigure(figure.value, null)}</strong>
+                <p>{figure.description}</p>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+    );
   }
 
-  if (slide.kind === "code") {
+  if (slide.kind === "caveat" && evidence) {
+    return <CaveatSlide evidence={evidence} focusClass={focusClass} />;
+  }
+
+  if (slide.kind === "working") {
     return (
       <section className="deck-code">
         <div data-focus="explanation" className={focusClass("explanation")}>
@@ -486,14 +520,6 @@ function SlideContent({
           {finding.code.lineCount} lines · Python · exit {finding.execution.exitCode} ·{" "}
           {finding.execution.durationMs} ms
         </p>
-      </section>
-    );
-  }
-
-  if (slide.kind === "cells") {
-    return (
-      <section className="deck-cells">
-        <h1>The number returns to the rows.</h1>
         <div data-focus="columns" className={focusClass("columns")}>
           <CellsGrid cells={finding.grounding.sampleCells} />
         </div>
@@ -501,6 +527,12 @@ function SlideContent({
           {formatCount(finding.grounding.sampleCells.length)} cells shown ·{" "}
           {formatCount(finding.grounding.rowCount)} rows read from {dataset.filename}
         </p>
+        {provenEvidence.map((item) => (
+          <div key={item.claim} className="deck-trap-method">
+            <p>{item.claim}</p>
+            <p>{item.method}</p>
+          </div>
+        ))}
       </section>
     );
   }
@@ -558,7 +590,7 @@ function BenchmarkPanel({ benchmark }: { benchmark: DeckBenchmark }) {
   );
 }
 
-function TrapSlide({
+function CaveatSlide({
   evidence,
   focusClass,
 }: {
@@ -568,27 +600,17 @@ function TrapSlide({
   return (
     <section className="deck-trap">
       <h1 data-focus="claim" className={focusClass("claim")}>
-        {evidence.claim.replace("OrderDate is DD/MM/YYYY", "The dates were day-first.")}
+        One thing changes the answer.
       </h1>
-      <div data-focus="counts" className={cn("deck-trap-counts", focusClass("counts"))}>
-        <div>
-          <strong>{formatCount(evidence.supportingRows)}</strong>
-          <span className="proof-bar proof-bar-full" />
-          <p>cannot be months</p>
-        </div>
-        <div>
-          <strong>{formatCount(evidence.contradictingRows)}</strong>
-          <span className="proof-bar" />
-          <p>argue otherwise</p>
-        </div>
-      </div>
-      <div data-focus="method" className={cn("deck-trap-method", focusClass("method"))}>
-        <p>{evidence.method}</p>
-        <div>
-          {evidence.examples.slice(0, 3).map((example) => (
-            <code key={example}>{example}</code>
-          ))}
-        </div>
+      <div
+        data-focus="consequence"
+        className={cn("deck-trap-method", focusClass("consequence"))}
+      >
+        <p>Taken at face value, the result would have been badly wrong.</p>
+        <p>
+          The check held across every value used
+          {evidence.contradictingRows === 0 ? ", with nothing arguing otherwise." : "."}
+        </p>
       </div>
     </section>
   );
