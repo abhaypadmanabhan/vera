@@ -27,6 +27,8 @@ const generated = (attempt: number) => ({
   code: `print("VERA_RESULT:${attempt}")`,
   explanation: `attempt ${attempt}`,
   columnsUsed: [],
+  context: [],
+  valence: "neutral" as const,
 });
 
 const failedExecution = (stderr: string): ExecutionResult => ({
