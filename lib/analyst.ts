@@ -1,4 +1,5 @@
 import { MOCK_MODE } from "./config";
+import { createGuardedAnalyst } from "./analyst/guarded";
 import { mockAnalyst } from "./mock/engine";
 import type { Analyst } from "./types";
 
@@ -16,9 +17,9 @@ import type { Analyst } from "./types";
  * SDK into the process (CLAUDE.md money rule).
  */
 export function getAnalyst(): Analyst {
-  if (MOCK_MODE) return mockAnalyst;
+  if (MOCK_MODE) return createGuardedAnalyst(mockAnalyst);
   // Lazy require so mock mode never pulls a paid SDK into the process.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { realAnalyst } = require("./real-analyst") as typeof import("./real-analyst");
-  return realAnalyst;
+  return createGuardedAnalyst(realAnalyst);
 }
