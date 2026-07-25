@@ -11,13 +11,16 @@ import {
 } from "@/lib/prepare/audit";
 import type { PrepOutput, PrepRequest } from "@/lib/prepare/generate";
 import {
-  CLEAN_CSV_PATH,
   prepareDataset,
   type PrepProgressEvent,
 } from "@/lib/prepare/run";
 import { getPrep, setPrep } from "@/lib/prepare/store";
 import type { ExecutionResult, ResolvedDataset } from "@/lib/types";
-import { SANDBOX_CSV_PATH } from "@/lib/daytona/sandbox";
+import {
+  CLEAN_CSV_PATH,
+  SANDBOX_CSV_PATH,
+  teardownSandbox,
+} from "@/lib/daytona/sandbox";
 
 async function executeAudit(
   sourceCsv: string,
@@ -815,6 +818,20 @@ describe("prepareDataset", () => {
 });
 
 describe("the prep report store", () => {
+  it("invalidates a prepared path when the sandbox identity changes", async () => {
+    const hash = contentHash(DATASET.content);
+    const report = await prepareDataset(DATASET, {
+      mockMode: true,
+      executor: successfulExecutor(),
+    });
+    setPrep(hash, report);
+    expect(getPrep(hash)).toBe(report);
+
+    await teardownSandbox();
+
+    expect(getPrep(hash)).toBeUndefined();
+  });
+
   it("evicts the oldest report after eight entries", () => {
     const report = {
       ok: true,

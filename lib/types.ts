@@ -255,6 +255,8 @@ export interface ResolvedDataset {
 export interface AnalysisRequest {
   question: string;
   dataset: ResolvedDataset;
+  /** Prepared sandbox artifact; absent when prep did not run or failed open. */
+  analysisPath?: string;
 }
 
 /** The safe subset of a dataset the client may receive: schema + preview, no bulk rows. */

@@ -3,6 +3,7 @@ import { LIMITS, MOCK_MODE } from "../config";
 import { parseCsv } from "../csv";
 import { contentHash } from "../datasets";
 import {
+  CLEAN_CSV_PATH,
   SANDBOX_CSV_PATH,
   daytonaExecutor,
   ensureDatasetLoaded,
@@ -19,8 +20,6 @@ import {
   type PrepOutput,
   type PrepRequest,
 } from "./generate";
-
-export const CLEAN_CSV_PATH = "/home/daytona/clean.csv";
 
 const FAILURE_DETAIL =
   "Vera could not tidy this file, so she is working from it as it came.";
