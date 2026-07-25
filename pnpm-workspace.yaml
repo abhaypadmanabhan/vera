@@ -2,6 +2,10 @@ allowBuilds:
   sharp: true
   unrs-resolver: true
   protobufjs: true
-  autoevals: set this to true or false
-  braintrust: set this to true or false
-  esbuild: set this to true or false
+  # These three ship build scripts. They are first-party SDKs and a bundler we
+  # already depend on, so their scripts are allowed to run. Left unanswered,
+  # pnpm's dependency check exits non-zero on every lint/test/build and reads as
+  # a failure that isn't one.
+  autoevals: true
+  braintrust: true
+  esbuild: true
