@@ -51,6 +51,8 @@ const verified: Finding = {
     sampleCells: [],
     schemaEvidence: [],
   },
+  context: [],
+  valence: "neutral",
   attempts: 1,
 };
 

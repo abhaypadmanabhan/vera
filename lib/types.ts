@@ -194,6 +194,10 @@ export type Finding =
       code: GeneratedCode;
       execution: ExecutionResult;
       grounding: Grounding;
+      /** Extra grounded figures for the "what it means" beat. Empty is normal. */
+      context: ContextFigure[];
+      /** Tone only: it selects how Vera opens and carries no figure. */
+      valence: Valence;
       attempts: number;
     }
   | {

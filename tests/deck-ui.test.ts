@@ -70,6 +70,8 @@ const finding: Extract<Finding, { verdict: "verified" }> = {
       },
     ],
   },
+  context: [],
+  valence: "neutral",
   attempts: 1,
 };
 

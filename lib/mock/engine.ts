@@ -104,6 +104,8 @@ const VERIFIED_FINDING = (dataset: ResolvedDataset, attempts: number): Finding =
     durationMs: 1_284,
   },
   grounding: groundingFrom(dataset),
+  context: [],
+  valence: "neutral",
   attempts,
 });
 

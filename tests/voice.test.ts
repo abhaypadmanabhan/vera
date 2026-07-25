@@ -23,6 +23,8 @@ const verified: Extract<Finding, { verdict: "verified" }> = {
     sampleCells: [],
     schemaEvidence: [],
   },
+  context: [],
+  valence: "neutral",
   attempts: 1,
 };
 

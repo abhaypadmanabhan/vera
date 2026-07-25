@@ -170,6 +170,8 @@ export const realAnalyst: Analyst = {
         code: result.code,
         execution: result.execution,
         grounding: verdict.grounding,
+        context: [],
+        valence: "neutral",
         attempts: result.attempts,
       },
       elapsedMs: elapsed(),
