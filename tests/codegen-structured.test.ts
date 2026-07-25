@@ -313,7 +313,7 @@ describe("structured pandas codegen", () => {
           "Sales",
         ],
         "explanation": "Sums Sales after applying the profiled schema constraints.",
-        "headline": "Here is the total sales across the file.",
+        "headline": "The total sales across the file is {value}.",
       }
     `);
   });
