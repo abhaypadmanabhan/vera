@@ -1,5 +1,11 @@
 import { isProven } from "./types";
-import type { DatasetProfile, Finding, SchemaEvidence } from "./types";
+import type {
+  ContextFigure,
+  DatasetProfile,
+  Finding,
+  SchemaEvidence,
+  Valence,
+} from "./types";
 
 /**
  * Vera presents a finding as a KEYNOTE, not a page.
@@ -14,11 +20,11 @@ import type { DatasetProfile, Finding, SchemaEvidence } from "./types";
  */
 
 export type SlideKind =
-  | "question"
-  | "headline"
-  | "trap"
-  | "code"
-  | "cells"
+  | "opener"
+  | "finding"
+  | "meaning"
+  | "caveat"
+  | "working"
   | "summary";
 
 /**
@@ -60,6 +66,12 @@ export interface Deck {
 
 const NO_DECK: Deck = { question: "", slides: [] };
 
+const OPENERS: Record<Valence, string> = {
+  good: "Right — I went through this properly, and there is good news in here.",
+  bad: "Right — I went through this properly, and you are not going to like it.",
+  neutral: "Right — I went through this properly, and here is what I found.",
+};
+
 function fmt(value: number | string, unit: string | null): string {
   const base =
     typeof value === "number"
@@ -68,17 +80,24 @@ function fmt(value: number | string, unit: string | null): string {
   return unit ? `${base}${unit}` : base;
 }
 
+function meaningLine(figure: ContextFigure): string {
+  return `Set against ${figure.description}, that is ${fmt(figure.value, null)}.`;
+}
+
 /**
- * How an analyst would say the evidence out loud — the gist and why it matters,
- * not the counts read off the screen. The precise numbers stay visible on the
- * slide; a person presenting does not recite them.
+ * Consequence, never method. The evidence supplies HOW MUCH agreed, which is the
+ * only part of it a person cares about out loud — never the format, the column,
+ * or the count. Works for any evidence a schema-driven profiler can produce, so
+ * it must not assume the fact is about dates.
  */
-function analystEvidenceLine(evidence: SchemaEvidence): string {
-  const subject = evidence.claim.split(" is ")[0]?.trim() ?? "this column";
+function caveatLine(evidence: SchemaEvidence): string {
+  const unanimous = evidence.contradictingRows === 0;
   return (
-    `The ${subject} column is written day first, not month first. ` +
-    `I checked that against every row before I used it — ` +
-    `about ${Math.round(evidence.supportingRows / 1000)} thousand rows can only be read that way, and none disagree.`
+    "There is something in this file worth knowing about. " +
+    "Taken at face value it would have sent the answer badly wrong, and nothing would have warned you. " +
+    (unanimous
+      ? "I checked it against every row before I used it, and they all agree."
+      : "I checked it against every row before I used it.")
   );
 }
 
@@ -110,24 +129,20 @@ export function buildDeck(
   const slides: Slide[] = [];
 
   slides.push({
-    id: "question",
-    kind: "question",
+    id: "opener",
+    kind: "opener",
     title: question,
     subtitle: `${profile.filename} · ${profile.rowCount.toLocaleString()} rows`,
-    spoken: `Right — I went through all ${profile.rowCount.toLocaleString()} rows for this one.`,
+    spoken: OPENERS[finding.valence],
     beats: [
-      { focus: "question", spoken: "Right, let me take you through this." },
-      {
-        focus: "file",
-        spoken: `I went through all ${profile.rowCount.toLocaleString()} rows before I answered.`,
-      },
+      { focus: "question", spoken: OPENERS[finding.valence] },
     ],
     covers: ["question", "ask", "what did i ask"],
   });
 
   slides.push({
-    id: "headline",
-    kind: "headline",
+    id: "finding",
+    kind: "finding",
     title: figure,
     subtitle: finding.claim,
     spoken: `The answer is ${figure}. ${speakable(finding.claim)}`,
@@ -138,24 +153,50 @@ export function buildDeck(
     covers: ["answer", "number", "result", "how much", "total", "figure"],
   });
 
-  // The trap slide only exists when there is something real to show.
-  for (const [index, evidence] of proven.entries()) {
+  if (finding.context.length > 0) {
+    const meaningLines = finding.context.map(meaningLine);
+    const meaningFocus = ["primary", "secondary", "tertiary"] as const;
     slides.push({
-      id: `trap-${index}`,
-      kind: "trap",
-      title: evidence.claim,
+      id: "meaning",
+      kind: "meaning",
+      title: "What that means",
+      subtitle: meaningLines.join(" "),
+      spoken: meaningLines.join(" "),
+      beats: finding.context.map((contextFigure, index) => ({
+        focus: meaningFocus[index] ?? "tertiary",
+        spoken: meaningLine(contextFigure),
+      })),
+      covers: [
+        "meaning",
+        "comparison",
+        "compare",
+        "context",
+        "prior",
+        ...finding.context.map((contextFigure) => contextFigure.description.toLowerCase()),
+      ],
+    });
+  }
+
+  for (const [index, evidence] of proven.entries()) {
+    const spoken = caveatLine(evidence);
+    slides.push({
+      id: `caveat-${index}`,
+      kind: "caveat",
+      title: "One thing changes the answer",
       subtitle: `${evidence.supportingRows.toLocaleString()} rows prove it · ${evidence.contradictingRows.toLocaleString()} argue otherwise`,
-      spoken: analystEvidenceLine(evidence),
+      spoken,
       beats: [
         {
           focus: "claim",
-          spoken: "Now, there is something in this file you would want to know about.",
+          spoken: "There is something in this file worth knowing about.",
         },
-        { focus: "counts", spoken: analystEvidenceLine(evidence) },
         {
-          focus: "method",
+          focus: "consequence",
           spoken:
-            "Take it at face value and the total comes out badly wrong, and nothing warns you.",
+            "Taken at face value it would have sent the answer badly wrong, and nothing would have warned you. " +
+            (evidence.contradictingRows === 0
+              ? "I checked it against every row before I used it, and they all agree."
+              : "I checked it against every row before I used it."),
         },
       ],
       covers: [
@@ -172,33 +213,27 @@ export function buildDeck(
   }
 
   slides.push({
-    id: "code",
-    kind: "code",
-    title: "The code that ran",
-    subtitle: `${finding.code.lineCount} lines · exit ${finding.execution.exitCode} · ${finding.execution.durationMs} ms`,
-    spoken: "This is the working, if you want to check me.",
-    beats: [
-      { focus: "code", spoken: "This is the working, if you want to check me." },
-      { focus: "explanation", spoken: "I wrote it, and it ran on your file, not on a summary of it." },
-      { focus: "exit", spoken: "It came back clean in under a second." },
+    id: "working",
+    kind: "working",
+    title: "The working",
+    subtitle: `${finding.code.lineCount} lines · ${finding.grounding.rowCount.toLocaleString()} rows traced`,
+    spoken: "",
+    beats: [],
+    covers: [
+      "code",
+      "pandas",
+      "python",
+      "script",
+      "run",
+      "what did you run",
+      "cells",
+      "source",
+      "rows",
+      "columns",
+      "data",
+      "where from",
+      "trace",
     ],
-    covers: ["code", "pandas", "python", "script", "run", "what did you run"],
-  });
-
-  slides.push({
-    id: "cells",
-    kind: "cells",
-    title: "The cells it read",
-    subtitle: `${finding.grounding.columns.join(", ")} across ${finding.grounding.rowCount.toLocaleString()} rows`,
-    spoken: "And these are the actual cells behind it.",
-    beats: [
-      { focus: "columns", spoken: "And these are the actual cells behind it." },
-      {
-        focus: "rows",
-        spoken: "Nothing here is a guess. You can follow any figure back to a row.",
-      },
-    ],
-    covers: ["cells", "source", "rows", "columns", "data", "where from", "trace"],
   });
 
   slides.push({

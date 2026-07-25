@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   DeckPlayer,
   DeckSlide,
+  needsFallbackPacing,
   presenterPosition,
 } from "@/components/vera/deck-player";
 import { buildDeck } from "@/lib/deck";
@@ -83,6 +84,14 @@ const benchmark = {
 };
 
 describe("deck slide presentation", () => {
+  it("paces a silent working slide even when voice is otherwise available", () => {
+    const working = buildDeck("What were sales in Q3 2018?", finding, profile).slides.find(
+      (slide) => slide.kind === "working",
+    );
+    expect(working).toBeDefined();
+    expect(needsFallbackPacing(working!, true)).toBe(true);
+  });
+
   it("keeps the presenter clear of a focused figure when there is room beside it", () => {
     const position = presenterPosition(
       { left: 0, top: 0, width: 1440, height: 708 },
@@ -179,7 +188,7 @@ describe("deck slide presentation", () => {
     expect(markup).toContain("computed and traceable");
   });
 
-  it("never renders an unproven fact when trap numbering skips it", () => {
+  it("keeps only proven technical evidence on the working slide", () => {
     const mixedFinding: Extract<Finding, { verdict: "verified" }> = {
       ...finding,
       grounding: {
@@ -196,21 +205,58 @@ describe("deck slide presentation", () => {
         ],
       },
     };
-    const trap = buildDeck("What were sales in Q3 2018?", mixedFinding, profile).slides.find(
-      (slide) => slide.kind === "trap",
+    const working = buildDeck("What were sales in Q3 2018?", mixedFinding, profile).slides.find(
+      (slide) => slide.kind === "working",
     );
-    expect(trap).toBeDefined();
+    expect(working).toBeDefined();
 
     const markup = renderToStaticMarkup(
       createElement(DeckSlide, {
-        slide: trap!,
+        slide: working!,
         finding: mixedFinding,
         dataset,
-        activeFocus: "claim",
+        activeFocus: null,
       }),
     );
 
-    expect(markup).toContain("The dates were day-first.");
+    expect(markup).toContain("OrderDate is DD/MM/YYYY");
     expect(markup).not.toContain("The first format guess");
+  });
+
+  it("renders every analyst slide kind with its existing presentation language", () => {
+    const contextFinding: Extract<Finding, { verdict: "verified" }> = {
+      ...finding,
+      context: [
+        {
+          name: "prior_period",
+          description: "the same quarter a year earlier",
+          value: 121004.2,
+          columnsUsed: ["OrderDate", "Sales"],
+        },
+      ],
+    };
+    const deck = buildDeck("What were sales in Q3 2018?", contextFinding, profile);
+
+    expect(deck.slides.map((slide) => slide.kind)).toEqual([
+      "opener",
+      "finding",
+      "meaning",
+      "caveat",
+      "working",
+      "summary",
+    ]);
+
+    for (const slide of deck.slides) {
+      const markup = renderToStaticMarkup(
+        createElement(DeckSlide, {
+          slide,
+          finding: contextFinding,
+          dataset,
+          benchmark,
+          activeFocus: slide.beats[0]?.focus ?? null,
+        }),
+      );
+      expect(markup).toContain(`data-kind="${slide.kind}"`);
+    }
   });
 });

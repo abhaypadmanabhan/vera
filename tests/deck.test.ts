@@ -37,15 +37,15 @@ const unverified: Finding = {
 };
 
 describe("deck", () => {
-  it("opens on the question and ends on the summary", () => {
+  it("opens with analyst framing and ends on the summary", () => {
     const deck = buildDeck("What were total sales in Q3 2018?", verified, profile);
-    expect(deck.slides[0]?.kind).toBe("question");
+    expect(deck.slides[0]?.kind).toBe("opener");
     expect(deck.slides.at(-1)?.kind).toBe("summary");
   });
 
-  it("includes a trap slide for each PROVEN schema fact", () => {
+  it("includes a caveat slide for each PROVEN schema fact", () => {
     const deck = buildDeck("q", verified, profile);
-    expect(deck.slides.filter((s) => s.kind === "trap")).toHaveLength(1);
+    expect(deck.slides.filter((s) => s.kind === "caveat")).toHaveLength(1);
   });
 
   it("drops an unproven schema fact rather than presenting it as evidence", () => {
@@ -58,7 +58,7 @@ describe("deck", () => {
         }],
       },
     };
-    expect(buildDeck("q", shaky, profile).slides.filter((s) => s.kind === "trap")).toHaveLength(0);
+    expect(buildDeck("q", shaky, profile).slides.filter((s) => s.kind === "caveat")).toHaveLength(0);
   });
 
   it("gives an unverified finding NO slides — nothing to present, nothing to speak", () => {
@@ -73,9 +73,9 @@ describe("deck", () => {
 
   it("routes a covered follow-up back to the slide that answered it", () => {
     const deck = buildDeck("What were total sales in Q3 2018?", verified, profile);
-    expect(matchSlide("how do you know the date format?", deck)?.kind).toBe("trap");
-    expect(matchSlide("what code did you run?", deck)?.kind).toBe("code");
-    expect(matchSlide("which cells did you read", deck)?.kind).toBe("cells");
+    expect(matchSlide("how do you know the date format?", deck)?.kind).toBe("caveat");
+    expect(matchSlide("what code did you run?", deck)?.kind).toBe("working");
+    expect(matchSlide("which cells did you read", deck)?.kind).toBe("working");
   });
 
   it("returns null for a genuinely new question instead of faking a match", () => {
@@ -97,15 +97,19 @@ describe("deck", () => {
 
   it("still routes a short deictic follow-up on a single keyword", () => {
     const deck = buildDeck("What were total sales in Q3 2018?", verified, profile);
-    expect(matchSlide("show me the code", deck)?.kind).toBe("code");
-    expect(matchSlide("which cells?", deck)?.kind).toBe("cells");
+    expect(matchSlide("show me the code", deck)?.kind).toBe("working");
+    expect(matchSlide("which cells?", deck)?.kind).toBe("working");
     expect(matchSlide("recap", deck)?.kind).toBe("summary");
   });
 });
 
 describe("presenter beats", () => {
-  it("every slide has beats whose concatenation covers the narration", () => {
+  it("every narrated slide has presenter beats", () => {
     for (const s of buildDeck("q", verified, profile).slides) {
+      if (s.kind === "working") {
+        expect(s.beats).toEqual([]);
+        continue;
+      }
       expect(s.beats.length).toBeGreaterThan(0);
       for (const b of s.beats) {
         expect(b.focus).toMatch(/^[a-z]+$/);
