@@ -18,16 +18,12 @@
  * must keep running with zero keys forever, so every call here is a no-op when
  * Braintrust is not configured. A logging failure must never fail an analysis.
  */
-import { initLogger, type Logger } from "braintrust";
+import { initLogger, withCurrent, type Logger, type Span } from "braintrust";
 import { MOCK_MODE } from "@/lib/config";
 import type { Finding } from "@/lib/types";
 
-/*
- * Must match the name in `instrumentation.ts`. Two different names would mean
- * two `initLogger` calls fighting over the SDK's global logger, and traces
- * landing in whichever project initialised last.
- */
-const PROJECT_NAME = "My Project";
+const PROJECT_NAME = "Vera Accuracy Benchmark";
+const FLUSH_TIMEOUT_MS = 2_000;
 
 let logger: Logger<false> | null | undefined;
 
@@ -51,57 +47,143 @@ function getLogger(): Logger<false> | null {
   return logger;
 }
 
-export interface AnalysisTrace {
-  question: string;
-  datasetId: string;
+/** Initializes the same cached logger used by request traces. */
+export function initializeBraintrust(): void {
+  getLogger();
+}
+
+export interface AnalysisTraceResult {
   finding: Finding | null;
   /** Set when the run failed before producing a finding. */
   error?: string;
   durationMs: number;
 }
 
+export interface AnalysisTrace {
+  run<Result>(callback: () => Result): Result;
+  finish(result: AnalysisTraceResult): Promise<void>;
+}
+
+interface AnalysisTraceInput {
+  question: string;
+  datasetId: string;
+}
+
+function analysisOutput(result: AnalysisTraceResult): object {
+  const { finding } = result;
+  return finding === null
+    ? { verdict: "failed", error: result.error ?? "Analysis produced no finding." }
+    : finding.verdict === "verified"
+      ? {
+          verdict: "verified",
+          value: finding.value,
+          unit: finding.unit,
+          claim: finding.claim,
+          code: finding.code.source,
+        }
+      : { verdict: "unverified", reason: finding.reason, detail: finding.detail };
+}
+
+function analysisMetadata(result: AnalysisTraceResult): Record<string, unknown> {
+  const { finding } = result;
+  return {
+    verdict: finding?.verdict ?? "failed",
+    durationMs: result.durationMs,
+    attempts: finding?.attempts ?? null,
+    exitCode: finding?.verdict === "verified" ? finding.execution.exitCode : null,
+    executionMs:
+      finding?.verdict === "verified" ? finding.execution.durationMs : null,
+    columns: finding?.verdict === "verified" ? finding.grounding.columns : [],
+    groundedRows:
+      finding?.verdict === "verified" ? finding.grounding.rowCount : null,
+  };
+}
+
+function noopTrace(): AnalysisTrace {
+  return {
+    run: (callback) => callback(),
+    finish: async () => undefined,
+  };
+}
+
 /**
- * Records one analysis as a Braintrust log event. Fire-and-forget: the caller
- * must never await correctness of telemetry, and never surface its failure.
+ * Opens the analysis root before any model or sandbox work begins. Each
+ * `run()` call restores that root as the active async context, which makes the
+ * manual Fireworks `traced()` call a child even though the response is streamed
+ * over several `ReadableStream.pull()` callbacks.
  */
-export function logAnalysis(trace: AnalysisTrace): void {
+export function beginAnalysisTrace(input: AnalysisTraceInput): AnalysisTrace {
   const active = getLogger();
-  if (!active) return;
+  if (!active) return noopTrace();
 
-  const { finding } = trace;
-
+  let span: Span;
   try {
-    active.log({
-      input: { question: trace.question, dataset: trace.datasetId },
-      // `Finding` is a discriminated union on purpose (PRD §6): a value exists
-      // only on the verified branch, so the trace can never carry a figure that
-      // was never verified.
-      output:
-        finding === null
-          ? { verdict: "failed", error: trace.error ?? "Analysis produced no finding." }
-          : finding.verdict === "verified"
-            ? {
-                verdict: "verified",
-                value: finding.value,
-                unit: finding.unit,
-                claim: finding.claim,
-                code: finding.code.source,
-              }
-            : { verdict: "unverified", reason: finding.reason, detail: finding.detail },
-      metadata: {
-        // Everything a judge would ask to see, without re-reading the transcript.
-        verdict: finding?.verdict ?? "failed",
-        durationMs: trace.durationMs,
-        attempts: finding?.attempts ?? null,
-        exitCode: finding?.verdict === "verified" ? finding.execution.exitCode : null,
-        executionMs: finding?.verdict === "verified" ? finding.execution.durationMs : null,
-        columns: finding?.verdict === "verified" ? finding.grounding.columns : [],
-        groundedRows: finding?.verdict === "verified" ? finding.grounding.rowCount : null,
+    span = active.startSpan({
+      name: "analysis",
+      type: "task",
+      event: {
+        input: { question: input.question, dataset: input.datasetId },
       },
     });
-    // Flush is best-effort; a failed flush must not fail the request.
-    void active.flush().catch(() => {});
   } catch {
-    // Telemetry is never load-bearing.
+    return noopTrace();
   }
+
+  let finished = false;
+  return {
+    run(callback) {
+      let callbackStarted = false;
+      let callbackCompleted = false;
+      let callbackResult!: ReturnType<typeof callback>;
+      try {
+        return withCurrent(
+          span,
+          () => {
+            callbackStarted = true;
+            callbackResult = callback();
+            callbackCompleted = true;
+            return callbackResult;
+          },
+          active.loggingState,
+        );
+      } catch (error) {
+        if (callbackCompleted) return callbackResult;
+        if (callbackStarted) throw error;
+        return callback();
+      }
+    },
+    async finish(result) {
+      if (finished) return;
+      finished = true;
+
+      // `Finding` is a discriminated union (PRD §6), so a figure can only
+      // appear on the verified branch. Every telemetry operation is isolated.
+      try {
+        span.log({
+          output: analysisOutput(result),
+          metadata: analysisMetadata(result),
+        });
+      } catch {
+        // Telemetry is never load-bearing.
+      }
+      try {
+        span.end();
+      } catch {
+        // Telemetry is never load-bearing.
+      }
+      let flushTimeout: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          span.flush(),
+          new Promise<void>((resolve) => {
+            flushTimeout = setTimeout(resolve, FLUSH_TIMEOUT_MS);
+          }),
+        ]);
+      } catch {
+        // Telemetry is never load-bearing.
+      } finally {
+        if (flushTimeout) clearTimeout(flushTimeout);
+      }
+    },
+  };
 }

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { LIMITS } from "@/lib/config";
 import { readEventStream } from "@/lib/stream";
 import type { Analyst, StageEvent } from "@/lib/types";
 
@@ -6,6 +7,17 @@ const lifecycle = vi.hoisted(() => ({
   mode: "error" as "error" | "pending" | "setup-error",
   next: vi.fn<() => Promise<IteratorResult<StageEvent>>>(),
   close: vi.fn<() => Promise<IteratorResult<StageEvent>>>(),
+}));
+
+const analysisTelemetry = vi.hoisted(() => ({
+  finish: vi.fn<() => Promise<void>>(),
+}));
+
+vi.mock("@/lib/braintrust/logger", () => ({
+  beginAnalysisTrace: () => ({
+    run: <Result>(callback: () => Result): Result => callback(),
+    finish: analysisTelemetry.finish,
+  }),
 }));
 
 vi.mock("@/lib/analyst", () => ({
@@ -62,6 +74,8 @@ beforeEach(() => {
   lifecycle.mode = "error";
   lifecycle.next.mockReset();
   lifecycle.close.mockReset();
+  analysisTelemetry.finish.mockReset();
+  analysisTelemetry.finish.mockResolvedValue();
 });
 
 describe("POST /api/analyze stream lifecycle", () => {
@@ -109,6 +123,7 @@ describe("POST /api/analyze stream lifecycle", () => {
   });
 
   it("closes a pending stream promptly when the request signal aborts", async () => {
+    vi.useFakeTimers();
     lifecycle.mode = "pending";
     lifecycle.next.mockImplementation(() => new Promise(() => undefined));
     lifecycle.close.mockResolvedValue({ done: true, value: undefined });
@@ -128,8 +143,49 @@ describe("POST /api/analyze stream lifecycle", () => {
       ),
     ]);
 
-    expect(outcome).toBe("closed");
+    try {
+      expect(outcome).toBe("closed");
+      expect(lifecycle.close).toHaveBeenCalledOnce();
+      expect(analysisTelemetry.finish).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(LIMITS.runBudgetMs);
+      await vi.waitFor(() => {
+        expect(analysisTelemetry.finish).toHaveBeenCalledOnce();
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("finishes telemetry only after in-flight analysis work settles on abort", async () => {
+    lifecycle.mode = "pending";
+    let resolveNext:
+      | ((result: IteratorResult<StageEvent>) => void)
+      | undefined;
+    lifecycle.next.mockImplementation(
+      () =>
+        new Promise<IteratorResult<StageEvent>>((resolve) => {
+          resolveNext = resolve;
+        }),
+    );
+    lifecycle.close.mockResolvedValue({ done: true, value: undefined });
+    const abortController = new AbortController();
+    const response = await POST(
+      request("route-abort-trace-order", abortController.signal),
+    );
+    if (!response.body) throw new Error("Expected a response body");
+    const pendingRead = response.body.getReader().read();
+
+    abortController.abort();
+    await pendingRead;
+
     expect(lifecycle.close).toHaveBeenCalledOnce();
+    expect(analysisTelemetry.finish).not.toHaveBeenCalled();
+
+    resolveNext?.({ done: true, value: undefined });
+    await vi.waitFor(() => {
+      expect(analysisTelemetry.finish).toHaveBeenCalledOnce();
+    });
   });
 
   it("closes cleanly when iterator cleanup itself fails", async () => {
