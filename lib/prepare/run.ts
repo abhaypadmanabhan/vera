@@ -17,6 +17,7 @@ import {
 } from "./audit";
 import {
   generatePrep,
+  PREP_FIXES,
   type PrepOutput,
   type PrepRequest,
 } from "./generate";
@@ -233,7 +234,9 @@ export async function prepareDataset(
     return {
       ok: true,
       analysisPath: cleanPath,
-      fixes: generated.fixes,
+      fixes: counts
+        ? generated.fixes
+        : generated.fixes.filter((fix) => fix !== PREP_FIXES[7]),
       questions,
       counts,
     };

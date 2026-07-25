@@ -610,6 +610,34 @@ describe("prepareDataset", () => {
     ]);
   });
 
+  it("does not claim duplicate removal when the audit could not measure it", async () => {
+    let call = 0;
+    const report = await prepareDataset(DATASET, {
+      mockMode: true,
+      generator: async () => ({
+        prepCode: "clean()",
+        fixes: [
+          "Exact duplicate records will be removed.",
+          "Missing values will be left empty rather than guessed.",
+        ],
+        questions: ["What is the total Sales?"],
+      }),
+      executor: {
+        async execute() {
+          call++;
+          return call === 1
+            ? execution()
+            : execution({ stdout: "VERA_AUDIT_UNAVAILABLE" });
+        },
+      },
+    });
+
+    expect(report.counts).toBeNull();
+    expect(report.fixes).toEqual([
+      "Missing values will be left empty rather than guessed.",
+    ]);
+  });
+
   it("skips the external loader and uses a zero-key stub in mock mode", async () => {
     let loadCalls = 0;
 
