@@ -1,4 +1,9 @@
+import { execFile } from "node:child_process";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
+import { parseCsv } from "@/lib/csv";
 import {
   buildPrepPrompt,
   generatePrep,
@@ -77,6 +82,54 @@ function responseWith(
 const validPrepCode = `import pandas as pd
 df = pd.read_csv("/workspace/data.csv")
 df.to_csv("/workspace/clean.csv", index=False)`;
+
+function profileWithColumn(
+  column: DatasetProfile["columns"][number],
+): DatasetProfile {
+  return {
+    ...profile,
+    duplicateRowCount: 0,
+    columns: [column],
+    notes: [],
+  };
+}
+
+async function runPrepLocally(
+  csv: string,
+  localProfile: DatasetProfile,
+): Promise<{ code: string; rows: string[][] }> {
+  const directory = await mkdtemp(join(tmpdir(), "vera-prep-transform-"));
+  const sourcePath = join(directory, "source.csv");
+  const cleanPath = join(directory, "clean.csv");
+
+  try {
+    await writeFile(sourcePath, csv, "utf8");
+    const output = await generatePrep(
+      {
+        profile: localProfile,
+        sampleRows: parseCsv(csv).slice(1, 6),
+        sourcePath,
+        cleanPath,
+      },
+      { mockMode: true },
+    );
+    await new Promise<void>((resolve, reject) => {
+      execFile("python3", ["-c", output.prepCode], (error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+    });
+    return {
+      code: output.prepCode,
+      rows: parseCsv(await readFile(cleanPath, "utf8")),
+    };
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
 
 describe("prep generation", () => {
   it("mock mode returns a usable prep with zero external calls", async () => {
@@ -569,5 +622,183 @@ df.to_csv("/workspace/clean.csv", index=False)`;
 
     expect(() => parsePrepResponse(extraField, request)).toThrow();
     expect(() => parsePrepResponse(tooManyQuestions, request)).toThrow();
+  });
+});
+
+describe("the canonical transform menu", () => {
+  const mixedUnitProfile = profileWithColumn({
+    name: "duration",
+    kind: "text",
+    nullCount: 0,
+    distinctCount: 3,
+    sampleValues: ["90 min", "2 Seasons", "Unknown"],
+    dateFormat: null,
+    evidence: null,
+  });
+
+  it("splits a mixed-unit column into an amount and unit without replacing it", async () => {
+    const output = await generatePrep(
+      { ...request, profile: mixedUnitProfile },
+      { mockMode: true },
+    );
+
+    expect(output.prepCode).toContain('df[["duration_amount","duration_unit"]]');
+    expect(output.prepCode).toContain('df["duration"]');
+    expect(output.prepCode).not.toContain("drop");
+  });
+
+  it("splits consistent multi-value cells into a list without exploding rows", async () => {
+    const multiValueProfile = profileWithColumn({
+      name: "listed_in",
+      kind: "category",
+      nullCount: 0,
+      distinctCount: 3,
+      sampleValues: [
+        "Drama, Comedy",
+        "Action, Drama",
+        "Comedy, Documentaries",
+      ],
+      dateFormat: null,
+      evidence: null,
+    });
+
+    const output = await generatePrep(
+      { ...request, profile: multiValueProfile },
+      { mockMode: true },
+    );
+
+    expect(output.prepCode).toContain('df["listed_in_list"]');
+    expect(output.prepCode).toContain('.split(",")');
+    expect(output.prepCode).not.toContain("explode");
+  });
+
+  it("normalises category whitespace without lowercasing or merging values", async () => {
+    const raggedCategoryProfile = profileWithColumn({
+      name: "genre",
+      kind: "category",
+      nullCount: 0,
+      distinctCount: 3,
+      sampleValues: [" Sci Fi", "SCI   FI ", "Drama"],
+      dateFormat: null,
+      evidence: null,
+    });
+
+    const output = await generatePrep(
+      { ...request, profile: raggedCategoryProfile },
+      { mockMode: true },
+    );
+
+    expect(output.prepCode).toContain(".str.strip()");
+    expect(output.prepCode).toContain('.str.replace(r"\\s+", " ", regex=True)');
+    expect(output.prepCode).not.toContain(".str.lower()");
+  });
+
+  it("normalises a fully profiled boolean-ish set and empties unknown values", async () => {
+    const booleanProfile = profileWithColumn({
+      name: "active",
+      kind: "category",
+      nullCount: 0,
+      distinctCount: 4,
+      sampleValues: ["yes", "No", "TRUE", "0"],
+      dateFormat: null,
+      evidence: null,
+    });
+
+    const output = await generatePrep(
+      { ...request, profile: booleanProfile },
+      { mockMode: true },
+    );
+
+    expect(output.prepCode).toContain('df["active"]');
+    expect(output.prepCode).toContain('"yes":True');
+    expect(output.prepCode).toContain('pd.NA');
+    expect(output.prepCode).toContain('.astype("boolean")');
+  });
+
+  it("refuses a harmless-looking transform the model invented", () => {
+    const raw = responseWith(`import pandas as pd
+df = pd.read_csv("/workspace/data.csv")
+df["Revenue"] = df["Revenue"].fillna(0)
+df.to_csv("/workspace/clean.csv", index=False)`);
+
+    expect(() => parsePrepResponse(raw, request)).toThrow(
+      /allowed|statement|prep code/i,
+    );
+  });
+
+  it("refuses a row-dropping statement outright", () => {
+    const raw = responseWith(`import pandas as pd
+df = pd.read_csv("/workspace/data.csv")
+df = df[df["Revenue"] > 0]
+df.to_csv("/workspace/clean.csv", index=False)`);
+
+    expect(() => parsePrepResponse(raw, request)).toThrow(
+      /allowed|statement|prep code/i,
+    );
+  });
+
+  it("offers unit splitting only when more than one sampled unit justifies it", async () => {
+    const cleanNumericProfile = profileWithColumn({
+      name: "duration",
+      kind: "number",
+      nullCount: 0,
+      distinctCount: 2,
+      sampleValues: ["90", "120"],
+      dateFormat: null,
+      evidence: null,
+    });
+    const singleUnitProfile = profileWithColumn({
+      name: "duration",
+      kind: "text",
+      nullCount: 0,
+      distinctCount: 2,
+      sampleValues: ["90 min", "120 min"],
+      dateFormat: null,
+      evidence: null,
+    });
+
+    const [numeric, singleUnit] = await Promise.all([
+      generatePrep(
+        { ...request, profile: cleanNumericProfile },
+        { mockMode: true },
+      ),
+      generatePrep(
+        { ...request, profile: singleUnitProfile },
+        { mockMode: true },
+      ),
+    ]);
+
+    expect(numeric.prepCode).not.toContain("duration_unit");
+    expect(singleUnit.prepCode).not.toContain("duration_unit");
+  });
+
+  it("leaves unmatched unit cells empty and preserves every row", async () => {
+    const transformed = await runPrepLocally(
+      'duration\n"90 min"\n"2 Seasons"\nUnknown\n',
+      mixedUnitProfile,
+    );
+
+    expect(transformed.rows).toEqual([
+      ["duration", "duration_amount", "duration_unit"],
+      ["90 min", "90", "min"],
+      ["2 Seasons", "2", "Seasons"],
+      ["Unknown", "", ""],
+    ]);
+  });
+
+  it("describes the widened fixed menu in the prompt", () => {
+    const prompt = buildPrepPrompt({
+      ...request,
+      profile: mixedUnitProfile,
+    });
+
+    expect(prompt).toMatch(/amounts?.*units?.*separat/i);
+    expect(prompt).toMatch(/multiple|several|list/i);
+    expect(prompt).toMatch(/yes-or-no|boolean|true or false/i);
+    expect(prompt).toMatch(/internal.*spaces|spaces.*within/i);
+    expect(prompt).toContain(
+      'df[["duration_amount","duration_unit"]] = df["duration"]',
+    );
+    expect(prompt).toMatch(/copy.*exact|exact.*cop/i);
   });
 });

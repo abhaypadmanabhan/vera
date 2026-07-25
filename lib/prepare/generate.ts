@@ -30,6 +30,10 @@ export const PREP_FIXES = [
   "Dates with a proven order will be made consistent.",
   "Symbols and separators around amounts will be removed.",
   "Extra spaces around text will be removed.",
+  "Amounts and units stored together will be separated.",
+  "Several values stored together will be separated without adding records.",
+  "Stray spaces within category values will be made consistent.",
+  "Clear yes-or-no values will be made consistently true or false.",
   "Exact duplicate records will be removed.",
   "Missing values will be left empty rather than guessed.",
   "Unusual records will be kept rather than removed.",
@@ -82,6 +86,13 @@ export function buildPrepPrompt(request: PrepRequest): string {
     profile: request.profile,
     sampleRows: request.sampleRows.slice(0, 5),
   };
+  const allowedTransforms = request.profile.columns
+    .map(transformFor)
+    .filter((line): line is string => line !== null);
+  const transformMenu =
+    allowedTransforms.length > 0
+      ? allowedTransforms.map((line) => `  ${line}`).join("\n")
+      : "  (no transforms are justified for this profile)";
   const prompt = `You prepare a messy business file for analysis, the way a careful analyst would before they answer any question about it.
 
 Return JSON only, matching this schema exactly:
@@ -89,7 +100,9 @@ ${JSON.stringify(PREP_JSON_SCHEMA, null, 2)}
 
 Rules for "prepCode":
 - Read ONLY from ${JSON.stringify(request.sourcePath)} with pandas.read_csv, and write the cleaned frame to ${JSON.stringify(request.cleanPath)} with df.to_csv(index=False). Touch no other path.
-- Fix only what is defensibly wrong: parse dates with the proven format, strip currency symbols, percent signs, and thousands separators from numeric columns, coerce numeric columns with errors="coerce", and trim whitespace.
+- Fix only what is defensibly wrong using this fixed menu: parse dates with the proven format; strip currency symbols, percent signs, and thousands separators from numeric columns; coerce numeric columns with errors="coerce"; separate a number from its unit when multiple units are proven; split consistently separated multi-value text into a list without adding records; strip and collapse internal spaces in category values without changing case; normalise a fully profiled yes-or-no value set to true or false; and trim other text whitespace.
+- Between the exact read and write calls, copy zero or more whole statements exactly from this profile-derived menu. Do not alter or combine them:
+${transformMenu}
 - Do NOT drop duplicates in prepCode. Vera's fixed checker measures and removes exact duplicates after your row-preserving cleanup.
 - NEVER fill, impute, interpolate or invent a value. NEVER drop a row for being an outlier. Removing real data or inventing missing data would make every later figure a lie.
 - Do not import or use network libraries. No environment or filesystem access beyond the two paths above.
@@ -285,8 +298,61 @@ function sameTokens(left: PythonToken[], rightCode: string): boolean {
   );
 }
 
+type ProfileColumn = DatasetProfile["columns"][number];
+
+function mixedUnitColumn(column: ProfileColumn): boolean {
+  if (column.kind !== "text") return false;
+  const units = new Set<string>();
+  for (const value of column.sampleValues) {
+    const match = /^\s*\d+(?:\.\d+)?\s+(\S+)/.exec(value);
+    if (match?.[1]) units.add(match[1]);
+  }
+  return units.size > 1;
+}
+
+function multiValueSeparator(column: ProfileColumn): "," | ";" | null {
+  if (column.kind !== "text" && column.kind !== "category") return null;
+  if (column.sampleValues.length === 0) return null;
+  const supported = ([",", ";"] as const).filter((separator) => {
+    const matches = column.sampleValues.filter((value) =>
+      value.includes(separator),
+    ).length;
+    return matches > column.sampleValues.length / 2;
+  });
+  return supported.length === 1 ? supported[0] ?? null : null;
+}
+
+function categoryNeedsNormalisation(column: ProfileColumn): boolean {
+  return (
+    column.kind === "category" &&
+    column.sampleValues.some(
+      (value) => value.trim() !== value || /\s{2,}/.test(value),
+    )
+  );
+}
+
+const BOOLEAN_TRUE_VALUES = new Set(["yes", "true", "y", "1"]);
+const BOOLEAN_FALSE_VALUES = new Set(["no", "false", "n", "0"]);
+
+function booleanishColumn(column: ProfileColumn): boolean {
+  if (column.kind === "date" || column.sampleValues.length === 0) return false;
+  const distinctSamples = new Set(column.sampleValues);
+  if (column.distinctCount !== distinctSamples.size) return false;
+  const normalised = [...distinctSamples].map((value) =>
+    value.trim().toLowerCase(),
+  );
+  return (
+    normalised.every(
+      (value) =>
+        BOOLEAN_TRUE_VALUES.has(value) || BOOLEAN_FALSE_VALUES.has(value),
+    ) &&
+    normalised.some((value) => BOOLEAN_TRUE_VALUES.has(value)) &&
+    normalised.some((value) => BOOLEAN_FALSE_VALUES.has(value))
+  );
+}
+
 function transformFor(
-  column: DatasetProfile["columns"][number],
+  column: ProfileColumn,
 ): string | null {
   const name = JSON.stringify(column.name);
   if (
@@ -297,8 +363,25 @@ function transformFor(
   ) {
     return `df[${name}] = pd.to_datetime(df[${name}], format=${JSON.stringify(column.dateFormat)})`;
   }
+  if (mixedUnitColumn(column)) {
+    const amountName = JSON.stringify(`${column.name}_amount`);
+    const unitName = JSON.stringify(`${column.name}_unit`);
+    return `df[[${amountName},${unitName}]] = df[${name}].astype("string").str.extract(r"^\\s*(\\d+(?:\\.\\d+)?)\\s+(\\S+)\\s*$").rename(columns={0:${amountName},1:${unitName}}).assign(**{${amountName}:lambda split:pd.to_numeric(split[${amountName}], errors="coerce")})`;
+  }
+  const separator = multiValueSeparator(column);
+  if (separator) {
+    const listName = JSON.stringify(`${column.name}_list`);
+    const separatorLiteral = JSON.stringify(separator);
+    return `df[${listName}] = df[${name}].apply(lambda value:[part.strip() for part in value.split(${separatorLiteral})] if isinstance(value, str) and ${separatorLiteral} in value else pd.NA)`;
+  }
+  if (booleanishColumn(column)) {
+    return `df[${name}] = df[${name}].apply(lambda value:{"yes":True,"true":True,"y":True,"1":True,"no":False,"false":False,"n":False,"0":False}.get(str(value).strip().lower(), pd.NA) if pd.notna(value) else pd.NA).astype("boolean")`;
+  }
   if (column.kind === "number" || column.kind === "integer") {
     return `df[${name}] = pd.to_numeric(df[${name}].astype(str).str.replace(r"[$,%]", "", regex=True), errors="coerce")`;
+  }
+  if (categoryNeedsNormalisation(column)) {
+    return `df[${name}] = df[${name}].astype("string").str.strip().str.replace(r"\\s+", " ", regex=True)`;
   }
   if (
     column.kind === "category" ||
@@ -348,8 +431,8 @@ function canonicalizePrepCode(
 }
 
 function allowedFixes(profile: DatasetProfile): Set<PrepFix> {
-  const allowed = new Set<PrepFix>(PREP_FIXES.slice(4));
-  if (profile.duplicateRowCount > 0) allowed.add(PREP_FIXES[3]);
+  const allowed = new Set<PrepFix>(PREP_FIXES.slice(8));
+  if (profile.duplicateRowCount > 0) allowed.add(PREP_FIXES[7]);
   if (
     profile.columns.some(
       (column) =>
@@ -380,6 +463,18 @@ function allowedFixes(profile: DatasetProfile): Set<PrepFix> {
     )
   ) {
     allowed.add(PREP_FIXES[2]);
+  }
+  if (profile.columns.some(mixedUnitColumn)) {
+    allowed.add(PREP_FIXES[3]);
+  }
+  if (profile.columns.some((column) => multiValueSeparator(column) !== null)) {
+    allowed.add(PREP_FIXES[4]);
+  }
+  if (profile.columns.some(categoryNeedsNormalisation)) {
+    allowed.add(PREP_FIXES[5]);
+  }
+  if (profile.columns.some(booleanishColumn)) {
+    allowed.add(PREP_FIXES[6]);
   }
   return allowed;
 }
@@ -472,31 +567,8 @@ function mockResponse(request: PrepRequest): string {
   ];
 
   for (const column of request.profile.columns) {
-    if (column.kind === "date" && column.dateFormat) {
-      lines.push(
-        `df[${pythonString(column.name)}] = pd.to_datetime(df[${pythonString(
-          column.name,
-        )}], format=${pythonString(column.dateFormat)})`,
-      );
-    }
-    if (column.kind === "number" || column.kind === "integer") {
-      lines.push(
-        `df[${pythonString(column.name)}] = pd.to_numeric(df[${pythonString(
-          column.name,
-        )}].astype(str).str.replace(r"[$,%]", "", regex=True), errors="coerce")`,
-      );
-    }
-    if (
-      column.kind === "category" ||
-      column.kind === "text" ||
-      column.kind === "id"
-    ) {
-      lines.push(
-        `df[${pythonString(column.name)}] = df[${pythonString(
-          column.name,
-        )}].apply(lambda value: value.strip() if isinstance(value, str) else value)`,
-      );
-    }
+    const transform = transformFor(column);
+    if (transform) lines.push(transform);
   }
 
   lines.push(`df.to_csv(${pythonString(request.cleanPath)}, index=False)`);
