@@ -11,7 +11,14 @@ const verified: Finding = {
   verdict: "verified", value: 143787.36, unit: null,
   claim: "Total sales in Q3 2018 were 143,787.36.",
   code: { language: "python", source: "print(1)", explanation: "Parsed dates then summed sales.", lineCount: 6 },
-  execution: { exitCode: 0, stdout: "", stderr: "", value: 143787.36, durationMs: 828 },
+  execution: {
+    exitCode: 0,
+    stdout: "",
+    stderr: "",
+    value: 143787.36,
+    contextValues: {},
+    durationMs: 828,
+  },
   grounding: {
     columns: ["OrderDate", "Sales"], rowCount: 9994, rowRange: [0, 9993], sampleCells: [],
     schemaEvidence: [{
@@ -20,6 +27,8 @@ const verified: Finding = {
       method: "5,952 values have a first component above 12, which cannot be a month.",
     }],
   },
+  context: [],
+  valence: "neutral",
   attempts: 1,
 };
 

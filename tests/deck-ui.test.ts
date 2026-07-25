@@ -49,6 +49,7 @@ const finding: Extract<Finding, { verdict: "verified" }> = {
     stdout: "143787.36",
     stderr: "",
     value: 143787.36,
+    contextValues: {},
     durationMs: 828,
   },
   grounding: {
@@ -69,6 +70,8 @@ const finding: Extract<Finding, { verdict: "verified" }> = {
       },
     ],
   },
+  context: [],
+  valence: "neutral",
   attempts: 1,
 };
 

@@ -101,8 +101,10 @@ describe("structured pandas codegen", () => {
           "OrderDate",
           "Sales",
         ],
+        "context": [],
         "explanation": "Parses the proven day-first date and sums 2018 sales.",
         "headline": "Sales in the third quarter of 2018 came to 143,787 dollars.",
+        "valence": "neutral",
       }
     `);
   });
@@ -306,14 +308,25 @@ describe("structured pandas codegen", () => {
       df = pd.read_csv("/workspace/data.csv")
       df["OrderDate"] = pd.to_datetime(df["OrderDate"], format="%d/%m/%Y")
       df["Sales"] = pd.to_numeric(df["Sales"].astype(str).str.replace(r"[$,%]", "", regex=True), errors="coerce")
-      result = round(float(df["Sales"].sum()), 2)
+      result = {"value": round(float(df["Sales"].sum()), 2), "context": {"row_count": int(len(df))}}
       print("VERA_RESULT:" + json.dumps(result, separators=(",", ":")))",
         "columnsUsed": [
           "OrderDate",
           "Sales",
         ],
+        "context": [
+          {
+            "columnsUsed": [
+              "OrderDate",
+              "Sales",
+            ],
+            "description": "the number of records behind it",
+            "name": "row_count",
+          },
+        ],
         "explanation": "Sums Sales after applying the profiled schema constraints.",
         "headline": "The total sales across the file is {value}.",
+        "valence": "neutral",
       }
     `);
   });
@@ -346,5 +359,69 @@ describe("structured pandas codegen", () => {
       if (originalKey === undefined) delete process.env.FIREWORKS_API_KEY;
       else process.env.FIREWORKS_API_KEY = originalKey;
     }
+  });
+
+  it("accepts context figures and a valence", () => {
+    const raw = JSON.stringify({
+      code: validCode,
+      explanation: "Sums Sales for Q3 2018.",
+      headline: "Sales in the third quarter came to {value} dollars.",
+      columnsUsed: ["OrderDate", "Sales"],
+      context: [
+        {
+          name: "prior_period",
+          description: "the same quarter a year earlier",
+          columnsUsed: ["OrderDate", "Sales"],
+        },
+      ],
+      valence: "good",
+    });
+    const parsed = parseCodegenResponse(raw, profile, "/workspace/data.csv");
+    expect(parsed.context[0]?.name).toBe("prior_period");
+    expect(parsed.valence).toBe("good");
+  });
+
+  it("defaults to no context and a neutral tone when the model omits them", () => {
+    const parsed = parseCodegenResponse(
+      validResponse,
+      profile,
+      "/workspace/data.csv",
+    );
+    expect(parsed.context).toEqual([]);
+    expect(parsed.valence).toBe("neutral");
+  });
+
+  it("rejects a valence that is not one of the three — it may never carry prose", () => {
+    const raw = JSON.stringify({
+      ...JSON.parse(validResponse),
+      valence: "up 18% on last quarter",
+    });
+    expect(() =>
+      parseCodegenResponse(raw, profile, "/workspace/data.csv"),
+    ).toThrow();
+  });
+
+  it("caps context at three figures", () => {
+    const context = [1, 2, 3, 4].map((number) => ({
+      name: `c${number}`,
+      description: `d${number}`,
+      columnsUsed: ["Sales"],
+    }));
+    const raw = JSON.stringify({ ...JSON.parse(validResponse), context });
+    expect(() =>
+      parseCodegenResponse(raw, profile, "/workspace/data.csv"),
+    ).toThrow();
+  });
+
+  it("rejects a context figure claiming a column this file does not have", () => {
+    const raw = JSON.stringify({
+      ...JSON.parse(validResponse),
+      context: [
+        { name: "c", description: "d", columnsUsed: ["NotAColumn"] },
+      ],
+    });
+    expect(() =>
+      parseCodegenResponse(raw, profile, "/workspace/data.csv"),
+    ).toThrow();
   });
 });

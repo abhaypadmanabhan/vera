@@ -2,6 +2,7 @@ import { parseCsv } from "./csv";
 import { isProven } from "./types";
 import type {
   BlockReason,
+  ContextFigure,
   DatasetProfile,
   ExecutionResult,
   Grounding,
@@ -130,4 +131,39 @@ export function verifyGrounding(input: VerifyInput): VerifyOutcome {
       schemaEvidence,
     },
   };
+}
+
+export interface VerifyContextInput {
+  declared: Array<{
+    name: string;
+    description: string;
+    columnsUsed: string[];
+  }>;
+  executed: Record<string, number | string>;
+  profile: DatasetProfile;
+}
+
+/**
+ * A context figure survives only if it was declared, executed, and every
+ * column it claims exists in this file. Anything else is dropped without
+ * comment: a figure Vera cannot trace is one she does not mention (PRD §6).
+ */
+export function verifyContextFigures(input: VerifyContextInput): ContextFigure[] {
+  const known = new Set(input.profile.columns.map((column) => column.name));
+  const kept: ContextFigure[] = [];
+
+  for (const figure of input.declared) {
+    const value = input.executed[figure.name];
+    if (value === undefined) continue;
+    const columns = figure.columnsUsed.filter((column) => column.trim() !== "");
+    if (columns.length === 0) continue;
+    if (columns.some((column) => !known.has(column))) continue;
+    kept.push({
+      name: figure.name,
+      description: figure.description,
+      value,
+      columnsUsed: columns,
+    });
+  }
+  return kept;
 }
