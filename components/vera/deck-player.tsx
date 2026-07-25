@@ -8,6 +8,7 @@ import { isProven } from "@/lib/types";
 import type { DatasetSummary, Finding, SchemaEvidence, SourceCell } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { formatCount, formatFigure } from "./format";
+import { PresenterOrb } from "./presenter-orb";
 import { useNarrationAudio } from "./use-narration-audio";
 
 const NARRATION_TIMING = {
@@ -243,6 +244,7 @@ export function DeckPlayer({
               benchmark={benchmark}
               activeFocus={null}
               speaking={false}
+              narrating={false}
             />
           </div>
         )}
@@ -254,6 +256,7 @@ export function DeckPlayer({
             benchmark={benchmark}
             activeFocus={focus}
             speaking={veraSpeaking}
+            narrating={narrating}
           />
         </div>
       </div>
@@ -323,6 +326,7 @@ export function DeckSlide({
   benchmark,
   activeFocus,
   speaking = false,
+  narrating = true,
 }: {
   slide: Slide;
   finding: VerifiedFinding;
@@ -330,6 +334,7 @@ export function DeckSlide({
   benchmark?: DeckBenchmark;
   activeFocus: string | null;
   speaking?: boolean;
+  narrating?: boolean;
 }) {
   const stageRef = useRef<HTMLDivElement>(null);
   const [halo, setHalo] = useState({ x: 0, y: 0, visible: false });
@@ -367,18 +372,12 @@ export function DeckSlide({
 
   return (
     <div ref={stageRef} className="deck-slide" data-kind={slide.kind}>
-      <div
-        className={cn(
-          "presenter-orb",
-          halo.visible && "presenter-orb-visible",
-          speaking && "presenter-orb-speaking",
-        )}
-        style={{ transform: `translate3d(${halo.x}px, ${halo.y}px, 0)` }}
-        aria-hidden
-      >
-        <span className="presenter-orb-wave" />
-        <span className="presenter-orb-core" />
-      </div>
+      <PresenterOrb
+        state={speaking ? "speaking" : narrating ? "idle" : "stopped"}
+        visible={halo.visible}
+        x={halo.x}
+        y={halo.y}
+      />
       <SlideContent
         slide={slide}
         finding={finding}
