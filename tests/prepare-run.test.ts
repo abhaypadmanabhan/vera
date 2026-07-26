@@ -147,6 +147,30 @@ describe("the audit program", () => {
     });
   });
 
+  it("measures shared cells and added columns separately", async () => {
+    const source = "kind,duration\nMovie, 90 min \nSeries,2 Seasons\n";
+    const prepared = [
+      "kind,duration,duration_amount,duration_unit",
+      "Movie,90 min,90,min",
+      "Series,2 Seasons,2,Seasons",
+    ].join("\n");
+
+    await expect(executeAudit(source, prepared)).resolves.toEqual({
+      rowsBefore: 2,
+      rowsAfter: 2,
+      duplicatesDropped: 0,
+      cellsCoerced: 1,
+      columnsAdded: 2,
+    });
+  });
+
+  it("still withholds counts when rows reorder alongside an added column", async () => {
+    const source = "id,value\n1,Alpha\n2,Beta\n";
+    const prepared = "id,value,value_list\n2,Beta,Beta\n1,Alpha,Alpha\n";
+
+    await expect(executeAudit(source, prepared)).resolves.toBeNull();
+  });
+
   it("withholds counts when an exact duplicate disappears", async () => {
     const source = "name,amount\nAlpha,10\nBeta,20\nBeta,20\nGamma,30\n";
     const clean = "name,amount\nAlpha,10\nBeta,20\nGamma,30\n";
