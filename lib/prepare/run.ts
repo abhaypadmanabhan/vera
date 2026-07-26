@@ -289,7 +289,14 @@ export async function prepareDataset(
 
   try {
     return mockMode ? await run() : await withLivePrepLock(run);
-  } catch {
+  } catch (error) {
+    // Prep fails open by design, but a silent fail-open is undiagnosable: the
+    // upload story would look like it worked while doing nothing. The reason
+    // goes to the server console only — never to a presentation surface.
+    console.error(
+      "[vera] prep failed, falling back to the raw file:",
+      error instanceof Error ? error.message : error,
+    );
     failActiveStage();
     return failOpen();
   }

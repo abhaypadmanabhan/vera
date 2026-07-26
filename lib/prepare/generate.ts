@@ -43,7 +43,29 @@ export const PREP_FIXES = [
 
 type PrepFix = (typeof PREP_FIXES)[number];
 
-const PREP_JSON_SCHEMA = {
+/**
+ * The response schema, narrowed per profile.
+ *
+ * The fix sentences are presentational: they describe the cleaning program in
+ * plain English. Offering all eleven and then rejecting the unsupported ones
+ * set the model up to fail — it described the transforms it had been told to
+ * copy and the whole prep was discarded. The enum is now the supported set, so
+ * an unsupported sentence is structurally unreachable rather than punished.
+ */
+function prepJsonSchema(profile: DatasetProfile): Record<string, unknown> {
+  return {
+    ...PREP_JSON_SCHEMA_SHAPE,
+    properties: {
+      ...PREP_JSON_SCHEMA_SHAPE.properties,
+      fixes: {
+        ...PREP_JSON_SCHEMA_SHAPE.properties.fixes,
+        items: { type: "string", enum: allowedFixList(profile) },
+      },
+    },
+  };
+}
+
+const PREP_JSON_SCHEMA_SHAPE = {
   type: "object",
   properties: {
     prepCode: { type: "string", minLength: 1, maxLength: 16_000 },
@@ -97,7 +119,7 @@ export function buildPrepPrompt(request: PrepRequest): string {
   const prompt = `You prepare a messy business file for analysis, the way a careful analyst would before they answer any question about it.
 
 Return JSON only, matching this schema exactly:
-${JSON.stringify(PREP_JSON_SCHEMA, null, 2)}
+${JSON.stringify(prepJsonSchema(request.profile), null, 2)}
 
 Rules for "prepCode":
 - Read ONLY from ${JSON.stringify(request.sourcePath)} with pandas.read_csv, and write the cleaned frame to ${JSON.stringify(request.cleanPath)} with df.to_csv(index=False). Touch no other path.
@@ -109,9 +131,8 @@ ${transformMenu}
 - Do not import or use network libraries. No environment or filesystem access beyond the two paths above.
 
 Rules for "fixes":
-- Choose exact sentences only from this list: ${JSON.stringify(PREP_FIXES)}.
-- Include only sentences supported by this profile. Date, symbol, spacing, and duplicate sentences require matching evidence.
-- The three safeguard sentences about missing values, unusual records, and exact repeats are always applicable, so return at least one fix.
+- Choose exact sentences only from this list, which is already narrowed to the sentences this file's evidence supports: ${JSON.stringify([...allowedFixes(request.profile)])}.
+- Every sentence in that list is permitted. Choose the ones your prepCode actually carries out, and always include the safeguard sentences about missing values, unusual records, and exact repeats.
 
 Rules for "questions":
 - Return five domain-expert opening questions worth asking of THIS file.
@@ -500,6 +521,12 @@ function allowedFixes(profile: DatasetProfile): Set<PrepFix> {
   return allowed;
 }
 
+/** The supported fix sentences, in the order they are declared. */
+function allowedFixList(profile: DatasetProfile): PrepFix[] {
+  const allowed = allowedFixes(profile);
+  return PREP_FIXES.filter((fix) => allowed.has(fix));
+}
+
 export function parsePrepResponse(
   raw: string,
   request: PrepRequest,
@@ -513,13 +540,14 @@ export function parsePrepResponse(
 
   const output = prepSchema.parse(parsedJson);
   const applicable = allowedFixes(request.profile);
-  if (output.fixes.some((fix) => !applicable.has(fix))) {
-    throw new Error(
-      "A proposed fix is not supported by this dataset profile.",
-    );
-  }
+  // A fix sentence is a plain-English description, never a claim of what
+  // changed — the audit measures that. So an unsupported sentence is dropped,
+  // never shown, and never allowed to discard a whitelisted cleaning program.
+  const fixes = output.fixes.filter((fix) => applicable.has(fix));
   return {
     ...output,
+    // The three safeguard sentences are supported by every profile.
+    fixes: fixes.length > 0 ? fixes : allowedFixList(request.profile).slice(-3),
     prepCode: canonicalizePrepCode(output.prepCode, request),
   };
 }
@@ -783,7 +811,7 @@ export async function generatePrep(
       type: "json_schema",
       json_schema: {
         name: "vera_file_prep",
-        schema: PREP_JSON_SCHEMA,
+        schema: prepJsonSchema(request.profile),
       },
     },
     maxTokens: 2_048,

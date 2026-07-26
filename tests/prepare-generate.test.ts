@@ -537,7 +537,7 @@ df.to_csv("/workspace/clean.csv", index=False)`,
     ).toThrow();
   });
 
-  it("rejects an evidence-specific fix when the profile does not support it", () => {
+  it("drops an evidence-specific fix the profile does not support", () => {
     const unsupportedProfile: DatasetProfile = {
       ...profile,
       duplicateRowCount: 0,
@@ -555,14 +555,88 @@ df.to_csv("/workspace/clean.csv", index=False)`,
       notes: [],
     };
 
-    expect(() =>
-      parsePrepResponse(
-        responseWith(validPrepCode, [
-          "Dates with a proven order will be made consistent.",
-        ]),
-        { ...request, profile: unsupportedProfile },
-      ),
-    ).toThrow(/support|profile|applicable/i);
+    const output = parsePrepResponse(
+      responseWith(validPrepCode, [
+        "Dates with a proven order will be made consistent.",
+        "Missing values will be left empty rather than guessed.",
+      ]),
+      { ...request, profile: unsupportedProfile },
+    );
+
+    expect(output.fixes).toEqual([
+      "Missing values will be left empty rather than guessed.",
+    ]);
+  });
+
+  /**
+   * Caught by the first real Fireworks prep call (2026-07-26). The model copied
+   * every transform verbatim and was still rejected wholesale, because it chose
+   * two fix sentences describing transforms the menu had handed it that the
+   * evidence test did not permit. Prep then failed open on every upload.
+   */
+  it("never lets an unsupported fix sentence discard a whitelisted program", () => {
+    const cleanProfile: DatasetProfile = {
+      ...profile,
+      duplicateRowCount: 0,
+      columns: [
+        {
+          name: "Region",
+          kind: "category",
+          nullCount: 0,
+          distinctCount: 2,
+          sampleValues: ["West", "East"],
+          dateFormat: null,
+          evidence: null,
+        },
+      ],
+      notes: [],
+    };
+
+    const output = parsePrepResponse(
+      responseWith(validPrepCode, [
+        "Symbols and separators around amounts will be removed.",
+        "Extra spaces around text will be removed.",
+      ]),
+      { ...request, profile: cleanProfile },
+    );
+
+    expect(output.prepCode).toContain("df.to_csv");
+    expect(output.fixes.length).toBeGreaterThan(0);
+    expect(output.fixes).not.toContain(
+      "Symbols and separators around amounts will be removed.",
+    );
+    expect(output.fixes).not.toContain(
+      "Extra spaces around text will be removed.",
+    );
+  });
+
+  it("offers the model only the fix sentences this profile supports", () => {
+    const cleanProfile: DatasetProfile = {
+      ...profile,
+      duplicateRowCount: 0,
+      columns: [
+        {
+          name: "Region",
+          kind: "category",
+          nullCount: 0,
+          distinctCount: 2,
+          sampleValues: ["West", "East"],
+          dateFormat: null,
+          evidence: null,
+        },
+      ],
+      notes: [],
+    };
+
+    const prompt = buildPrepPrompt({ ...request, profile: cleanProfile });
+
+    expect(prompt).not.toContain(
+      "Symbols and separators around amounts will be removed.",
+    );
+    expect(prompt).not.toContain("Extra spaces around text will be removed.");
+    expect(prompt).toContain(
+      "Missing values will be left empty rather than guessed.",
+    );
   });
 
   it.each([
