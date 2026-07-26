@@ -90,6 +90,28 @@ function meaningLine(figure: ContextFigure): string {
  * or the count. Works for any evidence a schema-driven profiler can produce, so
  * it must not assume the fact is about dates.
  */
+/**
+ * The proof chart's title, under the same rule as `caveatLine`: what the check
+ * was about, never how it was expressed. `evidence.claim` is true and stays
+ * inspectable on the working slide — but it carries a column name and a date
+ * format, and neither belongs on a slide Vera narrates.
+ */
+export function evidenceHeadline(evidence: SchemaEvidence | null): string {
+  if (!evidence) return "Rows behind the answer";
+  return evidence.contradictingRows === 0
+    ? "One thing changes the answer — every row agrees"
+    : "One thing changes the answer — what the rows said";
+}
+
+/**
+ * The opener names the file the way a person says it, without the extension.
+ * The working slide still shows the filename in full, which is where a technical
+ * detail belongs.
+ */
+function displayName(filename: string): string {
+  return filename.replace(/\.[a-z0-9]+$/i, "").trim() || filename;
+}
+
 function caveatLine(evidence: SchemaEvidence): string {
   const unanimous = evidence.contradictingRows === 0;
   return (
@@ -132,7 +154,7 @@ export function buildDeck(
     id: "opener",
     kind: "opener",
     title: question,
-    subtitle: `${profile.filename} · ${profile.rowCount.toLocaleString()} rows`,
+    subtitle: `${displayName(profile.filename)} · ${profile.rowCount.toLocaleString()} rows`,
     spoken: OPENERS[finding.valence],
     beats: [
       { focus: "question", spoken: OPENERS[finding.valence] },

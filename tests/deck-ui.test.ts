@@ -83,7 +83,63 @@ const benchmark = {
   baselineMisses: ["What was total profit?"],
 };
 
+/**
+ * The same rule `tests/deck-voice.test.ts` applies to narration, applied to what
+ * a person actually sees. The snake_case clause is deliberately not anchored on
+ * a word boundary: a leaked identifier arrives as `date_added`, and `\b_` never
+ * matches in the middle of a token.
+ */
+const JARGON =
+  /\b(column|pandas|python|dd\/mm|mm\/dd|day.first|month.first|format|parse[sd]?|dtype|csv)\b|[a-z0-9]+_[a-z0-9]+/i;
+
+/** What the slide reads as out loud to someone looking at it — text, never attributes. */
+function renderedText(markup: string): string {
+  return markup
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&#x27;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 describe("deck slide presentation", () => {
+  /*
+   * 328 tests passed while `date_added is DD/MM/YYYY` sat on the final slide,
+   * because every one of them asserted against `slide.spoken` and never against
+   * a rendered slide. This asserts the rendered text.
+   */
+  it("renders no code jargon on any narrated slide", () => {
+    const contextFinding: Extract<Finding, { verdict: "verified" }> = {
+      ...finding,
+      context: [
+        {
+          name: "prior_period",
+          description: "the same quarter a year earlier",
+          value: 121004.2,
+          columnsUsed: ["OrderDate", "Sales"],
+        },
+      ],
+    };
+    const deck = buildDeck("What were sales in Q3 2018?", contextFinding, profile);
+
+    for (const slide of deck.slides) {
+      if (slide.kind === "working") continue;
+      const markup = renderToStaticMarkup(
+        createElement(DeckSlide, {
+          slide,
+          finding: contextFinding,
+          dataset,
+          benchmark,
+          activeFocus: slide.beats[0]?.focus ?? null,
+        }),
+      );
+
+      expect(renderedText(markup), `${slide.id} rendered jargon`).not.toMatch(JARGON);
+    }
+  });
+
   it("paces a silent working slide even when voice is otherwise available", () => {
     const working = buildDeck("What were sales in Q3 2018?", finding, profile).slides.find(
       (slide) => slide.kind === "working",
