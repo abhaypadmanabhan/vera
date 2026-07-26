@@ -86,7 +86,12 @@ export async function POST(request: Request): Promise<Response> {
     analysisRequest = {
       question: parsed.data.question,
       dataset,
-      ...(prep?.ok ? { analysisPath: prep.analysisPath } : {}),
+      ...(prep?.ok && prep.analysisProfile
+        ? {
+            analysisPath: prep.analysisPath,
+            analysisProfile: prep.analysisProfile,
+          }
+        : {}),
     };
   } catch (error) {
     return badRequest(

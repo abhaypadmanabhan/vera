@@ -7,6 +7,7 @@ import {
   daytonaExecutor,
   ensureDatasetLoaded,
   getWarmSandbox,
+  readSandboxFile,
 } from "./daytona/sandbox";
 import { verifyContextFigures, verifyGrounding } from "./verify";
 import type { AnalysisRequest, Analyst, StageEvent } from "./types";
@@ -23,6 +24,8 @@ export const realAnalyst: Analyst = {
     const startedAt = Date.now();
     const elapsed = () => Date.now() - startedAt;
     const { dataset } = request;
+    let analysisDataset = dataset;
+    let sandboxPath = SANDBOX_CSV_PATH;
 
     yield {
       type: "stage",
@@ -72,12 +75,26 @@ export const realAnalyst: Analyst = {
       return;
     }
 
-    const schema = csvSchema(dataset.content, 3);
+    if (request.analysisPath && request.analysisProfile) {
+      try {
+        analysisDataset = {
+          ...dataset,
+          content: await readSandboxFile(request.analysisPath),
+          profile: request.analysisProfile,
+        };
+        sandboxPath = request.analysisPath;
+      } catch {
+        // Prepared artifacts are opportunistic. If one has gone stale, the
+        // question still runs against the original file and original profile.
+      }
+    }
+
+    const schema = csvSchema(analysisDataset.content, 3);
     const loop = runCodegenWithRetries({
       question: request.question,
-      profile: dataset.profile,
+      profile: analysisDataset.profile,
       sampleRows: schema.sampleRows,
-      sandboxPath: request.analysisPath ?? SANDBOX_CSV_PATH,
+      sandboxPath,
       generator: {
         generate: (req) => generatePandasCode(req, { mockMode: false }),
       },
@@ -105,8 +122,8 @@ export const realAnalyst: Analyst = {
     const verdict = verifyGrounding({
       execution: result.execution,
       columnsUsed: result.columnsUsed,
-      profile: dataset.profile,
-      csvContent: dataset.content,
+      profile: analysisDataset.profile,
+      csvContent: analysisDataset.content,
     });
 
     if (!verdict.ok) {
@@ -173,7 +190,7 @@ export const realAnalyst: Analyst = {
         context: verifyContextFigures({
           declared: result.context,
           executed: result.execution.contextValues,
-          profile: dataset.profile,
+          profile: analysisDataset.profile,
         }),
         valence: result.valence,
         attempts: result.attempts,

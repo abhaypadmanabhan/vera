@@ -2,7 +2,10 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import * as analystModule from "@/lib/analyst";
 import { generatePandasCode } from "@/lib/codegen/generate";
-import { SANDBOX_CSV_PATH } from "@/lib/daytona/sandbox";
+import {
+  readSandboxFile,
+  SANDBOX_CSV_PATH,
+} from "@/lib/daytona/sandbox";
 import { realAnalyst } from "@/lib/real-analyst";
 import { readEventStream } from "@/lib/stream";
 import { contentHash, resolveUpload } from "@/lib/datasets";
@@ -11,6 +14,7 @@ import { setPrep } from "@/lib/prepare/store";
 import type {
   AnalysisRequest,
   Analyst,
+  DatasetProfile,
   Finding,
   StageEvent,
 } from "@/lib/types";
@@ -47,6 +51,7 @@ vi.mock("@/lib/daytona/sandbox", () => ({
     readyMs: 0,
   })),
   ensureDatasetLoaded: vi.fn(async () => ({ uploaded: false, bytes: 13 })),
+  readSandboxFile: vi.fn(async () => "Sales\n100\n"),
   daytonaExecutor: {
     execute: vi.fn(async () => ({
       exitCode: 0,
@@ -140,6 +145,7 @@ describe("POST /api/analyze", () => {
     const report: PrepReport = {
       ok: true,
       analysisPath: "/workspace/clean-prepared.csv",
+      analysisProfile: resolveUpload(preparedUpload).profile,
       fixes: [],
       questions: [],
       counts: null,
@@ -152,6 +158,10 @@ describe("POST /api/analyze", () => {
     );
 
     expect(received.analysisPath).toBe(report.analysisPath);
+    expect(
+      (received as AnalysisRequest & { analysisProfile?: DatasetProfile })
+        .analysisProfile,
+    ).toBe(report.analysisProfile);
   });
 
   it("passes no prepared path when prep is unavailable", async () => {
@@ -174,6 +184,7 @@ describe("POST /api/analyze", () => {
       question: "What were total sales?",
       dataset: analysisDataset,
       analysisPath: "/workspace/clean-abc.csv",
+      analysisProfile: analysisDataset.profile,
     });
 
     expect(codegenRequest.sandboxPath).toBe("/workspace/clean-abc.csv");
@@ -186,6 +197,65 @@ describe("POST /api/analyze", () => {
     });
 
     expect(codegenRequest.sandboxPath).toBe(SANDBOX_CSV_PATH);
+  });
+
+  it("hands codegen the profile of the prepared file", async () => {
+    const preparedProfile: DatasetProfile = {
+      ...analysisDataset.profile,
+      columns: [
+        ...analysisDataset.profile.columns,
+        {
+          name: "duration_amount",
+          kind: "integer",
+          nullCount: 0,
+          distinctCount: 1,
+          sampleValues: ["90"],
+          dateFormat: null,
+          evidence: null,
+        },
+      ],
+    };
+    const preparedRequest = {
+      question: "How many titles run for 90 minutes?",
+      dataset: analysisDataset,
+      analysisPath: "/workspace/clean-duration.csv",
+      analysisProfile: preparedProfile,
+    } as AnalysisRequest & { analysisProfile: DatasetProfile };
+
+    const codegenRequest = await codegenRequestFor(preparedRequest);
+
+    expect(codegenRequest.profile).toBe(preparedProfile);
+  });
+
+  it("discards both prepared path and profile when the artifact is stale", async () => {
+    vi.mocked(readSandboxFile).mockRejectedValueOnce(
+      new Error("prepared artifact is gone"),
+    );
+    const preparedProfile: DatasetProfile = {
+      ...analysisDataset.profile,
+      columns: [
+        ...analysisDataset.profile.columns,
+        {
+          name: "duration_amount",
+          kind: "integer",
+          nullCount: 0,
+          distinctCount: 1,
+          sampleValues: ["90"],
+          dateFormat: null,
+          evidence: null,
+        },
+      ],
+    };
+
+    const codegenRequest = await codegenRequestFor({
+      question: "What were total sales?",
+      dataset: analysisDataset,
+      analysisPath: "/workspace/stale-clean.csv",
+      analysisProfile: preparedProfile,
+    });
+
+    expect(codegenRequest.sandboxPath).toBe(SANDBOX_CSV_PATH);
+    expect(codegenRequest.profile).toBe(analysisDataset.profile);
   });
 
   it("attaches only grounded context figures to the finding", async () => {

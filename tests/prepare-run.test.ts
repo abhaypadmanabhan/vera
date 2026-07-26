@@ -357,6 +357,7 @@ describe("prepareDataset", () => {
       loader: async () => {
         timeline.push("load");
       },
+      reader: async () => DATASET.content,
       generator: async () => {
         timeline.push("generate");
         return {
@@ -502,6 +503,59 @@ describe("prepareDataset", () => {
     expect(requests.every((request) => request.signal instanceof AbortSignal)).toBe(
       true,
     );
+  });
+
+  it("re-profiles the cleaned file after prep adds mixed-unit columns", async () => {
+    const mixedUnits: ResolvedDataset = {
+      ...DATASET,
+      id: "catalog",
+      filename: "catalog.csv",
+      content: "kind,duration\nMovie,90 min\nSeries,2 Seasons\n",
+      profile: {
+        ...DATASET.profile,
+        datasetId: "catalog",
+        filename: "catalog.csv",
+        rowCount: 2,
+        columns: [
+          {
+            name: "kind",
+            kind: "category",
+            nullCount: 0,
+            distinctCount: 2,
+            sampleValues: ["Movie", "Series"],
+            dateFormat: null,
+            evidence: null,
+          },
+          {
+            name: "duration",
+            kind: "text",
+            nullCount: 0,
+            distinctCount: 2,
+            sampleValues: ["90 min", "2 Seasons"],
+            dateFormat: null,
+            evidence: null,
+          },
+        ],
+      },
+    };
+    const dependencies = {
+      mockMode: true,
+      executor: successfulExecutor(),
+      reader: async () =>
+        [
+          "kind,duration,duration_amount,duration_unit",
+          "Movie,90 min,90,min",
+          "Series,2 Seasons,2,Seasons",
+        ].join("\n"),
+    } as Parameters<typeof prepareDataset>[1] & {
+      reader: (path: string) => Promise<string>;
+    };
+
+    const report = await prepareDataset(mixedUnits, dependencies);
+
+    expect(
+      report.analysisProfile?.columns.map((column) => column.name),
+    ).toContain("duration_amount");
   });
 
   it("uses only the first five parsed data rows when generating prep", async () => {
