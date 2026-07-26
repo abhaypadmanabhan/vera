@@ -75,6 +75,161 @@ function refusal(
   return { allowed: false, category, detail };
 }
 
+/**
+ * Every singular a plural might have come from, because English does not let you
+ * pick one: "movies" and "countries" both end in "ies", and only one of them is
+ * a "y" word. Both candidates are offered and a match on any of them counts.
+ */
+function variants(word: string): string[] {
+  const forms = new Set([word]);
+  if (word.length > 4 && word.endsWith("ies")) {
+    forms.add(`${word.slice(0, -3)}y`);
+  }
+  if (word.length > 4 && word.endsWith("es")) forms.add(word.slice(0, -2));
+  if (word.length > 3 && word.endsWith("s") && !word.endsWith("ss")) {
+    forms.add(word.slice(0, -1));
+  }
+  return [...forms];
+}
+
+/**
+ * Everything this file demonstrably talks about: the words in its column names,
+ * and the words in the values of its own categories and labels — so "movies" is
+ * recognised on a file whose `type` column contains "Movie", not just on one
+ * with a column called movie.
+ *
+ * The synonyms of any business concept the file provably has are folded in too,
+ * so a file with `Sales` still answers a question phrased as "revenue".
+ */
+function fileVocabulary(profile: DatasetProfile): Set<string> {
+  const vocabulary = new Set<string>();
+  const add = (word: string): void => {
+    if (word.length < 2) return;
+    for (const form of variants(word)) vocabulary.add(form);
+  };
+
+  for (const column of profile.columns) {
+    for (const word of words(column.name)) add(word);
+    if (
+      column.kind === "category" ||
+      column.kind === "text" ||
+      column.kind === "id"
+    ) {
+      for (const value of column.sampleValues) {
+        for (const word of words(value)) add(word);
+      }
+    }
+  }
+
+  const available = availableInformation(profile);
+  const synonyms: ReadonlyArray<[keyof AvailableInformation, string[]]> = [
+    ["sales", ["sales", "revenue", "turnover"]],
+    ["profit", ["profit", "earnings", "income"]],
+    ["cost", ["cost", "costs", "cogs", "expense", "expenses"]],
+    ["margin", ["margin", "margins"]],
+    ["customer", ["customer", "customers", "client", "clients", "buyer"]],
+    ["discount", ["discount", "discounts", "markdown"]],
+    ["quantity", ["quantity", "units", "unit"]],
+    ["region", ["region", "regions", "territory", "territories"]],
+    ["category", ["category", "categories"]],
+    ["product", ["product", "products", "item", "items", "sku"]],
+    ["orderId", ["order", "orders"]],
+  ];
+  for (const [concept, aliases] of synonyms) {
+    if (available[concept]) for (const alias of aliases) add(alias);
+  }
+
+  return vocabulary;
+}
+
+/**
+ * Words that are about the file itself or about the shape of the arithmetic,
+ * never about a subject the file would have to record. A question containing
+ * one of these is a question about the data as data, and is always fair game.
+ */
+const META_WORDS = new Set([
+  "record",
+  "records",
+  "row",
+  "rows",
+  "entry",
+  "entries",
+  "line",
+  "lines",
+  "file",
+  "files",
+  "dataset",
+  "data",
+  "column",
+  "columns",
+  "field",
+  "fields",
+  "value",
+  "values",
+  "duplicate",
+  "duplicates",
+  "thing",
+  "things",
+  // "How many types are represented?" asks about the shape of the data, not
+  // about a subject the file would have to record.
+  "type",
+  "types",
+  "kind",
+  "kinds",
+]);
+
+/** Modifiers that sit between "how many" and the actual subject. */
+const MODIFIERS = new Set([
+  "exact",
+  "unique",
+  "distinct",
+  "different",
+  "separate",
+  "total",
+  "average",
+  "median",
+  "individual",
+  "of",
+  "the",
+  "a",
+  "an",
+  "more",
+  "other",
+]);
+
+/**
+ * "How many X" and "how much X" name the subject being counted outright — the
+ * one place a question is unambiguous enough to refuse on. Anything looser
+ * ("which project had the highest sales?") stays allowed on purpose: a false
+ * refusal hides a valid analysis, and execution is still the final arbiter.
+ */
+function unrecordedSubject(
+  question: string,
+  profile: DatasetProfile,
+): GuardrailDecision | null {
+  const match = /\bhow\s+(?:many|much)\s+([a-z][a-z\s-]*)/i.exec(question);
+  if (!match?.[1]) return null;
+
+  const asked = words(question);
+  if (asked.some((word) => META_WORDS.has(word))) return null;
+
+  const subject = words(match[1]).find(
+    (word) => !MODIFIERS.has(word) && !META_WORDS.has(word),
+  );
+  if (!subject) return null;
+
+  const vocabulary = fileVocabulary(profile);
+  const recognised = asked.some((word) =>
+    variants(word).some((form) => vocabulary.has(form)),
+  );
+  if (recognised) return null;
+
+  return refusal(
+    "missing_information",
+    `This file does not record ${subject}.`,
+  );
+}
+
 function missingInformation(question: string, profile: DatasetProfile): GuardrailDecision | null {
   const available = availableInformation(profile);
   const marginAvailable =
@@ -226,5 +381,8 @@ export function classifyQuestion(
     );
   }
 
-  return missingInformation(normalized, profile) ?? { allowed: true };
+  return (
+    missingInformation(normalized, profile) ??
+    unrecordedSubject(normalized, profile) ?? { allowed: true }
+  );
 }

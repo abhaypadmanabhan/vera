@@ -153,6 +153,60 @@ describe("classifyQuestion", () => {
     expect(classifyQuestion("What was profit margin?", profile)).toEqual({ allowed: true });
   });
 
+  /*
+   * `phase-11-scope.md` P1. The concept map was a Superstore vocabulary, so on an
+   * arbitrary upload the guardrail neither refused wrongly nor helped — every
+   * unrecognised subject fell through to "allowed". The refusal quality the
+   * product is built on was only real for retail-shaped data.
+   */
+  describe("an arbitrary file, not a retail one", () => {
+    const netflix = profileDataset(
+      "netflix",
+      "netflix-titles.csv",
+      [
+        "show_id,type,title,country,release_year,rating,duration",
+        "s1,Movie,Dick Johnson Is Dead,United States,2020,PG-13,90 min",
+        "s2,TV Show,Blood & Water,South Africa,2021,TV-MA,2 Seasons",
+        "s3,Movie,Ganglands,France,2021,TV-MA,110 min",
+      ].join("\n"),
+    );
+
+    it.each([
+      "How many directors are there?",
+      "How many episodes are there?",
+      "How many subscribers watched it?",
+    ])("refuses '%s' because the file does not record it", (question) => {
+      const result = classifyQuestion(question, netflix);
+
+      expect(result).toMatchObject({
+        allowed: false,
+        category: "missing_information",
+      });
+      if (result.allowed) throw new Error("Expected the question to be refused");
+      expect(result.detail).not.toMatch(
+        /\b(?:column|pandas|schema|dataframe)\b/i,
+      );
+    });
+
+    it.each([
+      "How many titles are in the catalogue?",
+      "How many movies are there?",
+      "How many records are in this file?",
+      "How many exact duplicate records are there?",
+      "How many countries are represented?",
+      "Which country has the most titles?",
+      "What is the average duration in minutes for movies?",
+    ])("allows '%s'", (question) => {
+      expect(classifyQuestion(question, netflix)).toEqual({ allowed: true });
+    });
+  });
+
+  it("still answers a question phrased with a synonym the file proves it has", () => {
+    expect(classifyQuestion("How much revenue did we make?", completeProfile)).toEqual({
+      allowed: true,
+    });
+  });
+
   it("does not combine words from unrelated fields when checking for unique orders", () => {
     const profile = profileDataset(
       "unrelated-fields",
