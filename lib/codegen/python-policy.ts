@@ -1,3 +1,25 @@
+/**
+ * A program the model wrote that this policy will not run.
+ *
+ * Distinguished from an ordinary failure because it is *correctable*: the
+ * message names exactly what is wrong ("must call pd.read_csv with <path>"),
+ * which is the same shape as a stderr the retry loop already feeds back. The
+ * 2026-07-26 live run lost two findings to a path violation that died at
+ * `attempts: 1` — including the follow-up that would have made a multi-finding
+ * deck. A genuine upstream failure (network, auth, budget) is NOT this, and
+ * must keep failing fast rather than burning another paid call.
+ */
+export class PolicyViolationError extends Error {
+  /** The rejected program, so the retry can show the model its own mistake. */
+  readonly code: string;
+
+  constructor(message: string, code = "") {
+    super(message);
+    this.name = "PolicyViolationError";
+    this.code = code;
+  }
+}
+
 interface PythonToken {
   kind: "identifier" | "string" | "punct";
   value: string;
@@ -203,7 +225,7 @@ function validateImports(tokens: PythonToken[]): void {
     if (token?.value === "from") {
       const moduleName = tokens[index + 1]?.value;
       if (moduleName && !ALLOWED_IMPORTS.has(moduleName)) {
-        throw new Error(
+        throw new PolicyViolationError(
           `Generated code must not import network-capable or filesystem module ${moduleName}; only json and pandas are allowed.`,
         );
       }
@@ -225,7 +247,7 @@ function validateImports(tokens: PythonToken[]): void {
       }
       if (expectModule && current.kind === "identifier") {
         if (!ALLOWED_IMPORTS.has(current.value)) {
-          throw new Error(
+          throw new PolicyViolationError(
             `Generated code must not import network-capable or filesystem module ${current.value}; only json and pandas are allowed.`,
           );
         }
@@ -244,14 +266,14 @@ function validateCalls(tokens: PythonToken[], sandboxPath: string): void {
       arguments_[0].value === sandboxPath,
   );
   if (csvCalls.length !== 1 || exactCsvCalls.length !== 1) {
-    throw new Error(
+    throw new PolicyViolationError(
       `Generated code must call pd.read_csv with ${sandboxPath} exactly once.`,
     );
   }
 
   const printCalls = findFunctionCalls(tokens, "print");
   if (printCalls.length !== 1) {
-    throw new Error("Generated code must contain exactly one print statement.");
+    throw new PolicyViolationError("Generated code must contain exactly one print statement.");
   }
   const printArguments = printCalls[0] ?? [];
   if (
@@ -260,10 +282,10 @@ function validateCalls(tokens: PythonToken[], sandboxPath: string): void {
         token.kind === "string" && token.value.includes("VERA_RESULT:"),
     )
   ) {
-    throw new Error("Generated code must print one VERA_RESULT line.");
+    throw new PolicyViolationError("Generated code must print one VERA_RESULT line.");
   }
   if (!hasSequence(printArguments, ["json", ".", "dumps", "("])) {
-    throw new Error("Generated result output must use json.dumps.");
+    throw new PolicyViolationError("Generated result output must use json.dumps.");
   }
 
   for (let index = 0; index < tokens.length; index++) {
@@ -273,7 +295,7 @@ function validateCalls(tokens: PythonToken[], sandboxPath: string): void {
       FORBIDDEN_CALLS.has(token.value) &&
       tokens[index + 1]?.value === "("
     ) {
-      throw new Error(`Generated code must not call ${token.value}.`);
+      throw new PolicyViolationError(`Generated code must not call ${token.value}.`);
     }
     if (
       token?.value === "." &&
@@ -288,7 +310,7 @@ function validateCalls(tokens: PythonToken[], sandboxPath: string): void {
           tokens[index + 2]?.value === "("
         )
       ) {
-        throw new Error(
+        throw new PolicyViolationError(
           `Generated code must not perform extra pandas I/O via ${method}.`,
         );
       }
@@ -317,6 +339,19 @@ function callUsesDateWithFormat(
 }
 
 export function validatePythonPolicy(options: PythonPolicyOptions): void {
+  try {
+    validate(options);
+  } catch (error) {
+    // Carry the rejected program on the error so a retry can show the model
+    // its own mistake, exactly as an execution failure carries its stderr.
+    if (error instanceof PolicyViolationError && !error.code) {
+      throw new PolicyViolationError(error.message, options.code);
+    }
+    throw error;
+  }
+}
+
+function validate(options: PythonPolicyOptions): void {
   const tokens = tokenizePython(options.code);
   validateImports(tokens);
   validateCalls(tokens, options.sandboxPath);
@@ -326,13 +361,13 @@ export function validatePythonPolicy(options: PythonPolicyOptions): void {
     (column) => !options.knownColumns.includes(column),
   );
   if (unknownColumn) {
-    throw new Error(`Generated code named unknown column ${unknownColumn}.`);
+    throw new PolicyViolationError(`Generated code named unknown column ${unknownColumn}.`);
   }
   const unreferencedColumn = options.columnsUsed.find(
     (column) => !executableValues.has(column),
   );
   if (unreferencedColumn) {
-    throw new Error(
+    throw new PolicyViolationError(
       `columnsUsed names ${unreferencedColumn}, but the code does not reference it.`,
     );
   }
@@ -348,7 +383,7 @@ export function validatePythonPolicy(options: PythonPolicyOptions): void {
         callUsesDateWithFormat(call, date.column, date.format),
       )
     ) {
-      throw new Error(
+      throw new PolicyViolationError(
         `Generated code touching ${date.column} must call pd.to_datetime on that column with format="${date.format}".`,
       );
     }

@@ -8,6 +8,7 @@ import type {
   Valence,
 } from "../types";
 import type { CodegenOutput, CodegenRequest } from "./generate";
+import { PolicyViolationError } from "./python-policy";
 
 export interface CodeGenerator {
   generate(
@@ -145,6 +146,29 @@ export async function* runCodegenWithRetries(
       if (remaining() <= 0) throw new BudgetExceededError();
     } catch (error) {
       const timedOut = error instanceof BudgetExceededError;
+      // A policy rejection names exactly what is wrong with the program, which
+      // is the same correctable shape as a stderr — so it is retried, not
+      // surfaced. Two live findings died at `attempts: 1` on a read_csv path
+      // violation before this existed. Anything else (network, auth, budget)
+      // still fails fast rather than burning another paid call.
+      if (
+        error instanceof PolicyViolationError &&
+        !timedOut &&
+        attempt < maxAttempts &&
+        remaining() > 0
+      ) {
+        yield stage({
+          stage: "writing_code",
+          status: "failed",
+          detail: "The generated code broke a safety rule — asking again",
+          attempt,
+        });
+        previousFailure = {
+          stderr: error.message,
+          failingCode: error.code,
+        };
+        continue;
+      }
       yield stage({
         stage: "writing_code",
         status: "failed",

@@ -86,6 +86,26 @@ describe("structured pandas codegen", () => {
   });
 
   /*
+   * A prepared file's path carries a content hash, and the Braintrust logs for
+   * 2026-07-26 show a real model quietly substituting a tidier path — the
+   * rejection that cost two live findings. The line it must produce is now
+   * given verbatim rather than described in prose.
+   */
+  it("gives the read line verbatim so a hashed path cannot be tidied away", () => {
+    const hashed =
+      "/home/daytona/clean-45c436efd9f0240d5bafc80d7b431c849b004da3365f705066f5a43a8f622d6e.csv";
+    const prompt = buildCodegenPrompt({
+      question: "What is the average duration in minutes for movies?",
+      profile,
+      sampleRows: [],
+      sandboxPath: hashed,
+    });
+
+    expect(prompt).toContain(`df = pd.read_csv(${JSON.stringify(hashed)})`);
+    expect(prompt).toMatch(/character for character/i);
+  });
+
+  /*
    * The comparison Vera speaks has to be a figure the program printed. Nothing
    * downstream may subtract one verified number from another and say the
    * result, so the instruction to compute the change has to live here.
