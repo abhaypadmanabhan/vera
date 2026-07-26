@@ -118,8 +118,9 @@ Named here so nobody mistakes them for oversights.
   speaking state on real audio.
 - ~~**Suggested follow-ups are schema-shaped, not insight-shaped.**~~ **CLOSED 2026-07-25.**
   An uploaded file's chips now come from the prep call, which already holds the full profile, so
-  they cost nothing extra and every one is guardrail-filtered. **Never seen against a real
-  Fireworks response** — see `tasks/phase-11-scope.md` P0.
+  they cost nothing extra and every one is guardrail-filtered. **Seen against two real Fireworks
+  responses on 2026-07-26**: all five proposed questions were domain-specific to the file and all
+  five passed the guardrail on a Netflix profile.
 - **Not deployed.** The static surfaces (`/`, `/open`, and the deck) could ship to Vercel for
   a shareable link at zero cost. The live `/ask` route must not be public without auth: a
   stranger clicking a chip spends real Fireworks, Daytona and ElevenLabs credit. PRD §5's
@@ -147,10 +148,20 @@ The any-file path. **Everything here is proven in mock only unless it says other
       prepared path.
 - [x] Chips for an uploaded file come from that file, and every one passes the guardrail.
 - [x] The mock analyst answers from the file on screen, not from a hardcoded Superstore figure.
-- [ ] **Prep has never run against real Fireworks or real Daytona.** Zero `/api/prepare` calls in
-      the 2026-07-26 live session. The highest-risk unknown: whether a real model's pandas survives
-      the canonical whitelist at all.
-- [ ] **The widened transforms have never been executed by pandas** — only asserted in tests.
+- [x] **A real model's prep code survives the canonical whitelist.** Two live Fireworks prep calls
+      on the Netflix file (2026-07-26): the model copied all nine profile-derived transforms
+      **verbatim**, including the mixed-unit extract and the multi-value split. The feared
+      token-for-token brittleness is not real. Reproduce with `tests/live-prep.test.ts`.
+- [x] **An unsupported fix sentence can no longer discard a valid prep.** The first live call was
+      rejected wholesale because `transformFor` offers the strip and numeric transforms
+      unconditionally while `allowedFixes` gated the matching sentences on evidence — so the model
+      honestly described the code it was handed and lost the entire prep, silently, on every
+      upload. The schema's fix enum is now narrowed per profile and unsupported sentences are
+      filtered, never fatal. Proven live: second call ACCEPTED.
+- [~] **Prep has still never run against real Daytona.** Fireworks half proven above; no
+      `/api/prepare` has yet executed a prep program in a sandbox. Step B of `phase-11-scope.md` P0.
+- [ ] **The widened transforms have never been executed by pandas** — the model now demonstrably
+      writes them, but no sandbox has run them.
 - [ ] **"Ask anything" is only true for retail-shaped data.** `lib/guardrails/classify.ts` maps a
       hardcoded business vocabulary; an arbitrary file degrades quietly to "allowed".
 

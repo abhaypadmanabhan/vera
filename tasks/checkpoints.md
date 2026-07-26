@@ -498,3 +498,50 @@ the entire upload story quietly does nothing. Mock cannot detect this.
    because no poller was set.
 2. A green test suite is not a look.
 3. A call that returns without error has not necessarily done anything.
+
+---
+
+## CP-9 — PHASE 11 P0 STEP A · 2026-07-26 · prep proven against real Fireworks
+
+Two supervised Fireworks calls, no sandbox, no narration. Merged to `feat/p2-fireworks` at
+`85ad475`. **346 tests**, lint / `tsc --noEmit` / build clean. `main` still untouched.
+
+### What the live call actually found
+
+The predicted danger was wrong. `canonicalizePrepCode` is not brittle: `tokenizePython` normalizes
+quoting, whitespace, comments and statement order before comparing, and the real model copied all
+nine profile-derived transforms **token for token** — including the mixed-unit `duration` extract
+and the `listed_in` multi-value split.
+
+The prep was rejected anyway, one gate lower. `transformFor` offers a strip transform for every
+text column and a numeric coercion for every numeric column unconditionally; `allowedFixes` gates
+the matching plain-English sentences on evidence of visible dirt. The model honestly described the
+code it had been handed, chose two sentences the profile did not "support", and the entire prep was
+discarded. This fires on any file with a clean text or numeric column — i.e. most files. Live prep
+had never worked and never would have, and `prepareDataset`'s catch logged nothing, so the UI just
+said she was working from the file as it came.
+
+### The fix (`3a1dda5`, verified live)
+
+- The response schema's fix enum is narrowed per profile, so an unsupported choice is structurally
+  unreachable rather than punished after the fact.
+- Unsupported sentences are filtered, never fatal. A fix sentence describes the cleaning program in
+  plain English; the audit measures what actually changed. An unsupported sentence still never
+  reaches the UI, so the honesty property is unchanged.
+- The fail-open path logs its reason to the server console. Never a presentation surface.
+- `tests/live-prep.test.ts` (`VERA_LIVE=1`, one Fireworks call, no sandbox) captures the raw model
+  program and reports copied-vs-authored per statement. Netflix fixture committed for repeatability.
+
+Second live call after the fix: **ACCEPTED**, six supported fix sentences, five good questions.
+
+### Also answered, at no extra cost
+
+- Proposed questions are domain-specific and all five pass the guardrail on a Netflix profile.
+  *"What is the average duration in minutes for movies?"* is the derived-column probe Step B needs.
+- Token budget is a non-issue: 458 of 2048 on a nine-column file.
+
+### Still open — Step B
+
+Daytona has never executed a prep program. Unknowns 3, 4 and 5 of `phase-11-scope.md` P0 — do the
+widened transforms actually run in pandas, does the audit report usable counts after them, and does
+codegen use the derived columns — all need the supervised browser run. Awaiting the builder's go.

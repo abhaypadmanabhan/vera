@@ -40,6 +40,30 @@ product obeys the rule.
 
 ---
 
+## 2026-07-26 — Two gates derived from different evidence will punish an honest model
+
+**What happened:** the first real Fireworks prep call was rejected wholesale. Not for the reason
+three documents predicted — the model copied every canonical transform verbatim — but because
+`transformFor` hands the model a strip transform for every text column and a numeric coercion for
+every numeric column *unconditionally*, while `allowedFixes` only permits the matching English
+sentence when the samples contain visible dirt. The model described the code it had been told to
+copy and lost the entire prep for it. Live prep was dead on every upload, always, and the catch in
+`prepareDataset` logged nothing.
+
+**Why it matters:** the predicted failure was the interesting one, so it got all the attention.
+The actual failure was in the boring adjacent gate. Two whitelists over the same program, each
+derived from its own evidence threshold, will disagree — and the model that behaves correctly is
+the one that trips the disagreement.
+
+**How to apply:** when two gates constrain one artifact, derive them from the *same* evidence or
+prove they agree. Never let a presentational field invalidate an executed one. And when a path
+fails open by design, make it say why — a fail-open with no log is indistinguishable from success
+and cost this phase its entire premise. Cheap offline probing first also pays: mapping which
+deviations `tokenizePython` actually tolerates took minutes, cost nothing, and told us before the
+call that quoting and ordering were never the risk.
+
+---
+
 ## 2026-07-26 — A call that returns without error has not necessarily done anything
 
 **What happened:** `sandbox.delete(60)` returned cleanly, and the very next list call still showed

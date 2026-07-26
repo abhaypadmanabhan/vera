@@ -35,6 +35,23 @@ Merged on `feat/p2-fireworks` at `0a8b5c6`, 344 tests, lint/tsc/build clean.
 
 ## P0 — Prove the upload path live. Nothing else starts until this is done.
 
+> **STEP A DONE, 2026-07-26.** Two supervised Fireworks calls, no sandbox. Findings:
+> - Unknown 1 is **closed and was not the danger**: the model copied all nine profile-derived
+>   transforms token for token. `canonicalizePrepCode` is not brittle — `tokenizePython` normalizes
+>   quoting, whitespace, comments and ordering before comparing.
+> - **The real defect was one gate below it.** The transform menu offers strip and numeric coercion
+>   for every text and numeric column unconditionally; `allowedFixes` gated the matching plain-English
+>   sentences on evidence of actual dirt. The model described the code it had been handed, and the
+>   whole prep was discarded — silently, on essentially every file. Fixed in `3a1dda5`, re-run live,
+>   ACCEPTED.
+> - Unknown 2 is **closed**: proposed questions are domain-specific and all five pass the guardrail
+>   on a Netflix profile. One of them — *"What is the average duration in minutes for movies?"* — is
+>   the derived-column probe Step B needs.
+> - Token budget is a non-issue: 458 of 2048 for a nine-column file.
+> - Unknowns 3, 4 and 5 need Daytona and remain open. That is Step B.
+>
+> Reproduce Step A with `tests/live-prep.test.ts` (`VERA_LIVE=1`, one Fireworks call, no sandbox).
+
 **This is the single largest untested surface in the product, and it is exactly what the builder
 asked for.** During the 2026-07-26 live session there were **zero** `POST /api/prepare` calls. The
 Netflix file has never been through a real Fireworks cleaning call.
