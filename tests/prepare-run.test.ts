@@ -729,7 +729,12 @@ describe("prepareDataset", () => {
 
     expect(loadCalls).toBe(0);
     expect(report.ok).toBe(true);
-    expect(report.counts).toBeNull();
+    expect(report.counts).toEqual({
+      rowsBefore: 6,
+      rowsAfter: 6,
+      duplicatesDropped: 0,
+      cellsCoerced: 0,
+    });
   });
 
   it("fails open when loading or generation throws", async () => {

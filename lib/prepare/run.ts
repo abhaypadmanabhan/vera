@@ -109,9 +109,21 @@ function mockExecution(stdout = ""): ExecutionResult {
   };
 }
 
-function createMockExecutor(): CodeExecutor {
+function createMockExecutor(dataset: ResolvedDataset): CodeExecutor {
   return {
-    async execute() {
+    async execute({ code }) {
+      if (code.includes("VERA_AUDIT:")) {
+        const rowsBefore = dataset.profile.rowCount;
+        const duplicatesDropped = dataset.profile.duplicateRowCount;
+        return mockExecution(
+          `VERA_AUDIT:${JSON.stringify({
+            rowsBefore,
+            rowsAfter: rowsBefore - duplicatesDropped,
+            duplicatesDropped,
+            cellsCoerced: 0,
+          })}`,
+        );
+      }
       return mockExecution();
     },
   };
@@ -151,7 +163,7 @@ export async function prepareDataset(
   const executor =
     dependencies.executor ??
     (mockMode
-      ? createMockExecutor()
+      ? createMockExecutor(dataset)
       : daytonaExecutor);
   const cleanPath = cleanPathFor(dataset.content);
   let activeStage: PrepProgressEvent["stage"] | null = null;

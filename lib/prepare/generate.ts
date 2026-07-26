@@ -527,51 +527,57 @@ function pythonString(value: string): string {
   return JSON.stringify(value);
 }
 
-function boundedQuestion(
-  prefix: string,
-  column: string,
-  suffix = "?",
-): string {
-  const available = Math.max(1, 72 - prefix.length - suffix.length);
-  return `${prefix}${column.slice(0, available)}${suffix}`;
-}
-
 function mockQuestions(profile: DatasetProfile): string[] {
-  const firstColumn = profile.columns[0]?.name;
-  const numericColumn =
-    profile.columns.find((column) => column.kind === "number")?.name ??
-    profile.columns.find((column) => column.kind === "integer")?.name;
-  const categoryColumn =
-    profile.columns.find((column) => column.kind === "category")?.name ??
-    firstColumn ??
-    "";
-
-  if (!numericColumn) {
-    if (!firstColumn) {
-      return [
-        "How many records are in this file?",
-        "How many columns are in this file?",
-        "How many exact duplicate records are there?",
-        "How many records contain a missing value?",
-        "How many records have no missing values?",
-      ];
-    }
-    return [
-      "How many records are in this file?",
-      boundedQuestion("How many distinct ", firstColumn, " values are there?"),
-      boundedQuestion("How many ", firstColumn, " values are missing?"),
-      boundedQuestion("How many ", firstColumn, " values are present?"),
-      "How many exact duplicate records are there?",
-    ];
+  const kinds = new Set(profile.columns.map((column) => column.kind));
+  const questions: string[] = [];
+  if (kinds.has("category")) {
+    questions.push(
+      "How many records are there of each type?",
+      "How many types are represented?",
+      "How many records have no type listed?",
+    );
   }
-
-  return [
-    boundedQuestion("What is the total ", numericColumn),
-    boundedQuestion("What is the average ", numericColumn),
-    boundedQuestion("What is the highest ", numericColumn),
-    boundedQuestion("How many distinct ", categoryColumn, " values are there?"),
-    boundedQuestion("How many ", categoryColumn, " values are missing?"),
-  ];
+  if (kinds.has("number")) {
+    questions.push(
+      "What is the total amount?",
+      "What is the average amount?",
+      "What is the highest amount?",
+      "How many amounts are missing?",
+    );
+  }
+  if (kinds.has("integer")) {
+    questions.push(
+      "What is the highest whole-number value?",
+      "What is the lowest whole-number value?",
+      "How many whole-number values are missing?",
+    );
+  }
+  if (kinds.has("date")) {
+    questions.push(
+      "How many records are there for each year?",
+      "How many dates are missing?",
+    );
+  }
+  if (kinds.has("id")) {
+    questions.push(
+      "How many unique references are there?",
+      "How many references are missing?",
+    );
+  }
+  if (kinds.has("text")) {
+    questions.push(
+      "How many descriptions are represented?",
+      "How many descriptions are missing?",
+    );
+  }
+  questions.push(
+    "How many records are in this file?",
+    "How many columns are in this file?",
+    "How many exact duplicate records are there?",
+    "How many records contain a missing value?",
+    "How many records have no missing values?",
+  );
+  return [...new Set(questions)].slice(0, 5);
 }
 
 function mockFixes(profile: DatasetProfile): string[] {

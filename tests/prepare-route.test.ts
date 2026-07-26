@@ -175,7 +175,7 @@ describe("POST /api/prepare", () => {
         ["cleaning", "active"],
         ["cleaning", "complete"],
         ["checking", "active"],
-        ["checking", "failed"],
+        ["checking", "complete"],
         ["ready", "complete"],
       ]);
       expect(events.at(-1)).toMatchObject({
@@ -239,7 +239,7 @@ describe("POST /api/prepare", () => {
         ["cleaning", "active"],
         ["cleaning", "complete"],
         ["checking", "active"],
-        ["checking", "failed"],
+        ["checking", "complete"],
         ["ready", "complete"],
       ]);
     }
