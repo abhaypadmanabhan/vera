@@ -5,6 +5,7 @@ import type {
   DatasetProfile,
   Finding,
   SchemaEvidence,
+  Valence,
 } from "@/lib/types";
 
 const JARGON =
@@ -97,6 +98,25 @@ describe("the deck speaks like an analyst", () => {
       buildDeck("q", { ...VERIFIED, valence: "good" }, PROFILE).slides[0]?.spoken ?? "";
     expect(bad).not.toBe(good);
     expect(bad).not.toMatch(/\d/);
+  });
+
+  /*
+   * Three tails on one stem is a template, and it reads as one. Each valence
+   * has to start somewhere different, not arrive somewhere different.
+   */
+  it("opens three different ways rather than one stem with three tails", () => {
+    const openers = (["good", "bad", "neutral"] as const).map(
+      (valence: Valence) =>
+        buildDeck("q", { ...VERIFIED, valence }, PROFILE).slides[0]?.spoken ?? "",
+    );
+
+    const leadingClauses = openers.map((line) =>
+      (line.split(/[,.;:—]/)[0] ?? "").trim().toLowerCase(),
+    );
+    expect(new Set(leadingClauses).size, `shared clause: ${leadingClauses.join(" | ")}`).toBe(3);
+
+    const firstWords = openers.map((line) => (line.split(/\s+/)[0] ?? "").toLowerCase());
+    expect(new Set(firstWords).size, `shared opening word: ${firstWords.join(" | ")}`).toBe(3);
   });
 
   it("says what it means when a context figure survived", () => {

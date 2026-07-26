@@ -66,10 +66,15 @@ export interface Deck {
 
 const NO_DECK: Deck = { question: "", slides: [] };
 
+/**
+ * Three moods, three different sentences. A shared stem with three tails reads
+ * as a template because it is one, so each valence starts somewhere different:
+ * an offer, a warning, a report.
+ */
 const OPENERS: Record<Valence, string> = {
-  good: "Right — I went through this properly, and there is good news in here.",
-  bad: "Right — I went through this properly, and you are not going to like it.",
-  neutral: "Right — I went through this properly, and here is what I found.",
+  good: "There is good news in here, and I will start with it.",
+  bad: "You are not going to like this one, so I will get straight to it.",
+  neutral: "I have been through the file, and here is what came back.",
 };
 
 function fmt(value: number | string, unit: string | null): string {
