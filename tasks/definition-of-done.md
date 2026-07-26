@@ -177,12 +177,13 @@ The any-file path. **Everything here is proven in mock only unless it says other
 
 ## 10. Found in the live session, not yet fixed
 
-- [ ] **The rate limiter fired on a single local user** during ordinary demo clicking
-      (`POST /api/analyze 429`). The limit must stay; the window needs to fit a human presenting.
+- [~] **The rate limiter fired on a single local user** during ordinary demo clicking
+      (`POST /api/analyze 429`), and again on 2026-07-26 as `POST /api/speak 429` mid-deck.
+      Narration now draws on its own 60-per-minute bucket while analysis stays at 10; proven by
+      unit tests. **Not yet seen over HTTP in live mode** — mock short-circuits `/api/speak`
+      before the limiter, so the wiring gets its proof on the next live run.
 - [ ] **26 ElevenLabs calls served 3 questions** — one round trip per narration beat. Cost scales
       with how talkative the deck is, not with questions asked.
-- [ ] **The rate limiter fired again on 2026-07-26**, this time `POST /api/speak 429` mid-deck on
-      the second question of a single local session. It now interrupts narration, not just a click.
 - [x] ~~**The closing slide reads `0 Support · 0 Contradict · 0 rows that agree`**~~ **FIXED
       2026-07-26.** Schema evidence exists only for a proven deterministic claim; a question that
       reads no such column has none, and that absence was rendered as zero agreement beneath a

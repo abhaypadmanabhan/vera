@@ -602,3 +602,54 @@ remain untouched — still the builder's call.
 
 P0 is done and it did what it was supposed to do: it defined the phase. The queue is now the three
 defects above plus P1's profile-derived concept map, which defect 3 makes urgent.
+
+---
+
+## CP-11 — PHASE 11 · 2026-07-26 · the three live defects, and P1
+
+All on `feat/p2-fireworks`. **362 tests**, lint / `tsc --noEmit` / build clean. `main` untouched.
+No spend: every change below was proven in mock, in a browser, at zero cost.
+
+### The zero-agreement line (`fe42578`)
+
+`schemaEvidence` carries only proven deterministic claims — a date order, a cross-check — and only
+for columns the executed code read. A question touching no such column has none, which is normal.
+The summary slide rendered that absence as `0 Support · 0 Contradict · 0 rows that agree` under a
+figure that had just verified, which reads as the data disagreeing with the answer. Not
+upload-specific: any question that reads no evidence-bearing column hit it.
+
+The panel now drops when there is no proven claim, and the slide shows only what is real. Same rule
+the context figures already follow. Verified in a browser both ways — Superstore still shows 5,952,
+a dateless upload shows `12 rows read · 3 cells quoted back` and no agreement counts at all.
+
+### P1, the Superstore vocabulary (`80d261e`)
+
+The concept map now derives from the file: column-name words, the file's own category and label
+values (so "movies" is recognised from a `type` column holding "Movie"), plus the synonyms of any
+concept the file provably has (a file with `Sales` still answers "revenue").
+
+Refusal fires only on "how many X" / "how much X" — the one construction that names its subject
+outright — and only when nothing else in the question touches the file. Looser wording still
+passes on purpose. Verified in a browser: *"How many directors are there?"* on Netflix gives
+"Vera chose not to answer this from this file. This file does not record directors." with an offer
+of what she can do; *"How many movies are there?"* runs.
+
+Two things that cost time and are worth remembering: an English plural cannot be singularised
+deterministically — "movies" and "countries" both end in `ies` — so the matcher tries every
+candidate singular instead of picking one. And "type" had to be treated as a word about the shape
+of the data rather than a subject, or `How many types are represented?` refuses.
+
+### The rate limiter (`d507080`)
+
+One bucket served every money-spending route, and narration costs a call per beat, so a deck
+starved the analysis it was narrating. Analysis stays at 10 per minute; narration gets its own 60.
+Proven by unit tests. **The wiring has not been seen over HTTP** — mock short-circuits `/api/speak`
+before the limiter — so it gets its proof on the next live run.
+
+### Still open
+
+- Follow-up *generation* is still schema-shaped on an arbitrary file ("What share of release year
+  came from the top rating?"). The guardrail half is fixed; the generator is not.
+- P2's other half: 26 ElevenLabs calls for 3 questions. Cost scales with how talkative the deck is.
+- P3: several findings composed into one deck. Needs the builder's sign-off on spend per deck.
+- `dev` → `main` still needs the builder.
