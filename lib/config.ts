@@ -22,12 +22,12 @@ export const LIMITS = {
   /** Requests per window per IP on money-spending routes. */
   rateLimit: { requests: 10, windowMs: 60_000 },
   /**
-   * Narration gets its own budget. It costs one call per spoken beat, so a
-   * single deck spends a dozen without the user doing anything unusual — the
-   * 2026-07-26 live run served 3 questions with 26 calls and hit a 429 mid
-   * sentence. Sharing one bucket meant a talkative deck could starve the
-   * analysis it was narrating. Still capped: this is a few decks a minute, not
-   * an open tap, and each call is short.
+   * Narration gets its own budget. It costs one call per narrated slide (the
+   * slide's beats are synthesised in a single request — before that batching,
+   * the 2026-07-26 live run served 3 questions with 26 per-beat calls and hit
+   * a 429 mid sentence). Sharing one bucket meant a talkative deck could
+   * starve the analysis it was narrating. Still capped: this is decks per
+   * minute, not an open tap, and each call is short.
    */
   narrationRateLimit: { requests: 60, windowMs: 60_000 },
   /** Absolute cap on paid runs per server process. */

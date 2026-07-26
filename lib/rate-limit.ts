@@ -13,9 +13,9 @@ export type RateLimitResult =
  * Which budget a request draws from.
  *
  * "analysis" is the money guard proper — Fireworks plus a sandbox run per
- * request. "narration" is one short call per spoken beat, so a single deck
- * spends many; kept separate so a talkative deck can never starve the analysis
- * it is narrating.
+ * request. "narration" is one call per narrated slide (a whole slide's beats
+ * are synthesised in a single request), so a single deck spends several; kept
+ * separate so a talkative deck can never starve the analysis it is narrating.
  */
 export type RateLimitBucket = "analysis" | "narration";
 
