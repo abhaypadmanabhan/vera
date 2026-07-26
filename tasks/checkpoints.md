@@ -653,3 +653,70 @@ before the limiter — so it gets its proof on the next live run.
 - P2's other half: 26 ElevenLabs calls for 3 questions. Cost scales with how talkative the deck is.
 - P3: several findings composed into one deck. Needs the builder's sign-off on spend per deck.
 - `dev` → `main` still needs the builder.
+
+---
+
+## CP-12 — PHASE 11 · 2026-07-26 · three agent slices, merged and verified
+
+Three Kimi K3 agents (opencode, `--auto`) in three git worktrees, panes split from the
+orchestrator's own tab. All merged into `feat/p2-fireworks`. **410 tests**, lint / `tsc --noEmit` /
+build clean. `main` untouched. Zero spend on Fireworks, Daytona, Braintrust or ElevenLabs — every
+check below was mock or unit.
+
+### Follow-ups that never aggregate a label (`p11/follow-ups` → `1718894`)
+
+The deck was offering "What share of release year came from the top rating?" because any integer
+column counted as a measure. Now a measure must be honest to aggregate: a name word list
+disqualifies (year, id, rating, code…) or qualifies (sales, duration, quantity…), and when the name
+says nothing the *values* decide — year-shaped ranges, near-one-distinct-per-row identifiers, small
+integer scales. Unknown numbers still qualify, so an unanticipated file keeps its breakdowns.
+
+Verified against the real Netflix profile with the live run's own finding: "How many titles are
+there for each type?", "Which country has the most titles?", "How many titles are there for each
+rating?" — and Superstore still gets three sales-shaped suggestions. Two good suggestions beat
+three nonsense ones.
+
+### One narration call per slide (`p11/narration` → `6ed4f03`)
+
+`/api/speak` now takes every beat of a slide and returns one clip plus `beatEndsSeconds`; the
+player walks the UI focus along those boundaries. Boundaries come from ElevenLabs' character
+alignment, falling back to a proportional estimate when alignment is absent or mismatched — "a
+silently wrong boundary is worse than an estimated one". The abort signal is passed through to
+ElevenLabs, so an interrupt stops the spend and not just the sound.
+
+**Unverified:** the batched path itself. Mock returns 204 before any of it, so a browser exercises
+only the timed-beat fallback. The real call-count drop and interrupt-mid-clip need a live run.
+
+### Multi-finding decks, off by default (`p11/multi-finding` → `8f5d58f`)
+
+`LIMITS.maxFindingsPerDeck` defaults to **1**, and at 1 the pipeline is exactly what it was.
+Follow-up questions come from the free, guardrail-filtered suggestion machinery — no extra model
+call to choose them. A follow-up that fails to verify is swallowed and the run stops, so the deck
+never hedges. The iterator is hand-built rather than an async generator, because a generator queues
+`return()` behind a pending `next()` and would leave an analyst run billing after the client
+cancels.
+
+Verified in mock at a temporarily raised ceiling (reverted): one request streamed **3** findings,
+the deck rendered 17 slides — three findings each with figure, meaning, caveats and working — and
+closed on "What it adds up to" with "Every figure computed by code and traced to source cells."
+
+**Money shape to know:** above 1, one HTTP request spends N sandbox runs while consuming a single
+rate-limit token. `maxPaidRunsPerProcess` is still the backstop. The default of 1 is what keeps
+this safe, and raising it is the builder's decision.
+
+### Two things worth remembering
+
+- The stale-base trap: `git diff feat/p2-fireworks..HEAD` on a worktree cut from an older tip shows
+  the *other* slices as deletions. Diff against the branch's actual base or you will read a merge
+  as a revert.
+- Synthetic clicks from the browser tool silently stopped landing for a stretch, which looked
+  exactly like a merge regression that had killed every button. An in-page `.click()` fired the
+  request immediately and proved the app was fine. When the UI looks dead, prove it from inside the
+  page before believing the automation.
+
+### Mock wart, nobody's slice, still open
+
+The mock engine answers every question by summing a numeric column — on Netflix it reports "Total
+release year across the file comes to 80,784", the exact nonsense the follow-up fix now refuses to
+suggest. It also makes a multi-finding mock deck show the same figure three times. Live models do
+not do this. Flagged, not fixed: it was outside every agent's ownership.
