@@ -1,11 +1,19 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
+import * as analystModule from "@/lib/analyst";
 import { generatePandasCode } from "@/lib/codegen/generate";
 import { SANDBOX_CSV_PATH } from "@/lib/daytona/sandbox";
 import { realAnalyst } from "@/lib/real-analyst";
 import { readEventStream } from "@/lib/stream";
-import { resolveUpload } from "@/lib/datasets";
-import type { AnalysisRequest, Finding, StageEvent } from "@/lib/types";
+import { contentHash, resolveUpload } from "@/lib/datasets";
+import type { PrepReport } from "@/lib/prepare/run";
+import { setPrep } from "@/lib/prepare/store";
+import type {
+  AnalysisRequest,
+  Analyst,
+  Finding,
+  StageEvent,
+} from "@/lib/types";
 import { POST, runtime } from "@/app/api/analyze/route";
 
 vi.mock("@/lib/codegen/generate", () => ({
@@ -32,6 +40,7 @@ vi.mock("@/lib/codegen/generate", () => ({
 
 vi.mock("@/lib/daytona/sandbox", () => ({
   SANDBOX_CSV_PATH: "/workspace/data.csv",
+  getSandboxIdentity: vi.fn(() => 0),
   getWarmSandbox: vi.fn(async () => ({
     sandboxId: "stub",
     reused: true,
@@ -96,7 +105,70 @@ async function codegenRequestFor(
   return codegenRequest;
 }
 
+async function routeAnalysisRequestFor(
+  body: typeof validBody,
+  ip: string,
+): Promise<AnalysisRequest> {
+  let received: AnalysisRequest | undefined;
+  const analyst: Analyst = {
+    async *run(request) {
+      received = request;
+    },
+  };
+  const getAnalyst = vi
+    .spyOn(analystModule, "getAnalyst")
+    .mockReturnValue(analyst);
+
+  try {
+    const response = await POST(analyzeRequest(body, ip));
+    expect(response.status).toBe(200);
+    await response.text();
+  } finally {
+    getAnalyst.mockRestore();
+  }
+
+  if (!received) throw new Error("Expected the route to run the analyst.");
+  return received;
+}
+
 describe("POST /api/analyze", () => {
+  it("passes a successful cached prep path to the analyst", async () => {
+    const preparedUpload = {
+      filename: "prepared.csv",
+      content: "kind,duration\nMovie,90 min\nSeries,2 Seasons\n",
+    };
+    const report: PrepReport = {
+      ok: true,
+      analysisPath: "/workspace/clean-prepared.csv",
+      fixes: [],
+      questions: [],
+      counts: null,
+    };
+    setPrep(contentHash(preparedUpload.content), report);
+
+    const received = await routeAnalysisRequestFor(
+      { ...validBody, upload: preparedUpload },
+      "route-prepared-path",
+    );
+
+    expect(received.analysisPath).toBe(report.analysisPath);
+  });
+
+  it("passes no prepared path when prep is unavailable", async () => {
+    const received = await routeAnalysisRequestFor(
+      {
+        ...validBody,
+        upload: {
+          filename: "raw.csv",
+          content: "kind,duration\nMovie,91 min\n",
+        },
+      },
+      "route-missing-prep",
+    );
+
+    expect(received.analysisPath).toBeUndefined();
+  });
+
   it("answers from the prepared file when prep succeeded", async () => {
     const codegenRequest = await codegenRequestFor({
       question: "What were total sales?",
