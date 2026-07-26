@@ -553,7 +553,7 @@ function SlideContent({
           <ProofCount value={finding.grounding.rowCount} label="rows read" />
           <ProofCount
             value={provenEvidence[0]?.supportingRows ?? 0}
-            label="schema proofs"
+            label="rows that agree"
           />
         </div>
       </div>
