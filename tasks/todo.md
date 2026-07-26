@@ -59,3 +59,25 @@ runs a full demo. Parallelisable across 3 agents (UI / API+types / data).
 2. Each phase ends with a PR into `dev` + a "how to verify" summary, then **STOP** for review.
 3. Phase 1 must stay runnable with zero keys forever — later phases add a real path, they do not
    replace the mock path.
+
+---
+
+## p11/multi-finding — 2026-07-26 (TASK.md, branch `p11/multi-finding`)
+
+Multi-finding deck, OFF by default behind `LIMITS.maxFindingsPerDeck` (default 1 — cost is
+linear in findings; builder turns it up when he signs off on spend).
+
+- [x] `lib/config.ts`: `maxFindingsPerDeck: 1` with the money comment
+- [x] `lib/deck.ts`: `buildDeck(question, Finding | Finding[], profile)` — 1 verified →
+      byte-identical single deck; >1 → opener / per-finding slides with `findingIndex` /
+      tying summary; unverified findings are absent, never hedged
+- [x] `app/api/analyze/route.ts`: `runDeckQuestions` — follow-ups from the free,
+      guardrail-filtered suggestion machinery; failed follow-up findings swallowed;
+      hand-built iterator so `return()` still closes the analyst promptly on cancel
+- [x] `hooks/use-analysis.ts` + `console.tsx`: accumulate findings, deck from verified list
+- [x] `deck-player.tsx` (shared, minimal): per-slide finding resolution, caveat index from
+      last id segment, multi-figure summary branch
+- [x] Tests: `tests/deck-multi.test.ts` (14) + `tests/analyze-multifinding.test.ts` (6)
+- [x] Gates: `tsc --noEmit`, `eslint .`, `vitest run` (381 passed), `next build` — all clean
+- [x] Mock-mode smoke over HTTP, zero keys: single-finding stream unchanged, refusal forwarded
+- [ ] Commit + push. No PR, no merge.

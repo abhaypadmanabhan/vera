@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useAnalysis } from "@/hooks/use-analysis";
 import { buildDeck } from "@/lib/deck";
-import type { DatasetSummary } from "@/lib/types";
+import type { DatasetSummary, Finding } from "@/lib/types";
 import { AskScreen } from "./ask-screen";
 import { TopBar } from "./chrome";
 import { DeckPlayer, type DeckBenchmark } from "./deck-player";
@@ -32,7 +32,7 @@ export function Console({
   benchmark: DeckBenchmark;
   isMock: boolean;
 }) {
-  const { stages, finding, error, isRunning, start, reset } = useAnalysis();
+  const { stages, finding, findings, error, isRunning, start, reset } = useAnalysis();
   const prep = usePrepare();
   const [question, setQuestion] = useState("");
   const [asked, setAsked] = useState("");
@@ -83,7 +83,10 @@ export function Console({
     setStartedAt(0);
   }, [reset]);
 
-  const settled = finding !== null || error !== null;
+  // Settled only once the stream has ENDED — a multi-finding deck keeps
+  // streaming findings after the first one, and a half-built deck must never
+  // appear. With one finding the stream ends with it, so this is unchanged.
+  const settled = !isRunning && (finding !== null || error !== null);
   const phase = !submitted ? "ask" : settled ? "finding" : "working";
   const profile = useMemo(
     () => ({
@@ -98,17 +101,32 @@ export function Console({
     [activeDataset],
   );
 
+  /**
+   * The deck presents every VERIFIED finding and nothing else. A finding that
+   * failed to verify is absent — the asked question's failure still routes to
+   * the refusal screen below, because then there is no deck at all.
+   */
+  const verifiedFindings = useMemo(
+    () =>
+      findings.filter(
+        (candidate): candidate is Extract<Finding, { verdict: "verified" }> =>
+          candidate.verdict === "verified",
+      ),
+    [findings],
+  );
+
   const deck = useMemo(
     () =>
-      finding?.verdict === "verified" ? buildDeck(asked, finding, profile) : null,
-    [asked, finding, profile],
+      verifiedFindings.length > 0 ? buildDeck(asked, verifiedFindings, profile) : null,
+    [asked, verifiedFindings, profile],
   );
 
   // "You might also ask..." — derived from the columns the code actually read,
   // and filtered through the guardrail so every suggestion is answerable.
+  const firstVerified = verifiedFindings[0] ?? null;
   const suggestedFollowUps = useMemo(
-    () => (finding ? suggestFollowUps(finding, profile) : []),
-    [finding, profile],
+    () => (firstVerified ? suggestFollowUps(firstVerified, profile) : []),
+    [firstVerified, profile],
   );
 
   const askFollowUp = useCallback(
@@ -150,10 +168,10 @@ export function Console({
         />
       )}
 
-      {phase === "finding" && finding?.verdict === "verified" && deck && (
+      {phase === "finding" && firstVerified && deck && (
         <DeckPlayer
           deck={deck}
-          finding={finding}
+          finding={firstVerified}
           dataset={activeDataset}
           benchmark={benchmark}
           isMock={isMock}
@@ -162,7 +180,7 @@ export function Console({
         />
       )}
 
-      {phase === "finding" && finding?.verdict === "unverified" && (
+      {phase === "finding" && !firstVerified && finding?.verdict === "unverified" && (
         <FindingScreen
           question={asked}
           finding={finding}
