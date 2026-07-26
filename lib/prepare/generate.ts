@@ -5,6 +5,7 @@ import {
   type FireworksChatResult,
   type FireworksClient,
 } from "../fireworks/client";
+import { parseCsv } from "../csv";
 import type { DatasetProfile } from "../types";
 
 export interface PrepRequest {
@@ -525,6 +526,159 @@ export function parsePrepResponse(
 
 function pythonString(value: string): string {
   return JSON.stringify(value);
+}
+
+export interface MockPreparedArtifact {
+  content: string;
+  counts: {
+    rowsBefore: number;
+    rowsAfter: number;
+    duplicatesDropped: number;
+    cellsCoerced: number;
+    columnsAdded?: number;
+  };
+}
+
+function csvCell(value: string): string {
+  return /[",\r\n]/.test(value)
+    ? `"${value.replaceAll('"', '""')}"`
+    : value;
+}
+
+function serializeCsv(rows: string[][]): string {
+  return `${rows.map((row) => row.map(csvCell).join(",")).join("\n")}\n`;
+}
+
+function normalizedDate(value: string, format: string): string {
+  const parts = value.trim().split(/[/-]/);
+  if (parts.length !== 3) return value;
+  const [first = "", second = "", third = ""] = parts;
+  const year = format === "%Y-%m-%d" ? first : third;
+  const month = format === "%d/%m/%Y" ? second : first;
+  const day = format === "%Y-%m-%d" ? third : second;
+  if (![year, month, day].every((part) => /^\d+$/.test(part))) return value;
+  return `${year.padStart(4, "0")}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+}
+
+/**
+ * Deterministic in-memory stand-in for the exact profile-gated mock prep.
+ * It mirrors only transforms selected by transformFor; the whitelist remains
+ * enforced exclusively by canonicalizePrepCode.
+ */
+export function createMockPreparedArtifact(
+  profile: DatasetProfile,
+  content: string,
+): MockPreparedArtifact {
+  const [rawHeader = [], ...rawBody] = parseCsv(content);
+  const header = [...rawHeader];
+  const body = rawBody.map((row) =>
+    Array.from({ length: rawHeader.length }, (_, index) => row[index] ?? ""),
+  );
+  let cellsCoerced = 0;
+  let columnsAdded = 0;
+
+  const replaceColumn = (
+    index: number,
+    clean: (value: string) => string,
+  ): void => {
+    for (const row of body) {
+      const before = row[index] ?? "";
+      const after = clean(before);
+      if (after !== before) cellsCoerced++;
+      row[index] = after;
+    }
+  };
+  const addColumn = (
+    name: string,
+    valueFor: (row: string[]) => string,
+  ): void => {
+    header.push(name);
+    for (const row of body) row.push(valueFor(row));
+    columnsAdded++;
+  };
+
+  for (const column of profile.columns) {
+    if (!transformFor(column)) continue;
+    const index = rawHeader.indexOf(column.name);
+    if (index < 0) continue;
+    if (mixedUnitColumn(column)) {
+      addColumn(`${column.name}_amount`, (row) => {
+        const match = /^\s*(\d+(?:\.\d+)?)\s+(\S+)\s*$/.exec(
+          row[index] ?? "",
+        );
+        return match?.[1] ?? "";
+      });
+      addColumn(`${column.name}_unit`, (row) => {
+        const match = /^\s*(\d+(?:\.\d+)?)\s+(\S+)\s*$/.exec(
+          row[index] ?? "",
+        );
+        return match?.[2] ?? "";
+      });
+      continue;
+    }
+    const separator = multiValueSeparator(column);
+    if (multiValueSplitOffered(column) && separator) {
+      addColumn(`${column.name}_list`, (row) => {
+        const value = row[index] ?? "";
+        return value.includes(separator)
+          ? value
+              .split(separator)
+              .map((part) => part.trim())
+              .join(" | ")
+          : "";
+      });
+      continue;
+    }
+    if (booleanNormalisationOffered(column)) {
+      replaceColumn(index, (value) => {
+        const normalized = value.trim().toLowerCase();
+        if (BOOLEAN_TRUE_VALUES.has(normalized)) return "True";
+        if (BOOLEAN_FALSE_VALUES.has(normalized)) return "False";
+        return "";
+      });
+      continue;
+    }
+    if (column.kind === "number" || column.kind === "integer") {
+      replaceColumn(index, (value) => {
+        const stripped = value.replace(/[$,%]/g, "").trim();
+        const numeric = Number(stripped);
+        return stripped !== "" && Number.isFinite(numeric)
+          ? String(numeric)
+          : "";
+      });
+      continue;
+    }
+    if (column.kind === "date" && column.dateFormat) {
+      replaceColumn(index, (value) =>
+        normalizedDate(value, column.dateFormat ?? ""),
+      );
+      continue;
+    }
+    if (categoryNormalisationOffered(column)) {
+      replaceColumn(index, (value) => value.trim().replace(/\s+/g, " "));
+      continue;
+    }
+    replaceColumn(index, (value) => value.trim());
+  }
+
+  const seen = new Set<string>();
+  const deduplicated = body.filter((row) => {
+    const key = JSON.stringify(row);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  const counts: MockPreparedArtifact["counts"] = {
+    rowsBefore: rawBody.length,
+    rowsAfter: deduplicated.length,
+    duplicatesDropped: body.length - deduplicated.length,
+    cellsCoerced,
+  };
+  if (columnsAdded > 0) counts.columnsAdded = columnsAdded;
+  return {
+    content: serializeCsv([header, ...deduplicated]),
+    counts,
+  };
 }
 
 function mockQuestions(profile: DatasetProfile): string[] {

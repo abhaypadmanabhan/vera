@@ -9,6 +9,7 @@ import {
   getWarmSandbox,
   readSandboxFile,
 } from "./daytona/sandbox";
+import { profileDataset } from "./profile/profiler";
 import { verifyContextFigures, verifyGrounding } from "./verify";
 import type { AnalysisRequest, Analyst, StageEvent } from "./types";
 
@@ -77,10 +78,15 @@ export const realAnalyst: Analyst = {
 
     if (request.analysisPath && request.analysisProfile) {
       try {
+        const preparedContent = await readSandboxFile(request.analysisPath);
         analysisDataset = {
           ...dataset,
-          content: await readSandboxFile(request.analysisPath),
-          profile: request.analysisProfile,
+          content: preparedContent,
+          profile: profileDataset(
+            dataset.id,
+            dataset.filename,
+            preparedContent,
+          ),
         };
         sandboxPath = request.analysisPath;
       } catch {

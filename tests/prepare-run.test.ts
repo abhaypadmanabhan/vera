@@ -562,24 +562,53 @@ describe("prepareDataset", () => {
         ],
       },
     };
-    const dependencies = {
-      mockMode: true,
-      executor: successfulExecutor(),
-      reader: async () =>
-        [
-          "kind,duration,duration_amount,duration_unit",
-          "Movie,90 min,90,min",
-          "Series,2 Seasons,2,Seasons",
-        ].join("\n"),
-    } as Parameters<typeof prepareDataset>[1] & {
-      reader: (path: string) => Promise<string>;
-    };
-
-    const report = await prepareDataset(mixedUnits, dependencies);
+    const report = await prepareDataset(mixedUnits, { mockMode: true });
 
     expect(
       report.analysisProfile?.columns.map((column) => column.name),
     ).toContain("duration_amount");
+    expect(report.counts).toMatchObject({
+      rowsBefore: 2,
+      rowsAfter: 2,
+      duplicatesDropped: 0,
+      columnsAdded: 2,
+    });
+  });
+
+  it("keeps mock fixes and measured cleanup counts consistent", async () => {
+    const percentages: ResolvedDataset = {
+      ...DATASET,
+      id: "rates",
+      filename: "rates.csv",
+      content: "rate\n10%\n25%\n",
+      profile: {
+        ...DATASET.profile,
+        datasetId: "rates",
+        filename: "rates.csv",
+        rowCount: 2,
+        columns: [
+          {
+            name: "rate",
+            kind: "number",
+            nullCount: 0,
+            distinctCount: 2,
+            sampleValues: ["10%", "25%"],
+            dateFormat: null,
+            evidence: null,
+          },
+        ],
+      },
+    };
+
+    const report = await prepareDataset(percentages, { mockMode: true });
+
+    expect(report.counts?.cellsCoerced).toBe(2);
+    expect(
+      report.analysisProfile?.columns[0]?.sampleValues,
+    ).toEqual(["10", "25"]);
+    expect(report.fixes).toContain(
+      "Symbols and separators around amounts will be removed.",
+    );
   });
 
   it("uses only the first five parsed data rows when generating prep", async () => {

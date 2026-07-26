@@ -22,8 +22,10 @@ import {
   type AuditCounts,
 } from "./audit";
 import {
+  createMockPreparedArtifact,
   generatePrep,
   PREP_FIXES,
+  type MockPreparedArtifact,
   type PrepOutput,
   type PrepRequest,
 } from "./generate";
@@ -109,19 +111,14 @@ function mockExecution(stdout = ""): ExecutionResult {
   };
 }
 
-function createMockExecutor(dataset: ResolvedDataset): CodeExecutor {
+function createMockExecutor(
+  artifact: MockPreparedArtifact,
+): CodeExecutor {
   return {
     async execute({ code }) {
       if (code.includes("VERA_AUDIT:")) {
-        const rowsBefore = dataset.profile.rowCount;
-        const duplicatesDropped = dataset.profile.duplicateRowCount;
         return mockExecution(
-          `VERA_AUDIT:${JSON.stringify({
-            rowsBefore,
-            rowsAfter: rowsBefore - duplicatesDropped,
-            duplicatesDropped,
-            cellsCoerced: 0,
-          })}`,
+          `VERA_AUDIT:${JSON.stringify(artifact.counts)}`,
         );
       }
       return mockExecution();
@@ -153,17 +150,23 @@ export async function prepareDataset(
   dependencies: PrepareDependencies = {},
 ): Promise<PrepReport> {
   const mockMode = dependencies.mockMode ?? MOCK_MODE;
+  const mockArtifact = mockMode
+    ? createMockPreparedArtifact(dataset.profile, dataset.content)
+    : null;
   const generator = dependencies.generator ?? generatePrep;
   const loader = dependencies.loader ?? ensureDatasetLoaded;
   const reader =
     dependencies.reader ??
     (mockMode
-      ? async () => dataset.content
+      ? async () => mockArtifact?.content ?? dataset.content
       : readSandboxFile);
   const executor =
     dependencies.executor ??
     (mockMode
-      ? createMockExecutor(dataset)
+      ? createMockExecutor(
+          mockArtifact ??
+            createMockPreparedArtifact(dataset.profile, dataset.content),
+        )
       : daytonaExecutor);
   const cleanPath = cleanPathFor(dataset.content);
   let activeStage: PrepProgressEvent["stage"] | null = null;
