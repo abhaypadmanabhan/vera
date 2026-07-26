@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { Deck, Slide } from "@/lib/deck";
-import { matchSlide } from "@/lib/deck";
+import { evidenceHeadline, matchSlide } from "@/lib/deck";
 import { isProven } from "@/lib/types";
 import type { DatasetSummary, Finding, SchemaEvidence, SourceCell } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -659,8 +659,12 @@ function ProofChart({ evidence }: { evidence: SchemaEvidence | null }) {
   const contradict = evidence?.contradictingRows ?? 0;
   const max = Math.max(support, contradict, 1);
   return (
-    <div className="deck-proof-chart" role="img" aria-label={`${support} rows support the schema fact and ${contradict} contradict it`}>
-      <p>{evidence?.claim ?? "Rows behind the answer"}</p>
+    <div
+      className="deck-proof-chart"
+      role="img"
+      aria-label={`${support} rows agree with the check behind this answer and ${contradict} argue otherwise`}
+    >
+      <p>{evidenceHeadline(evidence)}</p>
       <div className="deck-proof-bars">
         {[
           { label: "Support", value: support, accent: true },

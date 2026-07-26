@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { buildDeck } from "@/lib/deck";
+import { verifyContextFigures } from "@/lib/verify";
 import type {
   ContextFigure,
   DatasetProfile,
   Finding,
   SchemaEvidence,
+  Valence,
 } from "@/lib/types";
 
 const JARGON =
@@ -32,6 +34,17 @@ const PRIOR_PERIOD: ContextFigure = {
   name: "prior_period",
   description: "the same quarter a year earlier",
   value: 121004.2,
+  columnsUsed: ["OrderDate", "Sales"],
+};
+
+/**
+ * The comparison as the program computed it: one named figure, its own value,
+ * described so the figure reads in front of it.
+ */
+const CHANGE_ON_PRIOR: ContextFigure = {
+  name: "change_on_prior_period",
+  description: "higher than the same quarter a year earlier",
+  value: "19%",
   columnsUsed: ["OrderDate", "Sales"],
 };
 
@@ -99,14 +112,96 @@ describe("the deck speaks like an analyst", () => {
     expect(bad).not.toMatch(/\d/);
   });
 
+  /*
+   * Three tails on one stem is a template, and it reads as one. Each valence
+   * has to start somewhere different, not arrive somewhere different.
+   */
+  it("opens three different ways rather than one stem with three tails", () => {
+    const openers = (["good", "bad", "neutral"] as const).map(
+      (valence: Valence) =>
+        buildDeck("q", { ...VERIFIED, valence }, PROFILE).slides[0]?.spoken ?? "",
+    );
+
+    const leadingClauses = openers.map((line) =>
+      (line.split(/[,.;:—]/)[0] ?? "").trim().toLowerCase(),
+    );
+    expect(new Set(leadingClauses).size, `shared clause: ${leadingClauses.join(" | ")}`).toBe(3);
+
+    const firstWords = openers.map((line) => (line.split(/\s+/)[0] ?? "").toLowerCase());
+    expect(new Set(firstWords).size, `shared opening word: ${firstWords.join(" | ")}`).toBe(3);
+  });
+
   it("says what it means when a context figure survived", () => {
     const deck = buildDeck("q", { ...VERIFIED, context: [PRIOR_PERIOD] }, PROFILE);
     const meaning = deck.slides.find((slide) => slide.kind === "meaning");
     expect(meaning?.spoken).toContain("the same quarter a year earlier");
   });
 
+  /*
+   * An analyst says "up nineteen percent on the quarter before", not "the other
+   * number is 121,004.20". The delta is only ever sayable because the generated
+   * program computed it and grounding kept it — TypeScript never subtracts one
+   * verified number from another and speaks the result.
+   */
+  it("speaks the change itself when the program computed one", () => {
+    const deck = buildDeck("q", { ...VERIFIED, context: [CHANGE_ON_PRIOR] }, PROFILE);
+    const meaning = deck.slides.find((slide) => slide.kind === "meaning");
+
+    expect(meaning?.spoken).toContain(
+      "That is 19 percent higher than the same quarter a year earlier",
+    );
+    expect(meaning?.spoken).not.toContain("Set against");
+    expect(meaning?.subtitle).toContain("19%");
+  });
+
+  it("falls back to setting the figure against a plain comparable", () => {
+    const deck = buildDeck("q", { ...VERIFIED, context: [PRIOR_PERIOD] }, PROFILE);
+    const meaning = deck.slides.find((slide) => slide.kind === "meaning");
+
+    expect(meaning?.spoken).toContain(
+      "Set against the same quarter a year earlier, that is 121,004.2",
+    );
+  });
+
   it("has NO meaning slide when nothing survived grounding", () => {
     const deck = buildDeck("q", { ...VERIFIED, context: [] }, PROFILE);
+    expect(deck.slides.some((slide) => slide.kind === "meaning")).toBe(false);
+  });
+
+  /*
+   * The end-to-end version of the rule above: a change the program declared but
+   * never printed is dropped by grounding, and a dropped figure leaves no slide
+   * behind for Vera to improvise over.
+   */
+  it("has NO meaning slide when the declared change never executed", () => {
+    const profileWithColumns: DatasetProfile = {
+      ...PROFILE,
+      columns: [
+        {
+          name: "Sales",
+          kind: "number",
+          nullCount: 0,
+          distinctCount: 3,
+          sampleValues: ["10", "20", "30"],
+          dateFormat: null,
+          evidence: null,
+        },
+      ],
+    };
+    const grounded = verifyContextFigures({
+      declared: [
+        {
+          name: "change_on_prior_period",
+          description: "higher than the same quarter a year earlier",
+          columnsUsed: ["Sales"],
+        },
+      ],
+      executed: {},
+      profile: profileWithColumns,
+    });
+
+    expect(grounded).toEqual([]);
+    const deck = buildDeck("q", { ...VERIFIED, context: grounded }, profileWithColumns);
     expect(deck.slides.some((slide) => slide.kind === "meaning")).toBe(false);
   });
 

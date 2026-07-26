@@ -85,6 +85,27 @@ describe("structured pandas codegen", () => {
     expect(prompt).not.toContain("NEVER_SEND_THE_WHOLE_CSV");
   });
 
+  /*
+   * The comparison Vera speaks has to be a figure the program printed. Nothing
+   * downstream may subtract one verified number from another and say the
+   * result, so the instruction to compute the change has to live here.
+   */
+  it("asks the program to compute a change against a comparable, never to state one", () => {
+    const prompt = buildCodegenPrompt({
+      question: "What were 2018 sales?",
+      profile,
+      sampleRows: [["08/11/2017", "261.96"]],
+      sandboxPath: "/workspace/data.csv",
+    });
+
+    expect(prompt).toContain("change against a comparable");
+    expect(prompt).toMatch(/compute it in the program/i);
+    expect(prompt).toMatch(/never state a change you did not compute/i);
+    // The description has to read with the figure in front of it, or the deck
+    // falls back to reciting the second number.
+    expect(prompt).toContain("higher than the same quarter a year earlier");
+  });
+
   it("parses the structured contract with zod and preserves pandas verbatim", () => {
     expect(
       parseCodegenResponse(validResponse, profile, "/workspace/data.csv"),

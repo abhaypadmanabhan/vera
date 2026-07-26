@@ -66,10 +66,15 @@ export interface Deck {
 
 const NO_DECK: Deck = { question: "", slides: [] };
 
+/**
+ * Three moods, three different sentences. A shared stem with three tails reads
+ * as a template because it is one, so each valence starts somewhere different:
+ * an offer, a warning, a report.
+ */
 const OPENERS: Record<Valence, string> = {
-  good: "Right — I went through this properly, and there is good news in here.",
-  bad: "Right — I went through this properly, and you are not going to like it.",
-  neutral: "Right — I went through this properly, and here is what I found.",
+  good: "There is good news in here, and I will start with it.",
+  bad: "You are not going to like this one, so I will get straight to it.",
+  neutral: "I have been through the file, and here is what came back.",
 };
 
 function fmt(value: number | string, unit: string | null): string {
@@ -80,8 +85,25 @@ function fmt(value: number | string, unit: string | null): string {
   return unit ? `${base}${unit}` : base;
 }
 
+/**
+ * A description the program already wrote as a comparison — "higher than the
+ * same quarter a year earlier", "down on the month before" — so the figure slots
+ * straight in front of it and Vera says the change rather than reciting a second
+ * number for the listener to subtract.
+ *
+ * The change itself is never computed here. It is a context figure the generated
+ * program produced and grounding kept, exactly like every other figure Vera
+ * speaks. A delta TypeScript derived from two verified numbers would still be a
+ * figure no code produced (PRD §6).
+ */
+const CHANGE_PHRASE =
+  /^(up|down|higher|lower|ahead|behind|above|below|more|less|better|worse|faster|slower|an? (increase|decrease|rise|fall|drop|gain|improvement))\b/i;
+
 function meaningLine(figure: ContextFigure): string {
-  return `Set against ${figure.description}, that is ${fmt(figure.value, null)}.`;
+  const value = fmt(figure.value, null);
+  return CHANGE_PHRASE.test(figure.description.trim())
+    ? `That is ${value} ${figure.description}.`
+    : `Set against ${figure.description}, that is ${value}.`;
 }
 
 /**
@@ -90,6 +112,28 @@ function meaningLine(figure: ContextFigure): string {
  * or the count. Works for any evidence a schema-driven profiler can produce, so
  * it must not assume the fact is about dates.
  */
+/**
+ * The proof chart's title, under the same rule as `caveatLine`: what the check
+ * was about, never how it was expressed. `evidence.claim` is true and stays
+ * inspectable on the working slide — but it carries a column name and a date
+ * format, and neither belongs on a slide Vera narrates.
+ */
+export function evidenceHeadline(evidence: SchemaEvidence | null): string {
+  if (!evidence) return "Rows behind the answer";
+  return evidence.contradictingRows === 0
+    ? "One thing changes the answer — every row agrees"
+    : "One thing changes the answer — what the rows said";
+}
+
+/**
+ * The opener names the file the way a person says it, without the extension.
+ * The working slide still shows the filename in full, which is where a technical
+ * detail belongs.
+ */
+function displayName(filename: string): string {
+  return filename.replace(/\.[a-z0-9]+$/i, "").trim() || filename;
+}
+
 function caveatLine(evidence: SchemaEvidence): string {
   const unanimous = evidence.contradictingRows === 0;
   return (
@@ -132,7 +176,7 @@ export function buildDeck(
     id: "opener",
     kind: "opener",
     title: question,
-    subtitle: `${profile.filename} · ${profile.rowCount.toLocaleString()} rows`,
+    subtitle: `${displayName(profile.filename)} · ${profile.rowCount.toLocaleString()} rows`,
     spoken: OPENERS[finding.valence],
     beats: [
       { focus: "question", spoken: OPENERS[finding.valence] },
@@ -161,10 +205,11 @@ export function buildDeck(
       kind: "meaning",
       title: "What that means",
       subtitle: meaningLines.join(" "),
-      spoken: meaningLines.join(" "),
+      // The slide shows "19%"; the voice says "19 percent".
+      spoken: meaningLines.map(speakable).join(" "),
       beats: finding.context.map((contextFigure, index) => ({
         focus: meaningFocus[index] ?? "tertiary",
-        spoken: meaningLine(contextFigure),
+        spoken: speakable(meaningLine(contextFigure)),
       })),
       covers: [
         "meaning",
