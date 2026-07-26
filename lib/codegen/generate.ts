@@ -137,9 +137,20 @@ Rules:
   for the previous comparable period, this slice's share of the whole, or the largest single
   contributor. Every context figure must be a bare number or bare string. Compute them, never
   estimate them. If nothing genuinely informative is available, return no context at all.
+- One context figure MAY be the change against a comparable — a percentage change or a difference
+  against the previous period, the rest of the file, or the rest of the group. If you want that
+  change spoken, compute it in the program and print it as its own context entry.
+  Never state a change you did not compute: the reader gets the figure your code produced, or none.
+- Express a percentage change as a string with the sign already in it, rounded to at most one
+  decimal place — "19%", "-4.2%" — and put the direction in the description, not the number.
 - The "context" field in the JSON you return declares those same figures in the SAME ORDER, with
   a "description" written the way you would say it out loud — "the same quarter a year earlier",
   never "prior_period" and never a column name.
+- Write a change figure's description so the figure reads in front of it, because that is how it
+  will be spoken: "higher than the same quarter a year earlier" becomes "That is 19% higher than
+  the same quarter a year earlier". Good: "down on the month before". Bad: "the percentage change
+  versus prior_period". Bad: "19% higher than last year" — the figure belongs in the value, never
+  in the description.
 - "valence": "good" if this finding is welcome news for the business, "bad" if it is unwelcome,
   "neutral" otherwise. It selects a tone of voice only. It MUST NOT contain a number, and it MUST
   be exactly one of those three words.
