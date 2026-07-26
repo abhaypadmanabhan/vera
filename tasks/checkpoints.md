@@ -433,3 +433,68 @@ decision is which project the app should log to, and `PROJECT_NAME` in
 
 These are product-shaped, not task-shaped. The next orchestrator should brainstorm and write a
 plan before cutting any agents.
+
+---
+
+## CP-8 — PRODUCT PHASE ROUND 1-3 · 2026-07-26 · handover to the next orchestrator
+
+Three rounds of agent work, all merged into `feat/p2-fireworks`, all verified in a real browser by
+the orchestrator, all seven worktrees torn down. **344 tests**, lint / `tsc --noEmit` / build clean.
+`main` still untouched.
+
+### What landed
+
+**Round 1 — the contract and prep** (`p10/contract`, `p10/prep`)
+- The printed result line may now carry the answer **and** grounded context figures, inside the
+  existing single `VERA_RESULT` marker. `python-policy.ts`'s one-print rule — a security invariant —
+  was deliberately kept intact; a bare scalar still parses exactly as before.
+- `verifyContextFigures` grounds every context figure independently and **drops** the ones that
+  fail. Never hedged, never rendered as pending.
+- `valence` is an enum (`good | bad | neutral`), so a tone can never carry a number.
+- `POST /api/prepare`: profiler detects deterministically, one Fireworks call writes the cleaning
+  script and proposes questions, one Daytona run executes it, and a **fixed audit program we wrote**
+  measures what changed. The model never claims what it changed.
+
+**Round 2 — voice, upload, wider transforms** (`p10/voice`, `p10/upload`, `p10/transforms`)
+- Deck reordered: opener → finding → meaning → caveat → working. Row counts left the opening,
+  `analystEvidenceLine`'s hardcoded "day first, not month first" was deleted, code and cells merged
+  into one silent working slide. `/open` untouched.
+- Upload front door: dropzone, prep stages, ready state, per-file chips.
+- The prep whitelist was widened — mixed-unit split, multi-value split, category normalisation,
+  boolean-ish — **without loosening the gate**. The model still may only select, never author.
+
+**Round 3 — six defects found by looking** (`p10/polish`, `p10/pipeline`)
+- The summary slide was printing `date_added is DD/MM/YYYY` verbatim. **328 passing tests said
+  nothing**, because the jargon test only ever asserted against spoken lines. Fixed, and a
+  rendered-text test now guards it.
+- `/api/analyze` never set `analysisPath`, so prep was decorative — every answer still came from the
+  raw file. Wired, with fallback.
+- Derived columns were invisible to codegen; the prepared profile now travels with the prepared path.
+- The audit no longer goes dark when prep adds a column, with every ambiguity guard intact.
+- Mock chips read as English; the counts panel renders.
+- `lib/mock/engine.ts` — unowned by every slice, flagged by two agents, fixed by the orchestrator.
+  It answered every question with one hardcoded Superstore figure, so a Netflix upload showed
+  `Sub-Category` in the code panel and the meaning slide had never once rendered.
+
+### The live run (2026-07-26, builder supervised, explicit go)
+
+3 × `POST /api/analyze 200` (~6s each) · 26 × `POST /api/speak 200` · 1 × `429` · **0 × /api/prepare**.
+
+- **Closed a known gap:** the orb's speaking state had never been driven by real audio. It has now.
+- **Sandbox reaped and confirmed gone.** `delete()` returned cleanly while the list still showed
+  `started` — the proof was polling until it disappeared, not the absence of an exception.
+- Five `stopped` sandboxes from 07-24 remain, deliberately untouched. Still the builder's call.
+
+### What the next orchestrator must know
+
+**Read `tasks/phase-11-scope.md` first.** P0 is non-negotiable and comes before everything else:
+**prep has never run against real Fireworks or real Daytona.** The specific risk is that
+`canonicalizePrepCode` demands token-for-token matches, and mock generates the canonical form by
+construction — so if a real model formats its pandas differently at all, every prep fails open and
+the entire upload story quietly does nothing. Mock cannot detect this.
+
+`tasks/lessons.md` holds three lessons from this stretch, all earned:
+1. Dispatching an agent is not the end of a turn — the builder caught two agents idle-and-finished
+   because no poller was set.
+2. A green test suite is not a look.
+3. A call that returns without error has not necessarily done anything.

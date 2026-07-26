@@ -1,7 +1,7 @@
 # RESUME PROMPT — paste into a fresh Claude Code session
 
 Everything below the line is the handoff. It assumes zero conversation history.
-Last updated **CP-7 (product phase handover), 2026-07-24 ~18:20 PDT**.
+Last updated **CP-8 (phase 11 handover), 2026-07-26**.
 
 ---
 
@@ -14,9 +14,11 @@ have to verify every line yourself.
 
 1. `PRD.md` — the bible. Especially §6, the honest definition of "verified".
 2. `CLAUDE.md` — the money rule and the honesty rule. Non-negotiable.
-3. `tasks/checkpoints.md` — **start at CP-7**, the last entry.
-4. `tasks/definition-of-done.md` — 48 proven, 2 open.
-5. `DESIGN.md` — the design system.
+3. `tasks/checkpoints.md` — **start at CP-8**, the last entry.
+4. `tasks/phase-11-scope.md` — **your phase. P0 comes before everything else.**
+5. `tasks/definition-of-done.md` — §9 and §10 are the live ones.
+6. `tasks/lessons.md` — three lessons, all earned the hard way.
+7. `DESIGN.md` — the design system.
 
 Use the `superpowers` skill for coding work. For UI also use `frontend-design`, the shadcn MCP,
 and read the builder's vault at `/Users/abhayp/Documents/Obsidian Vault/UI-UX/`.
@@ -47,37 +49,30 @@ and read the builder's vault at `/Users/abhayp/Documents/Obsidian Vault/UI-UX/`.
 ## Where things stand
 
 Everything works end to end, live: Fireworks writes pandas → Daytona executes → `lib/verify.ts`
-gates it → the deck presents it → ElevenLabs narrates it. Guardrails refuse what the file cannot
-answer. Voice input works. Braintrust logs each run. **176 tests pass**, lint/tsc/build clean.
+gates it → the deck presents it → ElevenLabs narrates it. Upload, prep, per-file chips and the
+analyst-voiced deck are all merged and browser-verified. **344 tests pass**, lint/tsc/build clean.
 
-`main` is untouched. PR #22 is merged into `dev`. All agent worktrees are torn down.
+`main` is untouched. Branch is `feat/p2-fireworks` at `0a8b5c6`. All worktrees are torn down.
 
-## Do these first
+## Do this first
 
-1. **Braintrust visibility — probably not a bug.** The builder cannot see traces and considers
-   it a loss because he cannot show judges. The traces exist; they were verified through the
-   REST API. They are in org **Padzy**, project **Vera Accuracy Benchmark**:
-   `https://www.braintrust.dev/app/Padzy/p/Vera%20Accuracy%20Benchmark/logs`
-   His screenshot was of **My Project**, a different empty project the setup wizard made. Open
-   the real URL first. If traces are there, the only decision left is which project the app
-   should write to — `PROJECT_NAME` in `lib/braintrust/logger.ts` and `instrumentation.ts` must
-   agree. Do not start a deep diagnosis before checking this.
+**`tasks/phase-11-scope.md` P0. Nothing else starts until it is done.**
 
-2. **Make Vera sound like an analyst, not a parser.** This is the builder's main complaint.
-   Narration and slides still lead with "the dates were day-first", row counts, and parsing
-   detail. That was scaffolding built to prove grounding — it is not analysis. She should lead
-   with the finding and what it means: the number, the comparison, the "so what". Provenance
-   stays available, but secondary. `lib/deck.ts` owns the narration; note that its analyst voice
-   was deliberately written and must not be "simplified" back into reading the slides aloud.
+Prep — the whole any-file story — has **never run against real Fireworks or real Daytona**. The
+2026-07-26 live session made zero `/api/prepare` calls.
 
-3. **Upload any dataset.** Today the demo CSV is the centre of gravity. Vera should take an
-   arbitrary file — a Netflix report was the example — and produce a **data-backed presentation
-   with real insights**, not one figure per question. That means multiple findings composed into
-   a narrative. Note `resolveUpload` already exists in `lib/datasets.ts`; the profiler and the
-   guardrail are already schema-driven, so the foundation is there.
+The specific danger: `canonicalizePrepCode` rejects any prep program that does not match canonical
+transforms token for token, and mock generates the canonical form *by construction*. So mock proves
+nothing about this. If a real model quotes or structures its pandas even slightly differently, every
+prep is rejected, prep fails open silently, and the upload story does nothing at all while appearing
+to work.
 
-These are product-shaped, not task-shaped. **Brainstorm and write a plan before cutting agents.**
-Use the `superpowers:brainstorming` skill, get the builder's approval, then orchestrate.
+Ask the builder for one supervised live run on a real non-Superstore file. Upload, watch prep, ask
+two or three questions including one that needs a derived column such as `duration_amount`. Then
+delete the Daytona sandbox **and confirm it is gone from the list** — the delete call returning is
+not proof.
+
+Expect P0 to define the real work of this phase. Do not plan P1 in detail before its results land.
 
 ## Fleet
 
@@ -93,7 +88,11 @@ Cut worktrees with
 then `pnpm install` in each. Give each agent a `TASK.md` with **explicit file ownership** so
 slices never collide, and tell it: no PR, push only, report gaps explicitly.
 
-Two lessons from the last run, both cost real time:
+Three lessons from the last runs, in `tasks/lessons.md`. The one that cost the most:
+**dispatching an agent is not the end of a turn.** Two agents sat finished and unread because no
+poller was set. Start background work and you own it until you have read its output.
+
+Two more, both cost real time:
 - A claude-kind agent's first prompt sometimes stalls as a staged paste. Send one bare
   `herdr agent send-keys <name> enter` — do not resend the text.
 - Tell agents that `pnpm test` exiting non-zero on `ERR_PNPM_IGNORED_BUILDS` is not a failure —

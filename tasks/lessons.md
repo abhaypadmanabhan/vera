@@ -37,3 +37,19 @@ Three agents reported "all gates pass" truthfully and the defect still shipped t
 *rendered*, not on the data behind it. And no slice is verified until the orchestrator has looked
 at it in a browser — an agent's green gates prove the code does what the tests say, not that the
 product obeys the rule.
+
+---
+
+## 2026-07-26 — A call that returns without error has not necessarily done anything
+
+**What happened:** `sandbox.delete(60)` returned cleanly, and the very next list call still showed
+the sandbox as `started`. Reporting "reaped" at that moment would have been false, and the thing
+that bills would have kept billing.
+
+**Why it matters:** the Daytona list is eventually consistent. The delete had in fact landed — but
+the only way to know that was to poll until the sandbox was **gone from the list**, not to trust
+the absence of an exception.
+
+**How to apply:** for anything that costs money or destroys state, the proof is an independent
+observation of the new state, not the return value of the call that was supposed to change it.
+Poll until the world agrees.

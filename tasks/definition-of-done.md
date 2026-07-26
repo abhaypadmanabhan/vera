@@ -74,8 +74,10 @@ This is the product. If any box here is unticked, nothing else matters.
 - [x] Mock runs emit no telemetry.
 - [x] `.env.local`, `.env.braintrust` and `.braintrust.json` are gitignored and untracked.
 - [x] No real key appears in any tracked file.
-- [ ] **The Daytona sandbox is reaped after every live session.** Standing operational rule,
-      not a one-off — it bills while it sits.
+- [x] **The Daytona sandbox is reaped after every live session.** Standing operational rule,
+      not a one-off — it bills while it sits. Honoured after the 2026-07-26 live run: the sandbox
+      was deleted and **confirmed gone from the list**, because `delete()` returned cleanly while
+      the sandbox still showed `started` (see `tasks/lessons.md`).
 
 ## 6. Craft
 
@@ -111,13 +113,50 @@ Named here so nobody mistakes them for oversights.
 
 - **Interrupt and follow-up by voice** — out of scope by decision, not by accident. You can
   now *ask* by voice, but you cannot interrupt her by voice.
-- **The orb's speaking state has never been driven by real audio.** Mock mode returns 204 from
-  `/api/speak`, so `speaking` is only ever true during a paid ElevenLabs run. The wiring is
-  verified; the live pairing is not.
-- **Suggested follow-ups are schema-shaped, not insight-shaped.** They propose a breakdown, a
-  trend and a share — sound questions, but not the ones a domain expert would ask. Making them
-  smarter means a model call, and that would put a cost on every finding.
+- ~~**The orb's speaking state has never been driven by real audio.**~~ **CLOSED 2026-07-26.**
+  A live session made 26 successful `/api/speak` calls across 3 analyses; the orb entered its
+  speaking state on real audio.
+- ~~**Suggested follow-ups are schema-shaped, not insight-shaped.**~~ **CLOSED 2026-07-25.**
+  An uploaded file's chips now come from the prep call, which already holds the full profile, so
+  they cost nothing extra and every one is guardrail-filtered. **Never seen against a real
+  Fireworks response** — see `tasks/phase-11-scope.md` P0.
 - **Not deployed.** The static surfaces (`/`, `/open`, and the deck) could ship to Vercel for
   a shareable link at zero cost. The live `/ask` route must not be public without auth: a
   stranger clicking a chip spends real Fireworks, Daytona and ElevenLabs credit. PRD §5's
   stated reason (serverless timeouts) is stale — the real reason is money.
+
+---
+
+## 9. Upload any dataset (added 2026-07-25/26)
+
+The any-file path. **Everything here is proven in mock only unless it says otherwise** — see
+`tasks/phase-11-scope.md` P0, which exists to close exactly that gap.
+
+- [x] A user can upload their own CSV from the browser. Dropzone plus file picker, guarded on
+      extension and size **before** any request reaches a route that spends money.
+- [x] Prep runs once per file, memoised by content hash, and is rate limited.
+- [x] The model cannot author cleaning code. `canonicalizePrepCode` rebuilds the program from
+      canonical transforms derived from the profile; anything else is rejected, so imputation and
+      row deletion are structurally impossible rather than merely forbidden.
+- [x] What changed is **measured**, never claimed — a fixed audit program we wrote compares the two
+      files. Ambiguous row identity yields `null`, not a plausible guess.
+- [x] Prep fails open. A failed prep leaves the raw file askable and says so in plain English.
+- [x] Answers are computed from the prepared file, falling back to raw when prep is missing,
+      evicted or stale. A question is never failed because prep was unavailable.
+- [x] The columns prep creates are visible to codegen — the prepared profile travels with the
+      prepared path.
+- [x] Chips for an uploaded file come from that file, and every one passes the guardrail.
+- [x] The mock analyst answers from the file on screen, not from a hardcoded Superstore figure.
+- [ ] **Prep has never run against real Fireworks or real Daytona.** Zero `/api/prepare` calls in
+      the 2026-07-26 live session. The highest-risk unknown: whether a real model's pandas survives
+      the canonical whitelist at all.
+- [ ] **The widened transforms have never been executed by pandas** — only asserted in tests.
+- [ ] **"Ask anything" is only true for retail-shaped data.** `lib/guardrails/classify.ts` maps a
+      hardcoded business vocabulary; an arbitrary file degrades quietly to "allowed".
+
+## 10. Found in the live session, not yet fixed
+
+- [ ] **The rate limiter fired on a single local user** during ordinary demo clicking
+      (`POST /api/analyze 429`). The limit must stay; the window needs to fit a human presenting.
+- [ ] **26 ElevenLabs calls served 3 questions** — one round trip per narration beat. Cost scales
+      with how talkative the deck is, not with questions asked.
