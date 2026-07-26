@@ -168,8 +168,12 @@ The any-file path. **Everything here is proven in mock only unless it says other
       minutes for movies?"* → **108.86**, exit 0, 765 ms. The rendered code reads
       `clean-45c436….csv` — the prepared file, not the raw one — and selects `duration_amount`.
       The source-cell table shows the derived column's real values.
-- [ ] **"Ask anything" is only true for retail-shaped data.** `lib/guardrails/classify.ts` maps a
-      hardcoded business vocabulary; an arbitrary file degrades quietly to "allowed".
+- [x] **"Ask anything" refuses honestly on an arbitrary file.** The vocabulary is now derived from
+      the file — column names, its own category and label values, plus the synonyms of any concept
+      the file provably has. "How many directors are there?" on a Netflix upload refuses with
+      "This file does not record directors."; "How many movies are there?" runs. Refusal fires only
+      where the subject is named outright ("how many X"); looser wording still passes, and
+      execution stays the final arbiter.
 
 ## 10. Found in the live session, not yet fixed
 
@@ -179,13 +183,14 @@ The any-file path. **Everything here is proven in mock only unless it says other
       with how talkative the deck is, not with questions asked.
 - [ ] **The rate limiter fired again on 2026-07-26**, this time `POST /api/speak 429` mid-deck on
       the second question of a single local session. It now interrupts narration, not just a click.
-- [ ] **The closing slide reads `0 Support · 0 Contradict · 40 rows read · 0 rows that agree`** on
-      an uploaded file, under a number that verified and rendered. On a presentation surface that
-      reads as "nothing in the data agrees with this", which is the opposite of the claim. Seen on
-      both Netflix answers — the mean (108.86) and the string (`Jeans`). Not yet known whether
-      Superstore shows the same, or whether this is specific to the prepared-file path.
-- [ ] **Follow-up suggestions degrade to nonsense on an arbitrary file.** After a Netflix answer
-      the deck offered "Which country had the highest release year?", "How did release year change
-      year over year?" and "What share of release year came from the top rating?" — schema-shaped,
-      not insight-shaped, and on a presentation surface. This is `phase-11-scope.md` P1 showing up
-      in the demo, not a separate defect.
+- [x] ~~**The closing slide reads `0 Support · 0 Contradict · 0 rows that agree`**~~ **FIXED
+      2026-07-26.** Schema evidence exists only for a proven deterministic claim; a question that
+      reads no such column has none, and that absence was rendered as zero agreement beneath a
+      verified figure. The panel now drops entirely and the slide shows only rows read and cells
+      quoted back. Verified in a browser both ways: Superstore and the Netflix mock still show
+      their real counts; a dateless upload shows no agreement counts at all.
+- [~] **Follow-up suggestions degrade to nonsense on an arbitrary file.** After a Netflix answer
+      the deck offered "Which country had the highest release year?" and "What share of release
+      year came from the top rating?" — schema-shaped, not insight-shaped, on a presentation
+      surface. The guardrail half is fixed (below); the *generation* of follow-ups is still
+      schema-shaped and is the remaining half.
