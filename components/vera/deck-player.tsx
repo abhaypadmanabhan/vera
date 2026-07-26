@@ -547,15 +547,33 @@ function SlideContent({
           {finding.claim}
         </p>
       </div>
+      {/*
+        Agreement counts exist only for a proven deterministic claim about the
+        schema. Most questions rest on none, which is normal — and rendering that
+        as "0 rows that agree" beneath a verified figure reads as the data
+        disagreeing with the answer. Grounded or absent, same as context figures.
+      */}
       <div data-focus="proof" className={cn("deck-summary-grid", focusClass("proof"))}>
-        <ProofChart evidence={provenEvidence[0] ?? null} />
-        <div className="deck-proof-counts">
-          <ProofCount value={finding.grounding.rowCount} label="rows read" />
-          <ProofCount
-            value={provenEvidence[0]?.supportingRows ?? 0}
-            label="rows that agree"
-          />
-        </div>
+        {provenEvidence[0] ? (
+          <>
+            <ProofChart evidence={provenEvidence[0]} />
+            <div className="deck-proof-counts">
+              <ProofCount value={finding.grounding.rowCount} label="rows read" />
+              <ProofCount
+                value={provenEvidence[0].supportingRows}
+                label="rows that agree"
+              />
+            </div>
+          </>
+        ) : (
+          <div className="deck-proof-counts">
+            <ProofCount value={finding.grounding.rowCount} label="rows read" />
+            <ProofCount
+              value={finding.grounding.sampleCells.length}
+              label="cells quoted back"
+            />
+          </div>
+        )}
       </div>
       {benchmark && <BenchmarkPanel benchmark={benchmark} />}
     </section>

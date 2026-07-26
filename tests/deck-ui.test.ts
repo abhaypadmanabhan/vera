@@ -315,4 +315,68 @@ describe("deck slide presentation", () => {
       expect(markup).toContain(`data-kind="${slide.kind}"`);
     }
   });
+
+  /*
+   * Found in the 2026-07-26 live run on an uploaded file. Schema evidence only
+   * exists for a column carrying a proven deterministic inference — a date order,
+   * a cross-check. A question that reads no such column has no evidence, which is
+   * normal and honest. The summary slide rendered it as `0 Support · 0 Contradict
+   * · 0 rows that agree` beneath a verified figure, which reads as "nothing in the
+   * data agrees with this number" — the opposite of the claim being made.
+   *
+   * Same rule as the context figures: grounded or absent, never a hedge and never
+   * a zero standing in for "not applicable".
+   */
+  it("shows no agreement counts when the answer rests on no proven schema claim", () => {
+    const noEvidence: typeof finding = {
+      ...finding,
+      grounding: { ...finding.grounding, schemaEvidence: [] },
+    };
+    const summary = buildDeck(
+      "What is the average duration in minutes for movies?",
+      noEvidence,
+      profile,
+    ).slides.find((slide) => slide.kind === "summary");
+    expect(summary).toBeDefined();
+
+    const text = renderedText(
+      renderToStaticMarkup(
+        createElement(DeckSlide, {
+          slide: summary!,
+          finding: noEvidence,
+          dataset,
+          benchmark,
+          activeFocus: "proof",
+        }),
+      ),
+    );
+
+    expect(text).not.toMatch(/rows that agree/i);
+    expect(text).not.toMatch(/support/i);
+    expect(text).not.toMatch(/contradict/i);
+    // What is real still shows.
+    expect(text).toMatch(/rows read/i);
+  });
+
+  it("still shows agreement counts when a proven schema claim backs the answer", () => {
+    const summary = buildDeck(
+      "What were sales in Q3 2018?",
+      finding,
+      profile,
+    ).slides.find((slide) => slide.kind === "summary");
+    const text = renderedText(
+      renderToStaticMarkup(
+        createElement(DeckSlide, {
+          slide: summary!,
+          finding,
+          dataset,
+          benchmark,
+          activeFocus: "proof",
+        }),
+      ),
+    );
+
+    expect(text).toMatch(/rows that agree/i);
+    expect(text).toMatch(/5,952/);
+  });
 });
