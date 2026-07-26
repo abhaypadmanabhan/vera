@@ -158,10 +158,16 @@ The any-file path. **Everything here is proven in mock only unless it says other
       honestly described the code it was handed and lost the entire prep, silently, on every
       upload. The schema's fix enum is now narrowed per profile and unsupported sentences are
       filtered, never fatal. Proven live: second call ACCEPTED.
-- [~] **Prep has still never run against real Daytona.** Fireworks half proven above; no
-      `/api/prepare` has yet executed a prep program in a sandbox. Step B of `phase-11-scope.md` P0.
-- [ ] **The widened transforms have never been executed by pandas** — the model now demonstrably
-      writes them, but no sandbox has run them.
+- [x] **Prep runs against real Daytona.** First-ever `POST /api/prepare 200`, 22.4s, on the Netflix
+      file in a browser (2026-07-26). Ready state rendered six plain-English fix sentences and the
+      measured line `40 rows in · 40 out · 0 exact duplicates removed · 40 values cleaned`.
+- [x] **The widened transforms execute in pandas.** `duration` → `duration_amount` /
+      `duration_unit` and `listed_in` → `listed_in_list` ran in the sandbox. The audit still
+      reported usable counts after two columns were added — it did not go dark.
+- [x] **Codegen uses the derived columns on a real question.** *"What is the average duration in
+      minutes for movies?"* → **108.86**, exit 0, 765 ms. The rendered code reads
+      `clean-45c436….csv` — the prepared file, not the raw one — and selects `duration_amount`.
+      The source-cell table shows the derived column's real values.
 - [ ] **"Ask anything" is only true for retail-shaped data.** `lib/guardrails/classify.ts` maps a
       hardcoded business vocabulary; an arbitrary file degrades quietly to "allowed".
 
@@ -171,3 +177,15 @@ The any-file path. **Everything here is proven in mock only unless it says other
       (`POST /api/analyze 429`). The limit must stay; the window needs to fit a human presenting.
 - [ ] **26 ElevenLabs calls served 3 questions** — one round trip per narration beat. Cost scales
       with how talkative the deck is, not with questions asked.
+- [ ] **The rate limiter fired again on 2026-07-26**, this time `POST /api/speak 429` mid-deck on
+      the second question of a single local session. It now interrupts narration, not just a click.
+- [ ] **The closing slide reads `0 Support · 0 Contradict · 40 rows read · 0 rows that agree`** on
+      an uploaded file, under a number that verified and rendered. On a presentation surface that
+      reads as "nothing in the data agrees with this", which is the opposite of the claim. Seen on
+      both Netflix answers — the mean (108.86) and the string (`Jeans`). Not yet known whether
+      Superstore shows the same, or whether this is specific to the prepared-file path.
+- [ ] **Follow-up suggestions degrade to nonsense on an arbitrary file.** After a Netflix answer
+      the deck offered "Which country had the highest release year?", "How did release year change
+      year over year?" and "What share of release year came from the top rating?" — schema-shaped,
+      not insight-shaped, and on a presentation surface. This is `phase-11-scope.md` P1 showing up
+      in the demo, not a separate defect.

@@ -545,3 +545,60 @@ Second live call after the fix: **ACCEPTED**, six supported fix sentences, five 
 Daytona has never executed a prep program. Unknowns 3, 4 and 5 of `phase-11-scope.md` P0 — do the
 widened transforms actually run in pandas, does the audit report usable counts after them, and does
 codegen use the derived columns — all need the supervised browser run. Awaiting the builder's go.
+
+---
+
+## CP-10 — PHASE 11 P0 STEP B · 2026-07-26 · the upload path proven end to end, live
+
+Supervised browser run on `feat/p2-fireworks`, real Fireworks + real Daytona + real ElevenLabs.
+**P0 is closed.** Sandbox reaped and confirmed gone from the list.
+
+### The run
+
+`POST /api/prepare 200` in 22.4s — the first one that has ever existed. Then two analyses:
+
+| Question | Answer | Evidence |
+|---|---|---|
+| What is the average duration in minutes for movies? | **108.86** | exit 0, context figures 166 longest / 88 shortest |
+| (stray click) which movie name s the longest | **Jeans** | exit 0, 765 ms, 40 rows read |
+
+The rendered code on the working slide is the proof that matters:
+
+```
+df = pd.read_csv('/home/daytona/clean-45c436….csv')
+m['duration_amount'] = pd.to_numeric(m['duration_amount'], errors='coerce')
+```
+
+It reads the **prepared** file, and it uses `duration_amount` — a column that did not exist in the
+upload. Every remaining P0 unknown falls out of that one screen:
+
+- the widened transforms really execute in pandas, not just in tests
+- the audit reports usable counts after two columns are added: `40 rows in · 40 out · 0 exact
+  duplicates removed · 40 values cleaned`. It does not go dark
+- codegen sees and uses the derived columns
+- prep memoisation by content hash works — the clean path hash matches the one from
+  `tests/live-prep.test.ts`
+
+Chips on the ready screen were all Netflix-specific and jargon-free.
+
+### Found by looking, not yet fixed
+
+1. **`0 Support · 0 Contradict · 40 rows read · 0 rows that agree`** on the closing slide, under a
+   number that verified and rendered. On stage that reads as "nothing agrees with this". Seen on
+   both answers, on the prepared-file path. Unknown whether Superstore does the same.
+2. **`POST /api/speak 429`** mid-deck on the second question, single local session. The rate
+   limiter now interrupts narration, not just a click. `definition-of-done.md` §10.
+3. **Follow-ups degrade to nonsense on an arbitrary file** — "Which country had the highest release
+   year?", "What share of release year came from the top rating?". P1 showing up on a presentation
+   surface.
+
+### Money
+
+2 Fireworks prep calls (Step A) + 1 prep + 2 analyses + ~11 narration calls. One sandbox created,
+deleted, and **polled until it was gone from the list**. The five `stopped` sandboxes from 07-24
+remain untouched — still the builder's call.
+
+### Next
+
+P0 is done and it did what it was supposed to do: it defined the phase. The queue is now the three
+defects above plus P1's profile-derived concept map, which defect 3 makes urgent.
