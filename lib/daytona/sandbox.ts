@@ -131,6 +131,15 @@ export async function ensureDatasetLoaded(
   return { uploaded: true, bytes };
 }
 
+/** Read a sandbox artifact back without executing code or invoking a model. */
+export async function readSandboxFile(remotePath: string): Promise<string> {
+  assertLive();
+  const s = state();
+  if (!s.sandbox) throw new Error("Sandbox unavailable.");
+  const content = await s.sandbox.fs.downloadFile(remotePath);
+  return content.toString("utf8");
+}
+
 /**
  * Accept a bare scalar, or a single-entry object/array wrapping one.
  *

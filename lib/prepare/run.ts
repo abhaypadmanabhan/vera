@@ -2,22 +2,30 @@ import type { CodeExecutor } from "../codegen/retry";
 import { LIMITS, MOCK_MODE } from "../config";
 import { parseCsv } from "../csv";
 import { contentHash } from "../datasets";
+import { profileDataset } from "../profile/profiler";
 import {
   CLEAN_CSV_PATH,
   SANDBOX_CSV_PATH,
   daytonaExecutor,
   ensureDatasetLoaded,
+  readSandboxFile,
 } from "../daytona/sandbox";
 import { classifyQuestion } from "../guardrails/classify";
-import type { ExecutionResult, ResolvedDataset } from "../types";
+import type {
+  DatasetProfile,
+  ExecutionResult,
+  ResolvedDataset,
+} from "../types";
 import {
   buildAuditProgram,
   parseAuditOutput,
   type AuditCounts,
 } from "./audit";
 import {
+  createMockPreparedArtifact,
   generatePrep,
   PREP_FIXES,
+  type MockPreparedArtifact,
   type PrepOutput,
   type PrepRequest,
 } from "./generate";
@@ -28,6 +36,8 @@ const FAILURE_DETAIL =
 export interface PrepReport {
   ok: boolean;
   analysisPath: string;
+  /** Deterministic profile of the exact artifact at analysisPath. */
+  analysisProfile?: DatasetProfile;
   fixes: string[];
   questions: string[];
   counts: AuditCounts | null;
@@ -44,6 +54,8 @@ type DatasetLoader = (
   content: string,
 ) => Promise<unknown>;
 
+type PreparedFileReader = (path: string) => Promise<string>;
+
 export interface PrepProgressEvent {
   stage: "cleaning" | "checking";
   status: "active" | "complete" | "failed";
@@ -55,6 +67,7 @@ interface PrepareDependencies {
   mockMode?: boolean;
   generator?: PrepGenerator;
   loader?: DatasetLoader;
+  reader?: PreparedFileReader;
   onProgress?: (event: PrepProgressEvent) => void;
 }
 
@@ -98,9 +111,16 @@ function mockExecution(stdout = ""): ExecutionResult {
   };
 }
 
-function createMockExecutor(): CodeExecutor {
+function createMockExecutor(
+  artifact: MockPreparedArtifact,
+): CodeExecutor {
   return {
-    async execute() {
+    async execute({ code }) {
+      if (code.includes("VERA_AUDIT:")) {
+        return mockExecution(
+          `VERA_AUDIT:${JSON.stringify(artifact.counts)}`,
+        );
+      }
       return mockExecution();
     },
   };
@@ -130,12 +150,23 @@ export async function prepareDataset(
   dependencies: PrepareDependencies = {},
 ): Promise<PrepReport> {
   const mockMode = dependencies.mockMode ?? MOCK_MODE;
+  const mockArtifact = mockMode
+    ? createMockPreparedArtifact(dataset.profile, dataset.content)
+    : null;
   const generator = dependencies.generator ?? generatePrep;
   const loader = dependencies.loader ?? ensureDatasetLoaded;
+  const reader =
+    dependencies.reader ??
+    (mockMode
+      ? async () => mockArtifact?.content ?? dataset.content
+      : readSandboxFile);
   const executor =
     dependencies.executor ??
     (mockMode
-      ? createMockExecutor()
+      ? createMockExecutor(
+          mockArtifact ??
+            createMockPreparedArtifact(dataset.profile, dataset.content),
+        )
       : daytonaExecutor);
   const cleanPath = cleanPathFor(dataset.content);
   let activeStage: PrepProgressEvent["stage"] | null = null;
@@ -215,17 +246,30 @@ export async function prepareDataset(
         failActiveStage();
       } else {
         counts = parseAuditOutput(audit.stdout);
-        if (counts) {
-          finishStage(
-            "checking",
-            "Checked the prepared file against the original.",
-          );
-        } else {
+        if (!counts) {
           failActiveStage();
         }
       }
     } catch {
       failActiveStage();
+    }
+    let analysisProfile: DatasetProfile;
+    try {
+      const cleanedContent = await reader(cleanPath);
+      analysisProfile = profileDataset(
+        dataset.id,
+        dataset.filename,
+        cleanedContent,
+      );
+    } catch {
+      failActiveStage();
+      return failOpen();
+    }
+    if (activeStage === "checking") {
+      finishStage(
+        "checking",
+        "Checked the prepared file against the original.",
+      );
     }
     const questions = generated.questions.filter(
       (question) => classifyQuestion(question, dataset.profile).allowed,
@@ -234,6 +278,7 @@ export async function prepareDataset(
     return {
       ok: true,
       analysisPath: cleanPath,
+      analysisProfile,
       fixes: counts
         ? generated.fixes
         : generated.fixes.filter((fix) => fix !== PREP_FIXES[7]),

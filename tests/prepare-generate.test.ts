@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { parseCsv } from "@/lib/csv";
+import { classifyQuestion } from "@/lib/guardrails/classify";
 import {
   buildPrepPrompt,
   generatePrep,
@@ -150,7 +151,12 @@ describe("prep generation", () => {
     expect(output.prepCode).not.toContain("drop_duplicates");
     expect(output.fixes).toHaveLength(3);
     expect(output.questions).toHaveLength(5);
-    expect(output.questions.join(" ")).toMatch(/Revenue|Region/);
+    expect(output.questions.join(" ")).not.toMatch(/Revenue|Region/);
+    expect(
+      output.questions.every(
+        (question) => classifyQuestion(question, profile).allowed,
+      ),
+    ).toBe(true);
   });
 
   it("preserves numeric percent samples instead of coercing them to missing", async () => {
@@ -280,9 +286,8 @@ describe("prep generation", () => {
     expect(output.questions.join(" ")).not.toMatch(
       /\b(total|average|highest)\b/i,
     );
-    expect(output.questions.some((question) => question.includes("Region"))).toBe(
-      true,
-    );
+    expect(output.questions.join(" ")).not.toMatch(/Region|CustomerSegment/);
+    expect(output.questions.join(" ")).toMatch(/\btype\b/i);
     expect(output.questions.every((question) => question.length <= 72)).toBe(
       true,
     );
@@ -313,7 +318,8 @@ describe("prep generation", () => {
     );
 
     expect(new Set(output.questions).size).toBe(output.questions.length);
-    expect(output.questions.join(" ")).toContain("Region");
+    expect(output.questions.join(" ")).not.toContain("Region");
+    expect(output.questions.join(" ")).toMatch(/\btype\b/i);
     expect(output.questions.join(" ")).not.toMatch(/\brecord values\b/i);
     expect(output.questions.every((question) => question.length <= 72)).toBe(
       true,
@@ -338,6 +344,49 @@ describe("prep generation", () => {
     expect(output.questions.every((question) => question.length <= 72)).toBe(
       true,
     );
+  });
+
+  it("never exposes raw column names in mock questions", async () => {
+    const uglyProfile: DatasetProfile = {
+      ...profile,
+      columns: [
+        {
+          name: "release_year",
+          kind: "integer",
+          nullCount: 0,
+          distinctCount: 2,
+          sampleValues: ["2025", "2026"],
+          dateFormat: null,
+          evidence: null,
+        },
+        {
+          name: "show_type",
+          kind: "category",
+          nullCount: 0,
+          distinctCount: 2,
+          sampleValues: ["Movie", "Series"],
+          dateFormat: null,
+          evidence: null,
+        },
+      ],
+    };
+
+    const output = await generatePrep(
+      { ...request, profile: uglyProfile },
+      { mockMode: true },
+    );
+
+    expect(output.questions.join(" ")).not.toMatch(
+      /release_year|show_type|_/,
+    );
+    expect(output.questions).toContain(
+      "How many records are there of each type?",
+    );
+    expect(
+      output.questions.every(
+        (question) => classifyQuestion(question, uglyProfile).allowed,
+      ),
+    ).toBe(true);
   });
 
   it("builds a bounded prompt with the careful prep rules", () => {

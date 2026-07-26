@@ -3,7 +3,12 @@ import { z } from "zod";
 import { getAnalyst } from "@/lib/analyst";
 import { LIMITS } from "@/lib/config";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { resolveDataset, resolveUpload } from "@/lib/datasets";
+import {
+  contentHash,
+  resolveDataset,
+  resolveUpload,
+} from "@/lib/datasets";
+import { getPrep } from "@/lib/prepare/store";
 import { encodeEvent } from "@/lib/stream";
 import { beginAnalysisTrace } from "@/lib/braintrust/logger";
 import type { AnalysisRequest, Finding, StageEvent } from "@/lib/types";
@@ -77,7 +82,17 @@ export async function POST(request: Request): Promise<Response> {
     const dataset = parsed.data.upload
       ? resolveUpload(parsed.data.upload)
       : await resolveDataset(parsed.data.datasetId);
-    analysisRequest = { question: parsed.data.question, dataset };
+    const prep = getPrep(contentHash(dataset.content));
+    analysisRequest = {
+      question: parsed.data.question,
+      dataset,
+      ...(prep?.ok && prep.analysisProfile
+        ? {
+            analysisPath: prep.analysisPath,
+            analysisProfile: prep.analysisProfile,
+          }
+        : {}),
+    };
   } catch (error) {
     return badRequest(
       error instanceof Error ? error.message : "That dataset could not be loaded.",

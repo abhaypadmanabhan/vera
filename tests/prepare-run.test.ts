@@ -147,6 +147,30 @@ describe("the audit program", () => {
     });
   });
 
+  it("measures shared cells and added columns separately", async () => {
+    const source = "kind,duration\nMovie, 90 min \nSeries,2 Seasons\n";
+    const prepared = [
+      "kind,duration,duration_amount,duration_unit",
+      "Movie,90 min,90,min",
+      "Series,2 Seasons,2,Seasons",
+    ].join("\n");
+
+    await expect(executeAudit(source, prepared)).resolves.toEqual({
+      rowsBefore: 2,
+      rowsAfter: 2,
+      duplicatesDropped: 0,
+      cellsCoerced: 1,
+      columnsAdded: 2,
+    });
+  });
+
+  it("still withholds counts when rows reorder alongside an added column", async () => {
+    const source = "id,value\n1,Alpha\n2,Beta\n";
+    const prepared = "id,value,value_list\n2,Beta,Beta\n1,Alpha,Alpha\n";
+
+    await expect(executeAudit(source, prepared)).resolves.toBeNull();
+  });
+
   it("withholds counts when an exact duplicate disappears", async () => {
     const source = "name,amount\nAlpha,10\nBeta,20\nBeta,20\nGamma,30\n";
     const clean = "name,amount\nAlpha,10\nBeta,20\nGamma,30\n";
@@ -357,6 +381,7 @@ describe("prepareDataset", () => {
       loader: async () => {
         timeline.push("load");
       },
+      reader: async () => DATASET.content,
       generator: async () => {
         timeline.push("generate");
         return {
@@ -501,6 +526,88 @@ describe("prepareDataset", () => {
     );
     expect(requests.every((request) => request.signal instanceof AbortSignal)).toBe(
       true,
+    );
+  });
+
+  it("re-profiles the cleaned file after prep adds mixed-unit columns", async () => {
+    const mixedUnits: ResolvedDataset = {
+      ...DATASET,
+      id: "catalog",
+      filename: "catalog.csv",
+      content: "kind,duration\nMovie,90 min\nSeries,2 Seasons\n",
+      profile: {
+        ...DATASET.profile,
+        datasetId: "catalog",
+        filename: "catalog.csv",
+        rowCount: 2,
+        columns: [
+          {
+            name: "kind",
+            kind: "category",
+            nullCount: 0,
+            distinctCount: 2,
+            sampleValues: ["Movie", "Series"],
+            dateFormat: null,
+            evidence: null,
+          },
+          {
+            name: "duration",
+            kind: "text",
+            nullCount: 0,
+            distinctCount: 2,
+            sampleValues: ["90 min", "2 Seasons"],
+            dateFormat: null,
+            evidence: null,
+          },
+        ],
+      },
+    };
+    const report = await prepareDataset(mixedUnits, { mockMode: true });
+
+    expect(
+      report.analysisProfile?.columns.map((column) => column.name),
+    ).toContain("duration_amount");
+    expect(report.counts).toMatchObject({
+      rowsBefore: 2,
+      rowsAfter: 2,
+      duplicatesDropped: 0,
+      columnsAdded: 2,
+    });
+  });
+
+  it("keeps mock fixes and measured cleanup counts consistent", async () => {
+    const percentages: ResolvedDataset = {
+      ...DATASET,
+      id: "rates",
+      filename: "rates.csv",
+      content: "rate\n10%\n25%\n",
+      profile: {
+        ...DATASET.profile,
+        datasetId: "rates",
+        filename: "rates.csv",
+        rowCount: 2,
+        columns: [
+          {
+            name: "rate",
+            kind: "number",
+            nullCount: 0,
+            distinctCount: 2,
+            sampleValues: ["10%", "25%"],
+            dateFormat: null,
+            evidence: null,
+          },
+        ],
+      },
+    };
+
+    const report = await prepareDataset(percentages, { mockMode: true });
+
+    expect(report.counts?.cellsCoerced).toBe(2);
+    expect(
+      report.analysisProfile?.columns[0]?.sampleValues,
+    ).toEqual(["10", "25"]);
+    expect(report.fixes).toContain(
+      "Symbols and separators around amounts will be removed.",
     );
   });
 
@@ -651,7 +758,12 @@ describe("prepareDataset", () => {
 
     expect(loadCalls).toBe(0);
     expect(report.ok).toBe(true);
-    expect(report.counts).toBeNull();
+    expect(report.counts).toEqual({
+      rowsBefore: 6,
+      rowsAfter: 6,
+      duplicatesDropped: 0,
+      cellsCoerced: 0,
+    });
   });
 
   it("fails open when loading or generation throws", async () => {

@@ -5,6 +5,7 @@ import {
   type FireworksChatResult,
   type FireworksClient,
 } from "../fireworks/client";
+import { parseCsv } from "../csv";
 import type { DatasetProfile } from "../types";
 
 export interface PrepRequest {
@@ -527,51 +528,210 @@ function pythonString(value: string): string {
   return JSON.stringify(value);
 }
 
-function boundedQuestion(
-  prefix: string,
-  column: string,
-  suffix = "?",
-): string {
-  const available = Math.max(1, 72 - prefix.length - suffix.length);
-  return `${prefix}${column.slice(0, available)}${suffix}`;
+export interface MockPreparedArtifact {
+  content: string;
+  counts: {
+    rowsBefore: number;
+    rowsAfter: number;
+    duplicatesDropped: number;
+    cellsCoerced: number;
+    columnsAdded?: number;
+  };
+}
+
+function csvCell(value: string): string {
+  return /[",\r\n]/.test(value)
+    ? `"${value.replaceAll('"', '""')}"`
+    : value;
+}
+
+function serializeCsv(rows: string[][]): string {
+  return `${rows.map((row) => row.map(csvCell).join(",")).join("\n")}\n`;
+}
+
+function normalizedDate(value: string, format: string): string {
+  const parts = value.trim().split(/[/-]/);
+  if (parts.length !== 3) return value;
+  const [first = "", second = "", third = ""] = parts;
+  const year = format === "%Y-%m-%d" ? first : third;
+  const month = format === "%d/%m/%Y" ? second : first;
+  const day = format === "%Y-%m-%d" ? third : second;
+  if (![year, month, day].every((part) => /^\d+$/.test(part))) return value;
+  return `${year.padStart(4, "0")}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+}
+
+/**
+ * Deterministic in-memory stand-in for the exact profile-gated mock prep.
+ * It mirrors only transforms selected by transformFor; the whitelist remains
+ * enforced exclusively by canonicalizePrepCode.
+ */
+export function createMockPreparedArtifact(
+  profile: DatasetProfile,
+  content: string,
+): MockPreparedArtifact {
+  const [rawHeader = [], ...rawBody] = parseCsv(content);
+  const header = [...rawHeader];
+  const body = rawBody.map((row) =>
+    Array.from({ length: rawHeader.length }, (_, index) => row[index] ?? ""),
+  );
+  let cellsCoerced = 0;
+  let columnsAdded = 0;
+
+  const replaceColumn = (
+    index: number,
+    clean: (value: string) => string,
+  ): void => {
+    for (const row of body) {
+      const before = row[index] ?? "";
+      const after = clean(before);
+      if (after !== before) cellsCoerced++;
+      row[index] = after;
+    }
+  };
+  const addColumn = (
+    name: string,
+    valueFor: (row: string[]) => string,
+  ): void => {
+    header.push(name);
+    for (const row of body) row.push(valueFor(row));
+    columnsAdded++;
+  };
+
+  for (const column of profile.columns) {
+    if (!transformFor(column)) continue;
+    const index = rawHeader.indexOf(column.name);
+    if (index < 0) continue;
+    if (mixedUnitColumn(column)) {
+      addColumn(`${column.name}_amount`, (row) => {
+        const match = /^\s*(\d+(?:\.\d+)?)\s+(\S+)\s*$/.exec(
+          row[index] ?? "",
+        );
+        return match?.[1] ?? "";
+      });
+      addColumn(`${column.name}_unit`, (row) => {
+        const match = /^\s*(\d+(?:\.\d+)?)\s+(\S+)\s*$/.exec(
+          row[index] ?? "",
+        );
+        return match?.[2] ?? "";
+      });
+      continue;
+    }
+    const separator = multiValueSeparator(column);
+    if (multiValueSplitOffered(column) && separator) {
+      addColumn(`${column.name}_list`, (row) => {
+        const value = row[index] ?? "";
+        return value.includes(separator)
+          ? value
+              .split(separator)
+              .map((part) => part.trim())
+              .join(" | ")
+          : "";
+      });
+      continue;
+    }
+    if (booleanNormalisationOffered(column)) {
+      replaceColumn(index, (value) => {
+        const normalized = value.trim().toLowerCase();
+        if (BOOLEAN_TRUE_VALUES.has(normalized)) return "True";
+        if (BOOLEAN_FALSE_VALUES.has(normalized)) return "False";
+        return "";
+      });
+      continue;
+    }
+    if (column.kind === "number" || column.kind === "integer") {
+      replaceColumn(index, (value) => {
+        const stripped = value.replace(/[$,%]/g, "").trim();
+        const numeric = Number(stripped);
+        return stripped !== "" && Number.isFinite(numeric)
+          ? String(numeric)
+          : "";
+      });
+      continue;
+    }
+    if (column.kind === "date" && column.dateFormat) {
+      replaceColumn(index, (value) =>
+        normalizedDate(value, column.dateFormat ?? ""),
+      );
+      continue;
+    }
+    if (categoryNormalisationOffered(column)) {
+      replaceColumn(index, (value) => value.trim().replace(/\s+/g, " "));
+      continue;
+    }
+    replaceColumn(index, (value) => value.trim());
+  }
+
+  const seen = new Set<string>();
+  const deduplicated = body.filter((row) => {
+    const key = JSON.stringify(row);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  const counts: MockPreparedArtifact["counts"] = {
+    rowsBefore: rawBody.length,
+    rowsAfter: deduplicated.length,
+    duplicatesDropped: body.length - deduplicated.length,
+    cellsCoerced,
+  };
+  if (columnsAdded > 0) counts.columnsAdded = columnsAdded;
+  return {
+    content: serializeCsv([header, ...deduplicated]),
+    counts,
+  };
 }
 
 function mockQuestions(profile: DatasetProfile): string[] {
-  const firstColumn = profile.columns[0]?.name;
-  const numericColumn =
-    profile.columns.find((column) => column.kind === "number")?.name ??
-    profile.columns.find((column) => column.kind === "integer")?.name;
-  const categoryColumn =
-    profile.columns.find((column) => column.kind === "category")?.name ??
-    firstColumn ??
-    "";
-
-  if (!numericColumn) {
-    if (!firstColumn) {
-      return [
-        "How many records are in this file?",
-        "How many columns are in this file?",
-        "How many exact duplicate records are there?",
-        "How many records contain a missing value?",
-        "How many records have no missing values?",
-      ];
-    }
-    return [
-      "How many records are in this file?",
-      boundedQuestion("How many distinct ", firstColumn, " values are there?"),
-      boundedQuestion("How many ", firstColumn, " values are missing?"),
-      boundedQuestion("How many ", firstColumn, " values are present?"),
-      "How many exact duplicate records are there?",
-    ];
+  const kinds = new Set(profile.columns.map((column) => column.kind));
+  const questions: string[] = [];
+  if (kinds.has("category")) {
+    questions.push(
+      "How many records are there of each type?",
+      "How many types are represented?",
+      "How many records have no type listed?",
+    );
   }
-
-  return [
-    boundedQuestion("What is the total ", numericColumn),
-    boundedQuestion("What is the average ", numericColumn),
-    boundedQuestion("What is the highest ", numericColumn),
-    boundedQuestion("How many distinct ", categoryColumn, " values are there?"),
-    boundedQuestion("How many ", categoryColumn, " values are missing?"),
-  ];
+  if (kinds.has("number")) {
+    questions.push(
+      "What is the total amount?",
+      "What is the average amount?",
+      "What is the highest amount?",
+      "How many amounts are missing?",
+    );
+  }
+  if (kinds.has("integer")) {
+    questions.push(
+      "What is the highest whole-number value?",
+      "What is the lowest whole-number value?",
+      "How many whole-number values are missing?",
+    );
+  }
+  if (kinds.has("date")) {
+    questions.push(
+      "How many records are there for each year?",
+      "How many dates are missing?",
+    );
+  }
+  if (kinds.has("id")) {
+    questions.push(
+      "How many unique references are there?",
+      "How many references are missing?",
+    );
+  }
+  if (kinds.has("text")) {
+    questions.push(
+      "How many descriptions are represented?",
+      "How many descriptions are missing?",
+    );
+  }
+  questions.push(
+    "How many records are in this file?",
+    "How many columns are in this file?",
+    "How many exact duplicate records are there?",
+    "How many records contain a missing value?",
+    "How many records have no missing values?",
+  );
+  return [...new Set(questions)].slice(0, 5);
 }
 
 function mockFixes(profile: DatasetProfile): string[] {
