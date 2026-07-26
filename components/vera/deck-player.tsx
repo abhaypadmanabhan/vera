@@ -80,7 +80,12 @@ export function DeckPlayer({
 
   const slide = deck.slides[slideIndex];
   const focus = slide?.beats[activeBeat]?.focus ?? null;
-  const spokenLine = narrating ? (slide?.beats[activeBeat]?.spoken ?? null) : null;
+  // Every beat of the slide goes to /api/speak in ONE request; the audio hook
+  // walks the beats along the returned clip and calls `advance` per beat.
+  const spokenBeats =
+    narrating && slide && slide.beats.length > 0
+      ? slide.beats.map((beat) => beat.spoken)
+      : null;
 
   const goTo = useCallback(
     (nextIndex: number, asReference = false) => {
@@ -128,7 +133,7 @@ export function DeckPlayer({
     available: voiceAvailable,
     stop: stopNarrationAudio,
   } = useNarrationAudio({
-    text: spokenLine,
+    texts: spokenBeats,
     enabled: narrating,
     onEnded: advance,
   });

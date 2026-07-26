@@ -59,3 +59,20 @@ runs a full demo. Parallelisable across 3 agents (UI / API+types / data).
 2. Each phase ends with a PR into `dev` + a "how to verify" summary, then **STOP** for review.
 3. Phase 1 must stay runnable with zero keys forever — later phases add a real path, they do not
    replace the mock path.
+
+---
+
+## Phase 11 — P2 narration batching (`p11/narration`, 2026-07-26)
+
+Plan: one `/api/speak` call per SLIDE instead of per beat, using ElevenLabs
+`convertWithTimestamps` so beat boundaries (which drive the UI focus) come from
+character-level alignment — exact, not estimated — with a proportional fallback
+if alignment is absent. STOP aborts the single in-flight fetch and pauses the
+one audio element, so no later beat can arrive after an interrupt.
+
+- [ ] `lib/voice/tts.ts`: `speakBeats()` + pure `beatEndsFromAlignment()`
+- [ ] `app/api/speak/route.ts`: `{ texts: [] }` in, `{ audio, beatEndsSeconds }` out; mock 204 + narration bucket untouched
+- [ ] `components/vera/narration-player.ts`: framework-free, unit-testable player
+- [ ] `use-narration-audio.ts`: thin wrapper; `deck-player.tsx`: 2-line change
+- [ ] Tests: call count per deck, interrupt proofs, route batching + rate limit
+- [ ] Gates: tsc / eslint / vitest / next build clean
