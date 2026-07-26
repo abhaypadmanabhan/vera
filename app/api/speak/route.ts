@@ -34,7 +34,9 @@ export async function POST(request: Request): Promise<Response> {
     return new Response(null, { status: 204 });
   }
 
-  const rate = checkRateLimit(clientIp(request));
+  // Narration draws on its own budget: one call per beat means a single deck
+  // would otherwise consume the whole analysis allowance. See lib/config.ts.
+  const rate = checkRateLimit(clientIp(request), Date.now(), "narration");
   if (!rate.allowed) {
     return Response.json(
       { error: "Too many requests." },
