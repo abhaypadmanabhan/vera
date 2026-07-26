@@ -23,6 +23,12 @@ export interface StageView {
 export interface AnalysisState {
   stages: StageView[];
   finding: Finding | null;
+  /**
+   * Every finding the stream delivered, in order. A single-question run yields
+   * exactly one; a multi-finding deck (`LIMITS.maxFindingsPerDeck` > 1) yields
+   * one per verified question, and the deck is built from the verified ones.
+   */
+  findings: Finding[];
   error: string | null;
   isRunning: boolean;
 }
@@ -40,6 +46,7 @@ export function useAnalysis() {
   const [state, setState] = useState<AnalysisState>({
     stages: initialStages(),
     finding: null,
+    findings: [],
     error: null,
     isRunning: false,
   });
@@ -48,7 +55,13 @@ export function useAnalysis() {
   const reset = useCallback(() => {
     abortRef.current?.abort();
     abortRef.current = null;
-    setState({ stages: initialStages(), finding: null, error: null, isRunning: false });
+    setState({
+      stages: initialStages(),
+      finding: null,
+      findings: [],
+      error: null,
+      isRunning: false,
+    });
   }, []);
 
   const start = useCallback(async (question: string, datasetId: string, upload?: CsvPayload) => {
@@ -56,7 +69,13 @@ export function useAnalysis() {
     const controller = new AbortController();
     abortRef.current = controller;
 
-    setState({ stages: initialStages(), finding: null, error: null, isRunning: true });
+    setState({
+      stages: initialStages(),
+      finding: null,
+      findings: [],
+      error: null,
+      isRunning: true,
+    });
 
     try {
       const response = await fetch("/api/analyze", {
@@ -89,7 +108,16 @@ export function useAnalysis() {
             ),
           }));
         } else if (event.type === "finding") {
-          setState((s) => ({ ...s, finding: event.finding, isRunning: false }));
+          // Keep the run "running" until the stream actually ends: a
+          // multi-finding deck delivers more than one finding event, and the
+          // deck should appear once, complete — never half-built mid-stream.
+          // With one finding the event is the stream's last, so nothing
+          // changes.
+          setState((s) => ({
+            ...s,
+            finding: event.finding,
+            findings: [...s.findings, event.finding],
+          }));
         } else {
           setState((s) => ({ ...s, error: event.message, isRunning: false }));
         }

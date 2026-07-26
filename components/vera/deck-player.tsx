@@ -254,7 +254,10 @@ export function DeckPlayer({
           <div className="deck-layer deck-layer-out" aria-hidden>
             <DeckSlide
               slide={deck.slides[previousIndex]}
-              finding={finding}
+              finding={
+                deck.findings?.[deck.slides[previousIndex]?.findingIndex ?? 0] ?? finding
+              }
+              findings={deck.findings}
               dataset={dataset}
               benchmark={benchmark}
               activeFocus={null}
@@ -266,7 +269,8 @@ export function DeckPlayer({
         <div key={slide.id} className="deck-layer deck-layer-in">
           <DeckSlide
             slide={slide}
-            finding={finding}
+            finding={deck.findings?.[slide.findingIndex ?? 0] ?? finding}
+            findings={deck.findings}
             dataset={dataset}
             benchmark={benchmark}
             activeFocus={focus}
@@ -360,6 +364,7 @@ export function DeckPlayer({
 export function DeckSlide({
   slide,
   finding,
+  findings,
   dataset,
   benchmark,
   activeFocus,
@@ -368,6 +373,8 @@ export function DeckSlide({
 }: {
   slide: Slide;
   finding: VerifiedFinding;
+  /** Every verified finding in the deck. Only set on a multi-finding deck. */
+  findings?: readonly VerifiedFinding[];
   dataset: DatasetSummary;
   benchmark?: DeckBenchmark;
   activeFocus: string | null;
@@ -419,6 +426,7 @@ export function DeckSlide({
       <SlideContent
         slide={slide}
         finding={finding}
+        findings={findings}
         dataset={dataset}
         benchmark={benchmark}
         focusClass={focusClass}
@@ -430,17 +438,22 @@ export function DeckSlide({
 function SlideContent({
   slide,
   finding,
+  findings,
   dataset,
   benchmark,
   focusClass,
 }: {
   slide: Slide;
   finding: VerifiedFinding;
+  findings?: readonly VerifiedFinding[];
   dataset: DatasetSummary;
   benchmark?: DeckBenchmark;
   focusClass: (id: string) => string;
 }) {
-  const evidenceIndex = slide.kind === "caveat" ? Number(slide.id.split("-")[1] ?? 0) : 0;
+  // Caveat ids are `caveat-N` on a single-finding deck and `caveat-F-N` on a
+  // multi-finding one; the evidence index is always the LAST segment.
+  const evidenceIndex =
+    slide.kind === "caveat" ? Number(slide.id.split("-").at(-1) ?? 0) : 0;
   const provenEvidence = finding.grounding.schemaEvidence.filter(isProven);
   const evidence = provenEvidence[evidenceIndex] ?? null;
 
@@ -538,6 +551,45 @@ function SlideContent({
             <p>{item.method}</p>
           </div>
         ))}
+      </section>
+    );
+  }
+
+  /*
+   * The multi-finding summary: every verified figure, each with its own claim
+   * and its own row count — repeated, never derived. A figure appears here
+   * only because its own executed run produced it; a finding that failed to
+   * verify is not in `findings` and simply does not appear.
+   */
+  if (slide.kind === "summary" && findings && findings.length > 1) {
+    return (
+      <section className="deck-summary">
+        <div className="deck-summary-head">
+          <p className="deck-verified">Verified findings</p>
+          <h1>{slide.title}</h1>
+        </div>
+        <div className="deck-proof-counts">
+          {findings.map((item, index) => {
+            const focus = `figure-${index}`;
+            return (
+              <div
+                key={`${index}-${item.claim}`}
+                data-focus={focus}
+                className={focusClass(focus)}
+              >
+                <strong>{formatFigure(item.value, item.unit)}</strong>
+                <p>{item.claim}</p>
+                <span>{formatCount(item.grounding.rowCount)} rows read</span>
+              </div>
+            );
+          })}
+        </div>
+        <div data-focus="proof" className={focusClass("proof")}>
+          <p className="deck-cells-meta">
+            Every figure computed by code and traced to source cells.
+          </p>
+        </div>
+        {benchmark && <BenchmarkPanel benchmark={benchmark} />}
       </section>
     );
   }
