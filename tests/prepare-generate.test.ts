@@ -407,6 +407,33 @@ describe("prep generation", () => {
     evidence: null,
   };
 
+  /*
+   * Macroscope on PR #43. Recognition used a leading-pair pattern while the
+   * generated str.extract requires the whole cell to be the pair, so a column
+   * of "-5 kg net" was classified as mixed-unit, the split was promised in the
+   * fixes list, and every one of those rows extracted to empty.
+   */
+  it("does not classify a column whose cells the split could not actually parse", () => {
+    const trailing: DatasetProfile = {
+      ...profile,
+      columns: [
+        {
+          name: "Weight",
+          kind: "text" as const,
+          nullCount: 0,
+          distinctCount: 2,
+          sampleValues: ["-5 kg net", "3 lb gross"],
+          dateFormat: null,
+          evidence: null,
+        },
+      ],
+    };
+
+    const prompt = buildPrepPrompt({ ...request, profile: trailing });
+
+    expect(prompt).not.toContain("str.extract");
+  });
+
   it("offers the mixed-unit split when the derived names are free", () => {
     const free: DatasetProfile = { ...profile, columns: [mixedUnitColumn] };
 

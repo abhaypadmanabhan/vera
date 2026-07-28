@@ -317,7 +317,16 @@ function unrecordedSubject(
    */
   const phrase: string[] = [];
   for (const word of words(match[1])) {
-    if (SUBJECT_END.has(word)) break;
+    // A SUBJECT_END word ends the noun phrase — but only once there IS one.
+    // `words()` splits on the hyphen, so "how many in-store purchases are
+    // there?" opened with the preposition "in", broke immediately, left the
+    // phrase empty and let the question through without ever looking at
+    // "purchases". Before the subject starts, these words are skipped rather
+    // than treated as its end.
+    if (SUBJECT_END.has(word)) {
+      if (phrase.length === 0) continue;
+      break;
+    }
     if (MODIFIERS.has(word)) continue;
     phrase.push(word);
   }

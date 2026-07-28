@@ -186,6 +186,25 @@ describe("classifyQuestion", () => {
     expect(classifyQuestion("Which category sold the most?", singular).allowed).toBe(true);
   });
 
+  /*
+   * Macroscope on PR #43, reviewing the narrowing fix above. `words()` splits
+   * the hyphen, so "in-store" opened the phrase with the preposition "in", the
+   * loop broke before pushing anything, and the question was allowed without
+   * "purchases" ever being checked.
+   */
+  it("does not lose the subject when the phrase opens with a hyphenated prefix", () => {
+    const decision = classifyQuestion(
+      "How many in-store purchases are there?",
+      salesOnlyProfile,
+    );
+    expect(decision.allowed).toBe(false);
+  });
+
+  it("still allows a bare row count", () => {
+    expect(classifyQuestion("How many are there?", salesOnlyProfile).allowed).toBe(true);
+    expect(classifyQuestion("How many rows are there?", salesOnlyProfile).allowed).toBe(true);
+  });
+
   it("still refuses when the file genuinely lacks the information", () => {
     expect(classifyQuestion("What was the average discount?", salesOnlyProfile).allowed).toBe(
       false,

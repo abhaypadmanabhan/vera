@@ -336,15 +336,22 @@ type ProfileColumn = DatasetProfile["columns"][number];
 const AMOUNT_PATTERN = "[+-]?\\d+(?:\\.\\d+)?";
 /** A cell that is exactly one amount and one unit. */
 const AMOUNT_UNIT = new RegExp(`^\\s*(${AMOUNT_PATTERN})\\s+(\\S+)\\s*$`);
-/** The same shape, reading only the leading pair, for recognising the column. */
-const AMOUNT_UNIT_LEAD = new RegExp(`^\\s*${AMOUNT_PATTERN}\\s+(\\S+)`);
-
+/**
+ * Recognition uses the SAME anchored pattern the transform does.
+ *
+ * A leading-pair variant recognised `-5 kg net` as a mixed-unit cell while the
+ * generated `str.extract` — which requires the whole cell to be the pair —
+ * could not split it, so the column was classified, the split was promised,
+ * and those rows came back empty. Two gates over one artifact derived from
+ * different evidence: `tasks/lessons.md` 2026-07-26, the same shape this
+ * helper was last changed to close.
+ */
 function mixedUnitColumn(column: ProfileColumn): boolean {
   if (column.kind !== "text") return false;
   const units = new Set<string>();
   for (const value of column.sampleValues) {
-    const match = AMOUNT_UNIT_LEAD.exec(value);
-    if (match?.[1]) units.add(match[1]);
+    const match = AMOUNT_UNIT.exec(value);
+    if (match?.[2]) units.add(match[2]);
   }
   return units.size > 1;
 }

@@ -43,15 +43,21 @@ mid-review: it means a commit on a review branch, which breaks the byte-identica
 
 ## Merge order — bottom-up, one at a time
 
+**`--delete-branch` is load-bearing, not tidy-up.** GitHub only retargets a stacked PR when its
+base branch is *deleted*. A plain `gh pr merge 40 --merge` leaves `review/01-…` alive, #41's base
+stays pointed at it, and merging #41 then merges into that branch instead of `dev` — the work never
+reaches `dev` and the stack silently does the wrong thing. The `--base dev` line makes the retarget
+explicit rather than relying on it.
+
 ```bash
-gh pr merge 40 --merge && sleep 5 && \
-gh pr merge 41 --merge && sleep 5 && \
-gh pr merge 42 --merge && sleep 5 && \
-gh pr merge 43 --merge
+gh pr merge 40 --merge --delete-branch && sleep 5 && \
+gh pr edit 41 --base dev && gh pr merge 41 --merge --delete-branch && sleep 5 && \
+gh pr edit 42 --base dev && gh pr merge 42 --merge --delete-branch && sleep 5 && \
+gh pr edit 43 --base dev && gh pr merge 43 --merge
 ```
 
-GitHub retargets each next PR as its predecessor lands. Do not merge out of order. Afterwards:
-close #36, open the final `dev` → `main` PR, stop for the builder.
+Do not delete the head branch on #43 — it is `feat/p2-fireworks`. Do not merge out of order.
+Afterwards: close #36, open the final `dev` → `main` PR, stop for the builder.
 
 ## What landed on 2026-07-28
 

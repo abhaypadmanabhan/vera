@@ -178,3 +178,32 @@ describe("the mock only claims what its own code and cells support", () => {
     expect(finding.grounding.sampleCells.some((cell) => cell.column === "Region")).toBe(true);
   });
 });
+
+/*
+ * Macroscope on PR #43, reviewing the header-only fix. rowCount became 0 but
+ * rowRange was still [0, Math.max(rowCount - 1, 0)] = [0, 0], which asserts
+ * row 0 was read. verifyGrounding on the real path returns null there.
+ */
+describe("grounding for a file with no body rows", () => {
+  it("reports no row range rather than claiming row 0", async () => {
+    vi.useFakeTimers();
+    const events: StageEvent[] = [];
+    const pending = (async () => {
+      for await (const event of mockAnalyst.run({
+        question: "How many records are there?",
+        dataset: resolveUpload({ filename: "empty.csv", content: "City,Widgets\n" }),
+      })) {
+        events.push(event);
+      }
+    })();
+    await vi.runAllTimersAsync();
+    await pending;
+
+    const finding = events.find((event) => event.type === "finding");
+    if (finding?.type !== "finding" || finding.finding.verdict !== "verified") {
+      throw new Error("expected a verified finding");
+    }
+    expect(finding.finding.grounding.rowCount).toBe(0);
+    expect(finding.finding.grounding.rowRange).toBeNull();
+  });
+});

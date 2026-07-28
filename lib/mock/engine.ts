@@ -125,7 +125,10 @@ function groundingFrom(dataset: ResolvedDataset, preferred: string[] = []): Grou
   return {
     columns: usedColumns,
     rowCount,
-    rowRange: [0, Math.max(rowCount - 1, 0)],
+    // Null, not [0, 0], when there are no body rows: a range says "row 0 was
+    // read", and on a header-only file no row was. `verifyGrounding` on the
+    // real path already returns null here; this is the mock catching up.
+    rowRange: rowCount > 0 ? [0, rowCount - 1] : null,
     sampleCells,
     // Real, counted proof from the profiler — not decoration.
     schemaEvidence: dataset.profile.columns
