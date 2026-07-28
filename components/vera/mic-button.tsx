@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { Mic, MicOff, Square } from "lucide-react";
 import { TRANSCRIPTION_LIMITS } from "@/lib/elevenlabs/transcription";
 import type { Microphone } from "./use-microphone";
@@ -40,14 +41,14 @@ export const MIC_STATUS_ID = "vera-mic-status";
  * One line, always present, always in the same place. It is the live region, so a screen
  * reader hears every state change without any duplicate off-screen copy of the same text.
  */
-export function MicStatus({ mic, idleHint }: { mic: Microphone; idleHint: string }) {
+export function MicStatus({ mic, idleHint }: { mic: Microphone; idleHint: ReactNode }) {
   const line = micLine(mic);
   return (
     <span
       id={MIC_STATUS_ID}
       role="status"
       aria-live="polite"
-      className={`text-micro ${line && mic.problem ? "text-ink" : "text-ink-muted"} ${
+      className={`text-small ${line && mic.problem ? "text-ink" : "text-ink-muted"} ${
         mic.phase === "recording" ? "v-nums" : ""
       }`}
     >

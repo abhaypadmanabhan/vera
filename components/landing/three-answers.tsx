@@ -1,94 +1,74 @@
 /*
  * The signature section: one question, three answers, two of them wrong.
  *
- * Structure encodes the argument — the two wrong figures are struck and set in
- * the muted ink, the true one stands alone at full figure size. This is a
- * comparison, not a sequence, so there is no numbering.
+ * The argument is unchanged; only the form is. It is a comparison, not a
+ * sequence, so nothing here is numbered. The two wrong figures sit in the open
+ * on hairlines, struck and muted. The true one is the section's single
+ * contained object, which is the whole point being made typographically: it is
+ * the only one with something behind it.
  *
- * Every figure here is real and recorded (see PRD / the cold open in DESIGN.md).
+ * Every figure is real and recorded — see `./recorded` for provenance.
  */
-import { Reveal, Section } from "./primitives";
+import { ANSWERS, DAY_FIRST, FILE, QUESTION } from "./recorded";
+import { CheckMark, Reveal, Section } from "./primitives";
 
-type Answer = {
-  figure: string;
-  label: string;
-  detail: string;
-  status: "wrong" | "true";
-};
-
-const ANSWERS: readonly Answer[] = [
-  {
-    figure: "$50,517",
-    label: "A naive date parse",
-    detail: "Silently drops 5,952 of 9,994 rows. Reads DD/MM as MM/DD and throws away what will not fit.",
-    status: "wrong",
-  },
-  {
-    figure: "$131,098",
-    label: "The file's own Order Quarter column",
-    detail: "Disagrees with the real order dates on 2,889 rows. The column is in the file, and the column is wrong.",
-    status: "wrong",
-  },
-  {
-    figure: "$143,787.36",
-    label: "The truth",
-    detail: "Parsed day-first, proven by 5,952 values whose first component exceeds 12 and cannot be a month — 0 arguing otherwise.",
-    status: "true",
-  },
-];
+const WRONG = ANSWERS.filter((answer) => answer.status === "wrong");
+const TRUE_ANSWER = ANSWERS.find((answer) => answer.status === "true")!;
 
 export function ThreeAnswers() {
   return (
-    <Section eyebrow="The problem, in one number">
+    <Section className="pt-16 pb-12 sm:pt-24 sm:pb-16">
       <Reveal>
-        <h2 className="max-w-[24ch] text-[clamp(2rem,5vw,3.75rem)] font-medium leading-[1.05] tracking-[-0.02em]">
-          &ldquo;What were sales in Q3 2018?&rdquo;
+        <h2 className="v-display max-w-[20ch] text-[clamp(2rem,4.6vw,3.5rem)]">
+          &ldquo;{QUESTION}&rdquo;
         </h2>
-        <p className="mt-6 max-w-[54ch] text-lead text-ink-muted">
-          One question. One file. Three different answers, and only one of them is right. Two of
-          these are what a confident assistant hands you without blinking.
+        <p className="mt-6 max-w-[46ch] text-body text-ink-muted">
+          One question. One file. Three answers &mdash; and all three run without an error.
         </p>
       </Reveal>
 
-      <ol className="mt-20 space-y-0">
-        {ANSWERS.map((answer, i) => (
+      <div className="mt-16 border-t border-line">
+        {WRONG.map((answer, i) => (
           <Reveal key={answer.figure} step={i + 1}>
-            <li
-              className={`grid gap-x-12 gap-y-4 border-t border-line py-12 sm:grid-cols-[minmax(0,20rem)_1fr] ${
-                answer.status === "true" ? "border-t-ink" : ""
-              }`}
-            >
-              <div>
-                <p
-                  className={`v-nums whitespace-nowrap font-mono text-[clamp(1.875rem,4vw,2.75rem)] leading-none tracking-[-0.03em] ${
-                    answer.status === "true"
-                      ? "text-ink"
-                      : "text-ink-muted line-through decoration-danger decoration-[2px]"
-                  }`}
-                >
-                  {answer.figure}
-                </p>
-                <p
-                  className={`v-label mt-4 ${
-                    answer.status === "true" ? "text-accent" : "text-danger"
-                  }`}
-                >
-                  {answer.status === "true" ? "Verified" : "Wrong"}
-                </p>
+            <div className="grid gap-x-12 gap-y-3 border-b border-line py-8 sm:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] sm:items-baseline">
+              <p className="v-display v-nums text-[clamp(1.75rem,3.4vw,2.5rem)] text-ink-muted line-through decoration-danger decoration-2">
+                {answer.figure}
+              </p>
+              <div className="max-w-[54ch]">
+                <p className="text-body font-medium text-ink">{answer.label}</p>
+                <p className="mt-2 text-small text-ink-muted">{answer.detail}</p>
               </div>
-              <div className="max-w-[52ch] self-center">
-                <p className="text-lead font-medium text-ink">{answer.label}</p>
-                <p className="mt-2 text-body text-ink-muted">{answer.detail}</p>
-              </div>
-            </li>
+            </div>
           </Reveal>
         ))}
-      </ol>
+      </div>
+
+      <Reveal step={3}>
+        <div className="mt-12 rounded-2xl border border-line bg-surface px-6 py-8 shadow-lift sm:px-12 sm:py-12">
+          <p className="flex items-start gap-2 text-small font-medium text-accent">
+            <CheckMark className="mt-1 shrink-0" />
+            The one that survives being checked
+          </p>
+          <div className="mt-6 grid gap-x-12 gap-y-6 lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)] lg:items-baseline">
+            <p className="v-display v-nums whitespace-nowrap text-[clamp(2.5rem,5.6vw,3.75rem)] text-ink">
+              {TRUE_ANSWER.figure}
+            </p>
+            <div className="max-w-[52ch]">
+              <p className="text-body font-medium text-ink">{TRUE_ANSWER.label}</p>
+              <p className="mt-2 text-small text-ink-muted">{TRUE_ANSWER.detail}</p>
+            </div>
+          </div>
+          <p className="mt-8 border-t border-line pt-6 font-mono text-micro text-ink-muted">
+            OrderDate &rarr; %d/%m/%Y &middot;{" "}
+            {DAY_FIRST.supporting.toLocaleString("en-US")} rows for &middot;{" "}
+            {DAY_FIRST.contradicting} against &middot; {FILE.rows.toLocaleString("en-US")} rows read
+          </p>
+        </div>
+      </Reveal>
 
       <Reveal step={4}>
-        <p className="mt-16 max-w-[60ch] border-l-2 border-accent pl-6 text-lead text-ink">
-          Nothing on screen tells you which one you got. That is the whole problem — the wrong
-          answers run perfectly well.
+        <p className="v-display mt-16 max-w-[26ch] text-[clamp(1.625rem,3vw,2.25rem)] text-ink">
+          Nothing on screen tells you which one you got. The wrong answers run perfectly well.
         </p>
       </Reveal>
     </Section>

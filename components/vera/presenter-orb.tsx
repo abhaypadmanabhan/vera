@@ -34,8 +34,17 @@ const Orb = dynamic(() => import("@/components/ui/orb").then((module) => module.
 /** Fixed, so the orb looks the same in every run of the demo. */
 const ORB_SEED = 20_18;
 
-/** Matches the light-mode `--deck-orb-*` tokens; only used before the first read. */
-const FALLBACK_COLORS: [string, string] = ["#0073cf", "#90bce9"];
+/**
+ * Matches the light-mode `--deck-orb-*` tokens in `app/deck.css`; only used
+ * before the first read, and whenever `read()` bails because the custom
+ * properties are not resolvable yet.
+ *
+ * Keep these two literals equal to the `:root` values of `--deck-orb-1` and
+ * `--deck-orb-2`. They drifted once already — the comment claimed a match that
+ * had not been true since the tokens were retuned, so the pre-read frame
+ * flashed a different blue than the one the deck settles on.
+ */
+const FALLBACK_COLORS: [string, string] = ["#73a3d5", "#caddf2"];
 
 export function PresenterOrb({
   state,

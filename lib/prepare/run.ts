@@ -133,7 +133,11 @@ function execute(
   return executor.execute({
     code,
     csvPath: SANDBOX_CSV_PATH,
-    timeoutMs: LIMITS.runBudgetMs,
+    // THE MONEY RULE as a number. This is a PER-CALL cap and a prep run makes
+    // two calls, so handing it the whole-run budget let one stuck cleaning plus
+    // one stuck audit bill ~180s of paid sandbox time against a documented 90s
+    // budget. The per-execution limit is the only one that bounds a single call.
+    timeoutMs: LIMITS.executionTimeoutMs,
     signal: new AbortController().signal,
   });
 }

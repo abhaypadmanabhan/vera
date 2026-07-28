@@ -11,6 +11,24 @@
  */
 export const MOCK_MODE = process.env.VERA_MOCK !== "0";
 
+/**
+ * Whether Braintrust spans may carry the raw prompt and completion.
+ *
+ * Defaults to FALSE, and the default is the point. The codegen prompt embeds
+ * the dataset profile and up to five sample rows of the user's file, so logging
+ * `input` verbatim ships their data to a third party as a side effect of
+ * tracing being on. Traces stay useful without it: model, token counts,
+ * latency, finish reason and payload sizes are all still recorded.
+ *
+ * This flag is necessary but NOT sufficient. It is process-wide, so on its own
+ * it would mean that switching tracing on to debug the benchmark also exported
+ * whatever a user uploaded next. A request is traced only when this is set AND
+ * the caller passes `tracePayloads: true` on that specific request, which only
+ * the benchmark does — its data is our own committed CSV. The product's own
+ * paths never ask, so no value of this variable can leak a user's file.
+ */
+export const TRACE_PAYLOADS = process.env.VERA_TRACE_PAYLOADS === "1";
+
 /** Hard caps so a runaway loop cannot drain hackathon credits. PRD §4.2, §7. */
 export const LIMITS = {
   /** Retries after the first attempt. PRD §7 says max 2. */

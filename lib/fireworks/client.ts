@@ -1,7 +1,7 @@
 import { env } from "node:process";
 import { currentSpan, type Span } from "braintrust";
 import { z } from "zod";
-import { MOCK_MODE } from "../config";
+import { MOCK_MODE, TRACE_PAYLOADS } from "../config";
 
 export const FIREWORKS_BASE_URL = "https://api.fireworks.ai/inference/v1";
 
@@ -52,6 +52,16 @@ export interface FireworksChatRequest {
   };
   maxTokens: number;
   signal?: AbortSignal;
+  /**
+   * Opt this ONE request into raw prompt/completion tracing.
+   *
+   * `VERA_TRACE_PAYLOADS` alone is not enough, and deliberately so: it is
+   * process-wide, so switching it on to debug the benchmark would also export
+   * whatever a user uploaded next to Braintrust. The env flag is the operator's
+   * kill-switch; this field is the caller stating the data is its own. Both are
+   * required, so neither can leak on its own.
+   */
+  tracePayloads?: boolean;
 }
 
 export interface FireworksChatResult {
@@ -136,6 +146,13 @@ export function createFireworksClient(
        * route establishes the parent analysis context; this manual span records
        * the raw fetch as its child.
        */
+      /*
+       * Both are required, so neither can leak on its own: the env flag is the
+       * operator's switch, `request.tracePayloads` is the caller asserting the
+       * data is ours (the benchmark's own committed CSV), not a user's upload.
+       */
+      const logPayloads = TRACE_PAYLOADS && request.tracePayloads === true;
+
       let telemetrySpan: Span | null = null;
       try {
         telemetrySpan = currentSpan().startSpan({
@@ -146,9 +163,23 @@ export function createFireworksClient(
         telemetrySpan = null;
       }
       try {
+        /*
+         * The prompt carries the dataset profile and sample rows of the user's
+         * file. It is logged verbatim only when the builder has opted in; by
+         * default the span records the shape of the call, not its contents.
+         */
         telemetrySpan?.log({
-          input: request.messages,
-          metadata: { model: FIREWORKS_MODEL_ID, maxTokens: request.maxTokens },
+          input: logPayloads ? request.messages : undefined,
+          metadata: {
+            model: FIREWORKS_MODEL_ID,
+            maxTokens: request.maxTokens,
+            messageCount: request.messages.length,
+            promptChars: request.messages.reduce(
+              (total, message) => total + message.content.length,
+              0,
+            ),
+            payloadsRedacted: !logPayloads,
+          },
         });
       } catch {
         // Telemetry is never load-bearing.
@@ -195,7 +226,13 @@ export function createFireworksClient(
         const usage = parsed.data.usage;
         try {
           telemetrySpan?.log({
-            output: choice.message.content,
+            // The completion is the generated program plus the headline; it can
+            // quote the sample rows back. Same opt-in as the prompt.
+            output: logPayloads ? choice.message.content : undefined,
+            metadata: {
+              finishReason: choice.finish_reason,
+              completionChars: choice.message.content.length,
+            },
             metrics: usage
               ? {
                   prompt_tokens: usage.prompt_tokens,

@@ -91,3 +91,61 @@ describe("verifyContextFigures — grounded, or gone", () => {
     ).toEqual([]);
   });
 });
+
+/*
+ * Macroscope on PR #41, deferred out of the codegen slice and closed here.
+ *
+ * "Every column it claims exists in this file" was never the claim being made.
+ * A context figure could name any real column of the CSV, have been computed
+ * from none of it, and still be printed beside the headline as though the code
+ * had read it. `groundedColumns` is what the FINDING was verified against, so
+ * a figure has to be part of the run that produced the number, not merely
+ * consistent with the file's schema.
+ */
+describe("a context figure must belong to the run, not just the file", () => {
+  const twoColumnProfile: DatasetProfile = {
+    ...profile,
+    columns: [
+      ...profile.columns,
+      {
+        name: "Profit",
+        kind: "number",
+        nullCount: 0,
+        distinctCount: 3,
+        sampleValues: ["1", "2", "3"],
+        dateFormat: null,
+        evidence: null,
+      },
+    ],
+  };
+
+  const citesProfit = [
+    {
+      name: "margin",
+      description: "the margin behind it",
+      columnsUsed: ["Profit"],
+    },
+  ];
+
+  it("drops a figure citing a real column the run never read", () => {
+    const kept = verifyContextFigures({
+      declared: citesProfit,
+      executed: { margin: 0.12 },
+      profile: twoColumnProfile,
+      groundedColumns: ["Sales"],
+    });
+
+    expect(kept).toEqual([]);
+  });
+
+  it("keeps it when the run did read that column", () => {
+    const kept = verifyContextFigures({
+      declared: citesProfit,
+      executed: { margin: 0.12 },
+      profile: twoColumnProfile,
+      groundedColumns: ["Sales", "Profit"],
+    });
+
+    expect(kept.map((figure) => figure.name)).toEqual(["margin"]);
+  });
+});

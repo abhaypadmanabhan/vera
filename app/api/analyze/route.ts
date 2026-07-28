@@ -15,11 +15,49 @@ import { beginAnalysisTrace } from "@/lib/braintrust/logger";
 import type {
   AnalysisRequest,
   Analyst,
+  DatasetProfile,
   Finding,
   StageEvent,
 } from "@/lib/types";
 
 export const runtime = "nodejs";
+
+/**
+ * The schema the analyst can be PROVEN to have run against.
+ *
+ * `realAnalyst` re-profiles the prepared artifact when it can still read it and
+ * silently falls back to the raw file and the raw profile when that artifact has
+ * gone stale — a sandbox recycled between prep and analyze. The route cannot see
+ * which branch was taken, and it used to hand `suggestFollowUps` the cached prep
+ * profile either way. After a stale fallback that proposes questions about
+ * columns prep INVENTED (an amount/unit split adds `duration_amount`, which the
+ * raw file has never heard of), so the next run is either refused by the
+ * guardrail or answered against a schema nobody meant.
+ *
+ * A verified finding's grounding columns were checked against the profile the
+ * analyst actually used (`verifyGrounding`), which makes them the one piece of
+ * evidence available here about which schema that was. If the prepared profile
+ * cannot account for all of them it is demonstrably not the profile that ran, so
+ * follow-ups come from the raw dataset profile — exactly what the analyst fell
+ * back to.
+ *
+ * What this does NOT detect: two profiles with identical column NAMES that
+ * differ only in inferred kind (a dirty text column prep turned into a number).
+ * The grounding carries names, not kinds. Those suggestions stay phrased over
+ * the same columns either way, so the follow-up is still answerable; it is the
+ * structural drift that produces a refusal, and that is what this catches.
+ */
+function groundedProfile(
+  finding: Finding,
+  request: AnalysisRequest,
+): DatasetProfile {
+  const prepared = request.analysisProfile;
+  if (!prepared || finding.verdict !== "verified") return request.dataset.profile;
+  const preparedColumns = new Set(prepared.columns.map((column) => column.name));
+  return finding.grounding.columns.every((column) => preparedColumns.has(column))
+    ? prepared
+    : request.dataset.profile;
+}
 
 /**
  * Run the asked question, then — only while `maxFindings` allows — the
@@ -55,7 +93,6 @@ export function runDeckQuestions(
 ): AsyncIterable<StageEvent> {
   const ceiling = Math.max(1, Math.floor(maxFindings));
   const asked = new Set([request.question.trim().toLowerCase()]);
-  const suggestionProfile = request.analysisProfile ?? request.dataset.profile;
 
   return {
     [Symbol.asyncIterator]() {
@@ -90,9 +127,10 @@ export function runDeckQuestions(
           if (result.done) {
             inner = null;
             if (!finding || finding.verdict !== "verified") return finish();
-            const nextQuestion = suggestFollowUps(finding, suggestionProfile).find(
-              (candidate) => !asked.has(candidate.trim().toLowerCase()),
-            );
+            const nextQuestion = suggestFollowUps(
+              finding,
+              groundedProfile(finding, request),
+            ).find((candidate) => !asked.has(candidate.trim().toLowerCase()));
             if (!nextQuestion) return finish();
             asked.add(nextQuestion.trim().toLowerCase());
             current = { ...request, question: nextQuestion };

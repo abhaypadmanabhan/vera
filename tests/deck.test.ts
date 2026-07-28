@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDeck, matchSlide } from "@/lib/deck";
+import { buildDeck, evidenceHeadline, matchSlide } from "@/lib/deck";
 import type { DatasetProfile, Finding } from "@/lib/types";
 
 const profile: DatasetProfile = {
@@ -36,6 +36,9 @@ const unverified: Finding = {
   verdict: "unverified", reason: "retry_exhausted", detail: "no", code: null, attempts: 2,
 };
 
+/** Any claim that every row backed the schema fact, in any of its wordings. */
+const UNANIMITY = /every row agrees|all\s+(?:of\s+them\s+)?agree/i;
+
 describe("deck", () => {
   it("opens with analyst framing and ends on the summary", () => {
     const deck = buildDeck("What were total sales in Q3 2018?", verified, profile);
@@ -59,6 +62,36 @@ describe("deck", () => {
       },
     };
     expect(buildDeck("q", shaky, profile).slides.filter((s) => s.kind === "caveat")).toHaveLength(0);
+  });
+
+  /*
+   * `SchemaEvidence` counts the rows that SUPPORT a claim and the rows that
+   * CONTRADICT it, and permits rows that do neither — a value that reads validly
+   * both ways is ambiguous, not agreement. The fixture is 5,952 supporting and 0
+   * contradicting on a 9,994-row file, so 4,042 rows said nothing either way and
+   * "every row agrees" was a false statement of proof on a slide Vera narrates.
+   * Zero contradictions proves that nothing disagreed, and no more (PRD §6).
+   */
+  it("never turns an absence of contradictions into unanimity", () => {
+    const evidence = (verified as Extract<Finding, { verdict: "verified" }>).grounding
+      .schemaEvidence[0];
+    expect(evidence).toBeDefined();
+    expect(evidence!.contradictingRows).toBe(0);
+    // The fixture only discriminates if rows really are unaccounted for.
+    expect(evidence!.supportingRows).toBeLessThan(profile.rowCount);
+
+    expect(evidenceHeadline(evidence!)).not.toMatch(UNANIMITY);
+    const deck = buildDeck("q", verified, profile);
+    for (const slide of deck.slides) {
+      expect(slide.spoken, `${slide.id} claimed unanimity`).not.toMatch(UNANIMITY);
+      for (const beat of slide.beats) {
+        expect(beat.spoken, `${slide.id} beat claimed unanimity`).not.toMatch(UNANIMITY);
+      }
+    }
+
+    // What WAS proven is still said out loud — this is a rewording, not a cut.
+    const caveat = deck.slides.find((slide) => slide.kind === "caveat");
+    expect(caveat?.spoken).toMatch(/disagree/i);
   });
 
   it("gives an unverified finding NO slides — nothing to present, nothing to speak", () => {

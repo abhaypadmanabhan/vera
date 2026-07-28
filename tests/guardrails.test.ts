@@ -143,6 +143,74 @@ describe("classifyQuestion", () => {
     expect(classifyQuestion("What was gross margin?", profile)).toEqual({ allowed: true });
   });
 
+  /*
+   * CodeRabbit on PR #40: `availableInformation()` matched a column word against
+   * the exact singular alias, while `missingInformation()`'s patterns accept
+   * plural phrasing. A file whose column is `Discounts` therefore had the
+   * question allowed by one half of the guardrail and refused by the other.
+   */
+  it("recognises a plural column name as the information being asked for", () => {
+    const profile = profileDataset(
+      "plural-columns",
+      "plural-columns.csv",
+      "OrderDate,Discounts,Costs\n15/04/2019,0.10,60\n",
+    );
+
+    expect(classifyQuestion("What was the average discount?", profile)).toEqual({
+      allowed: true,
+    });
+    expect(classifyQuestion("What were total costs?", profile)).toEqual({
+      allowed: true,
+    });
+  });
+
+  /*
+   * Macroscope on PR #43, reviewing the fix above: the first version appended a
+   * bare "s", so `category` pluralised to `categorys` and a `Categories` column
+   * was still reported as missing — the same bug the helper was added to close.
+   */
+  it("handles consonant-plus-y plurals in both directions", () => {
+    const plural = profileDataset(
+      "ies",
+      "ies.csv",
+      "OrderDate,Categories,Quantities\n15/04/2019,Tables,3\n",
+    );
+    expect(classifyQuestion("Which category sold the most?", plural).allowed).toBe(true);
+    expect(classifyQuestion("How many units were sold?", plural).allowed).toBe(true);
+
+    const singular = profileDataset(
+      "y",
+      "y.csv",
+      "OrderDate,Category,Quantity\n15/04/2019,Tables,3\n",
+    );
+    expect(classifyQuestion("Which category sold the most?", singular).allowed).toBe(true);
+  });
+
+  /*
+   * Macroscope on PR #43, reviewing the narrowing fix above. `words()` splits
+   * the hyphen, so "in-store" opened the phrase with the preposition "in", the
+   * loop broke before pushing anything, and the question was allowed without
+   * "purchases" ever being checked.
+   */
+  it("does not lose the subject when the phrase opens with a hyphenated prefix", () => {
+    const decision = classifyQuestion(
+      "How many in-store purchases are there?",
+      salesOnlyProfile,
+    );
+    expect(decision.allowed).toBe(false);
+  });
+
+  it("still allows a bare row count", () => {
+    expect(classifyQuestion("How many are there?", salesOnlyProfile).allowed).toBe(true);
+    expect(classifyQuestion("How many rows are there?", salesOnlyProfile).allowed).toBe(true);
+  });
+
+  it("still refuses when the file genuinely lacks the information", () => {
+    expect(classifyQuestion("What was the average discount?", salesOnlyProfile).allowed).toBe(
+      false,
+    );
+  });
+
   it("allows a ready-made margin without separately requiring profit", () => {
     const profile = profileDataset(
       "margin",
@@ -188,7 +256,38 @@ describe("classifyQuestion", () => {
       );
     });
 
+    /*
+     * Macroscope on PR #42. The meta-word exemption was tested against every
+     * word in the question, so "dataset" excused the whole sentence: the
+     * guardrail returned early and never asked whether the file records
+     * directors at all.
+     */
+    it("checks the counted subject even when a meta word appears elsewhere", () => {
+      expect(
+        classifyQuestion("How many directors are in this dataset?", netflix),
+      ).toMatchObject({
+        allowed: false,
+        category: "missing_information",
+      });
+    });
+
+    /*
+     * Macroscope on PR #42, the same bug in the other half of the check:
+     * recognition ran over every word in the question, so "country" — a
+     * qualifier, not the thing being counted — was enough to let an unrecorded
+     * subject through.
+     */
+    it("does not let a recognised qualifier rescue an unrecorded subject", () => {
+      expect(
+        classifyQuestion("How many directors are there by country?", netflix),
+      ).toMatchObject({
+        allowed: false,
+        category: "missing_information",
+      });
+    });
+
     it.each([
+      "How many titles are there by country?",
       "How many titles are in the catalogue?",
       "How many movies are there?",
       "How many records are in this file?",

@@ -197,6 +197,9 @@ export const realAnalyst: Analyst = {
           declared: result.context,
           executed: result.execution.contextValues,
           profile: analysisDataset.profile,
+          // The columns this finding was actually verified against. Without
+          // them a context figure only had to name a column that exists.
+          groundedColumns: verdict.grounding.columns,
         }),
         valence: result.valence,
         attempts: result.attempts,

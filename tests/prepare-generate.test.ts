@@ -7,6 +7,7 @@ import { parseCsv } from "@/lib/csv";
 import { classifyQuestion } from "@/lib/guardrails/classify";
 import {
   buildPrepPrompt,
+  createMockPreparedArtifact,
   generatePrep,
   parsePrepResponse,
 } from "@/lib/prepare/generate";
@@ -387,6 +388,80 @@ describe("prep generation", () => {
         (question) => classifyQuestion(question, uglyProfile).allowed,
       ),
     ).toBe(true);
+  });
+
+  /*
+   * Macroscope on PR #41. The mixed-unit transform invents `<name>_amount` and
+   * `<name>_unit`. It never checked whether the file already had a column by
+   * that name, so a real `Weight_amount` column would have been assigned
+   * straight over — data destroyed by the step whose whole job is to make the
+   * file more trustworthy.
+   */
+  const mixedUnitColumn = {
+    name: "Weight",
+    kind: "text" as const,
+    nullCount: 0,
+    distinctCount: 2,
+    sampleValues: ["5 kg", "3 lb"],
+    dateFormat: null,
+    evidence: null,
+  };
+
+  /*
+   * Macroscope on PR #43. Recognition used a leading-pair pattern while the
+   * generated str.extract requires the whole cell to be the pair, so a column
+   * of "-5 kg net" was classified as mixed-unit, the split was promised in the
+   * fixes list, and every one of those rows extracted to empty.
+   */
+  it("does not classify a column whose cells the split could not actually parse", () => {
+    const trailing: DatasetProfile = {
+      ...profile,
+      columns: [
+        {
+          name: "Weight",
+          kind: "text" as const,
+          nullCount: 0,
+          distinctCount: 2,
+          sampleValues: ["-5 kg net", "3 lb gross"],
+          dateFormat: null,
+          evidence: null,
+        },
+      ],
+    };
+
+    const prompt = buildPrepPrompt({ ...request, profile: trailing });
+
+    expect(prompt).not.toContain("str.extract");
+  });
+
+  it("offers the mixed-unit split when the derived names are free", () => {
+    const free: DatasetProfile = { ...profile, columns: [mixedUnitColumn] };
+
+    const prompt = buildPrepPrompt({ ...request, profile: free });
+
+    expect(prompt).toContain("Weight_amount");
+  });
+
+  it("withdraws the split when a derived name already exists in the file", () => {
+    const collides: DatasetProfile = {
+      ...profile,
+      columns: [
+        mixedUnitColumn,
+        {
+          name: "Weight_amount",
+          kind: "number" as const,
+          nullCount: 0,
+          distinctCount: 2,
+          sampleValues: ["5", "3"],
+          dateFormat: null,
+          evidence: null,
+        },
+      ],
+    };
+
+    const prompt = buildPrepPrompt({ ...request, profile: collides });
+
+    expect(prompt).not.toContain("str.extract");
   });
 
   it("builds a bounded prompt with the careful prep rules", () => {
@@ -935,6 +1010,116 @@ df.to_csv("/workspace/clean.csv", index=False)`);
       ["2 Seasons", "2", "Seasons"],
       ["Unknown", "", ""],
     ]);
+  });
+
+  /*
+   * Macroscope on PR #41. The extraction regex accepted unsigned amounts only.
+   * Positive samples like `5 kg` and `3 lb` establish the column, and a real
+   * `-5 kg` row then failed `str.extract` — that row lost both its amount and
+   * its unit, silently, in the step whose whole job is to leave the file more
+   * trustworthy than it was.
+   */
+  const signedUnitProfile = profileWithColumn({
+    name: "weight",
+    kind: "text",
+    nullCount: 0,
+    distinctCount: 3,
+    sampleValues: ["5 kg", "3 lb"],
+    dateFormat: null,
+    evidence: null,
+  });
+  const signedUnitCsv = "weight\n5 kg\n-5 kg\n3 lb\n";
+  const signedUnitRows = [
+    ["weight", "weight_amount", "weight_unit"],
+    ["5 kg", "5", "kg"],
+    ["-5 kg", "-5", "kg"],
+    ["3 lb", "3", "lb"],
+  ];
+
+  it("keeps a signed amount instead of emptying that row", async () => {
+    const transformed = await runPrepLocally(
+      signedUnitCsv,
+      signedUnitProfile,
+    );
+
+    expect(transformed.rows).toEqual(signedUnitRows);
+  });
+
+  it("prepares signed amounts in mock mode exactly as pandas does", () => {
+    const artifact = createMockPreparedArtifact(
+      signedUnitProfile,
+      signedUnitCsv,
+    );
+
+    expect(parseCsv(artifact.content)).toEqual(signedUnitRows);
+  });
+
+  it("recognises a mixed-unit column whose sampled amounts are signed", () => {
+    const signedSamples = profileWithColumn({
+      name: "delta",
+      kind: "text",
+      nullCount: 0,
+      distinctCount: 2,
+      sampleValues: ["-5 kg", "3 lb"],
+      dateFormat: null,
+      evidence: null,
+    });
+
+    const prompt = buildPrepPrompt({ ...request, profile: signedSamples });
+
+    expect(prompt).toContain('df[["delta_amount","delta_unit"]]');
+  });
+
+  /*
+   * Macroscope on PR #43. Withdrawing the split on a name collision was not
+   * enough: `transformFor` fell through and returned the generic text cleanup,
+   * so the mock's own `if (!transformFor(...))` guard still passed and it added
+   * `duration_amount` a second time — a duplicate CSV header, re-profiled and
+   * handed to analysis. The fix sentence was offered on the same evidence.
+   */
+  it("adds nothing and promises nothing when a derived name is taken", async () => {
+    const collides: DatasetProfile = {
+      ...profile,
+      duplicateRowCount: 0,
+      notes: [],
+      columns: [
+        {
+          name: "duration",
+          kind: "text",
+          nullCount: 0,
+          distinctCount: 2,
+          sampleValues: ["90 min", "2 Seasons"],
+          dateFormat: null,
+          evidence: null,
+        },
+        {
+          name: "duration_amount",
+          kind: "number",
+          nullCount: 0,
+          distinctCount: 2,
+          sampleValues: ["90", "2"],
+          dateFormat: null,
+          evidence: null,
+        },
+      ],
+    };
+    const csv = "duration,duration_amount\n90 min,90\n2 Seasons,2\n";
+
+    const artifact = createMockPreparedArtifact(collides, csv);
+    const output = await generatePrep(
+      { ...request, profile: collides },
+      { mockMode: true },
+    );
+
+    expect(parseCsv(artifact.content)[0]).toEqual([
+      "duration",
+      "duration_amount",
+    ]);
+    expect(artifact.counts.columnsAdded).toBeUndefined();
+    expect(output.prepCode).not.toContain("str.extract");
+    expect(output.fixes).not.toContain(
+      "Amounts and units stored together will be separated.",
+    );
   });
 
   it("describes the widened fixed menu in the prompt", () => {

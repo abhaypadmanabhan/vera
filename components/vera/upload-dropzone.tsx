@@ -93,11 +93,11 @@ export function UploadDropzone({
       <div
         aria-hidden
         className={cn(
-          "pointer-events-none absolute inset-x-2 inset-y-6 rounded-[20px] border border-dashed border-accent bg-accent-wash/40 transition-opacity duration-150",
+          "pointer-events-none absolute inset-4 flex items-center justify-center rounded-[20px] border border-dashed border-accent bg-accent-wash/60 transition-opacity duration-150",
           dragging ? "opacity-100" : "opacity-0",
         )}
       >
-        <p className="mt-6 text-center text-small font-medium text-accent">Drop your CSV here</p>
+        <p className="text-body font-medium text-accent">Drop your CSV here</p>
       </div>
     </div>
   );
@@ -132,10 +132,10 @@ export function UploadButton({
         type="button"
         disabled={busy}
         onClick={() => inputRef.current?.click()}
-        className="inline-flex items-center gap-1.5 rounded-full border border-line px-3 py-1.5 text-micro text-ink-muted transition-[color,border-color] duration-150 hover:border-line-strong hover:text-ink disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-line disabled:hover:text-ink-muted"
+        className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-line px-3 py-1 text-small text-ink-muted transition-[color,border-color] duration-150 hover:border-line-strong hover:text-ink disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-line disabled:hover:text-ink-muted"
       >
-        <Upload className="size-3" aria-hidden />
-        Use your own file
+        <Upload className="size-3.5" aria-hidden />
+        {busy ? "Preparing your file" : "Use your own file"}
       </button>
     </>
   );

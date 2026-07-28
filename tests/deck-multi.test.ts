@@ -243,6 +243,25 @@ describe("multi-finding deck — several findings, one narrative", () => {
     expect(matchSlide("which region had the highest profit margin", deck)).toBeNull();
   });
 
+  /*
+   * Every per-finding slide claims the same topics — each working slide claims
+   * "code" — so a deictic follow-up scores identically against all of them.
+   * Keeping the first match sent "show me the code", asked while the SECOND
+   * finding was on screen, back to the FIRST finding's program: on stage Vera
+   * answers a question about one number by showing the working for another.
+   */
+  it("answers a deictic follow-up with the slide for the finding on screen", () => {
+    const first = deck.slides.findIndex((slide) => slide.id === "finding-0");
+    const second = deck.slides.findIndex((slide) => slide.id === "finding-1");
+    expect(first).toBeGreaterThan(0);
+    expect(second).toBeGreaterThan(first);
+
+    expect(matchSlide("show me the code", deck, second)?.id).toBe("working-1");
+    expect(matchSlide("show me the code", deck, first)?.id).toBe("working-0");
+    // The deck-wide slides are unaffected: there is only one summary to reach.
+    expect(matchSlide("recap", deck, second)?.id).toBe("summary");
+  });
+
   it("keeps every narrated line free of code jargon", () => {
     const voiceJargon =
       /\b(column|pandas|python|dd\/mm|mm\/dd|day.first|month.first|format|parse[sd]?|row count|dtype|csv)\b/i;

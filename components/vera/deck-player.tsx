@@ -37,6 +37,35 @@ export function needsFallbackPacing(
   return slide !== undefined && (slide.beats.length === 0 || !voiceAvailable);
 }
 
+/** Where narration goes when the beat that just finished was `beat`. */
+export type NarrationMove =
+  | { kind: "beat"; beat: number }
+  | { kind: "slide" }
+  | { kind: "end" };
+
+/**
+ * The one decision `advance` makes, kept pure so the re-entrancy is provable.
+ *
+ * `narration-player.ts` drains beats in a SYNCHRONOUS while loop: its `ended`
+ * handler fires every beat `timeupdate` missed (it ticks ~4Hz) back to back,
+ * so `advance` runs two or three times before React re-renders once. A beat
+ * index read from component state inside that burst is the value captured at
+ * the last render — every call saw the same stale beat, took the "next beat"
+ * branch again, and pushed the cursor past the end of the list. The deck never
+ * reached the next slide and narration stalled there with no further callbacks.
+ *
+ * So the cursor lives in a ref, which is current at the moment of the call, and
+ * this function decides from the value it is handed rather than from a closure.
+ */
+export function nextNarrationMove(
+  beat: number,
+  beatCount: number,
+  isLastSlide: boolean,
+): NarrationMove {
+  if (beat < beatCount - 1) return { kind: "beat", beat: beat + 1 };
+  return isLastSlide ? { kind: "end" } : { kind: "slide" };
+}
+
 export function presenterPosition(
   stage: { left: number; top: number; width: number; height: number },
   target: { left: number; right: number; top: number; height: number },
@@ -78,6 +107,13 @@ export function DeckPlayer({
   const [referencing, setReferencing] = useState(false);
   const [followUp, setFollowUp] = useState("");
   const transitionTimer = useRef<number | null>(null);
+  /*
+   * The beat cursor `advance` reads. `activeBeat` renders it; this holds it,
+   * because the voice can call `advance` several times in one synchronous burst
+   * and state would still read the value from the last render. See
+   * `nextNarrationMove` for the stall that caused.
+   */
+  const beatCursor = useRef(0);
 
   const slide = deck.slides[slideIndex];
   /*
@@ -98,6 +134,7 @@ export function DeckPlayer({
     (nextIndex: number, asReference = false) => {
       const bounded = Math.max(0, Math.min(nextIndex, deck.slides.length - 1));
       setReferencing(asReference);
+      beatCursor.current = 0;
       setActiveBeat(0);
       if (bounded === slideIndex) return;
       if (transitionTimer.current !== null) window.clearTimeout(transitionTimer.current);
@@ -121,17 +158,23 @@ export function DeckPlayer({
   /** Advance one beat, then one slide, then stop. Shared by the voice and the timer. */
   const advance = useCallback(() => {
     if (!slide) return;
-    if (activeBeat < slide.beats.length - 1) {
-      setActiveBeat((current) => current + 1);
+    const move = nextNarrationMove(
+      beatCursor.current,
+      slide.beats.length,
+      slideIndex >= deck.slides.length - 1,
+    );
+    if (move.kind === "beat") {
+      beatCursor.current = move.beat;
+      setActiveBeat(move.beat);
       return;
     }
-    if (slideIndex < deck.slides.length - 1) {
+    if (move.kind === "slide") {
       goTo(slideIndex + 1);
       return;
     }
     setNarrating(false);
     setReferencing(false);
-  }, [activeBeat, deck.slides.length, goTo, slide, slideIndex]);
+  }, [deck.slides.length, goTo, slide, slideIndex]);
 
   // Vera speaks the beat; the deck moves on when she finishes, so the blob is
   // always highlighting whatever she is currently saying.
@@ -171,11 +214,14 @@ export function DeckPlayer({
   }, [narrating, stopNarration]);
 
   // Fallback pacing when there is no audio (mock mode, blocked autoplay, failure).
+  // One timer paces ONE beat, so `activeBeat` is a dependency in its own right:
+  // `advance` no longer changes identity per beat, and without this the timer
+  // armed once per slide and the mock deck stopped on its first beat.
   useEffect(() => {
     if (!narrating || !needsFallbackPacing(slide, voiceAvailable)) return;
     const id = window.setTimeout(advance, NARRATION_TIMING.beatMs);
     return () => window.clearTimeout(id);
-  }, [advance, narrating, slide, voiceAvailable]);
+  }, [activeBeat, advance, narrating, slide, voiceAvailable]);
 
   useEffect(() => {
     if (narrating) return;
@@ -208,7 +254,9 @@ export function DeckPlayer({
   const submitFollowUp = () => {
     const question = followUp.trim();
     if (!question) return;
-    const matched = matchSlide(question, deck);
+    // Where she is standing decides a tie: "show me the code" means the code
+    // behind the finding on screen, not the first finding in the deck.
+    const matched = matchSlide(question, deck, slideIndex);
     setFollowUp("");
     if (matched) {
       const matchedIndex = deck.slides.findIndex((candidate) => candidate.id === matched.id);
@@ -558,6 +606,18 @@ function SlideContent({
      * while the chart stays put.
      */
     const bars = contextSeries(finding.value, finding.context, "This answer");
+    /*
+     * Which figures the chart actually plots. `contextSeries` drops the ones
+     * that cannot share the axis — a percentage change beside a six-figure
+     * total — and those are supposed to be stated as tiles instead. The
+     * annotated treatment hides a tile's figure because the bar already carries
+     * it, so applying it to EVERY tile deleted the value of exactly the figures
+     * the chart had refused to plot: `+10.4` and `6.3` were left as a
+     * description and a provenance line with no number anywhere on the slide.
+     */
+    const charted = new Set(
+      (bars ?? []).filter((bar) => !bar.isAnswer).map((bar) => bar.label),
+    );
     return (
       <section className="deck-canvas">
         <header className="deck-head">
@@ -582,12 +642,23 @@ function SlideContent({
             gives way: a 390px plot cannot hold a category label and a value
             label, so `deck.css` swaps to these tiles instead of clipping the
             numbers. Same markup, no viewport branch in React, no hydration seam.
+
+            The annotated class therefore sits on the CHARTED tiles, one at a
+            time, never on the list — an uncharted figure has no bar to defer to
+            and keeps its number.
           */}
-          <div className={cn("deck-figures", bars && "deck-figures-annotated")}>
+          <div className="deck-figures">
             {finding.context.map((figure, index) => {
               const focus = focusNames[index] ?? "tertiary";
               return (
-                <div key={figure.name} data-focus={focus} className={focusClass(focus)}>
+                <div
+                  key={figure.name}
+                  data-focus={focus}
+                  className={cn(
+                    focusClass(focus),
+                    charted.has(figure.description) && "deck-figures-annotated",
+                  )}
+                >
                   <strong>{formatFigure(figure.value, finding.unit)}</strong>
                   <p>{figure.description}</p>
                   <span>{figure.columnsUsed.join(" · ")}</span>
@@ -802,9 +873,15 @@ function CaveatSlide({
             Taken at face value, the result would have been badly wrong — and nothing on screen
             would have warned you.
           </p>
+          {/*
+            Never "and they all agree": the evidence counts rows that support the
+            claim and rows that contradict it, and a value that reads validly both
+            ways is counted as neither. Zero contradictions proves nothing
+            disagreed, which is all this may say (PRD §6).
+          */}
           <p>
             She checked it against every value the answer rests on before using it
-            {evidence.contradictingRows === 0 ? ", and they all agree." : "."}
+            {evidence.contradictingRows === 0 ? ", and not one of them disagreed." : "."}
           </p>
         </div>
         <EvidenceStats evidence={evidence} />

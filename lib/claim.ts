@@ -24,8 +24,18 @@ export const VALUE_SLOT = "{value}";
  * Digit runs, with optional thousands separators and decimals. Deliberately
  * ignores any leading currency symbol or trailing unit — we compare magnitudes,
  * not formatting.
+ *
+ * The sign is part of the literal, because a loss is a real answer here: the
+ * Tables sub-category loses money, and without this a correct headline reading
+ * "lost -3,000.50" had its minus stripped, failed to match the executed
+ * -3000.50, and was discarded and rebuilt. Fail-safe, but it threw away good
+ * wording on every negative figure.
+ *
+ * The lookbehind keeps a hyphen between two numbers out of it: in "2018-2019"
+ * the match starts at `2`, not at `-`, so a year range stays two positive
+ * years rather than becoming 2018 and -2019.
  */
-const NUMERIC_LITERAL = /\d[\d,]*(?:\.\d+)?/g;
+const NUMERIC_LITERAL = /(?<![\d.])-?\d[\d,]*(?:\.\d+)?/g;
 
 /** Matches the display formatting used on screen and by the voice: 2dp, grouped. */
 export function formatValue(value: number | string): string {

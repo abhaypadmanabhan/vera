@@ -1,63 +1,49 @@
 /*
- * Hero. This is a presentation surface — the builder narrates it in front of
- * judges — so it is type, air, and one action. Nothing decorative.
+ * Hero.
  *
- * The thesis is the sentence itself, set as large as the viewport allows, with
- * the operative clause carried in the one accent.
+ * One sentence, one line under it, one action — then the demonstration. The
+ * argument is not "here is a program"; it is "watch her get to a number you can
+ * check". The program is behind a click inside the panel, for whoever wants it.
+ *
+ * Copy is deliberately short. The builder's note: more words isn't better.
  */
-import { Reveal, SpeakToVera } from "./primitives";
+import { Cta, Section } from "./primitives";
+import { ProofSequence } from "./proof-sequence";
+import { Reveal } from "./reveal";
 
-export function Hero({ questionCount }: { questionCount: number }) {
+export function Hero() {
   return (
-    <header className="flex min-h-[92svh] flex-col justify-between px-6 py-12 sm:px-10 sm:py-16">
-      <Reveal>
-        <div className="flex items-baseline gap-4">
-          <p className="text-lead font-medium tracking-[-0.02em]">Vera</p>
-          <span aria-hidden className="h-px flex-1 bg-line" />
-          <p className="v-label">superstore.csv &middot; 9,994 rows</p>
-        </div>
-      </Reveal>
-
-      <div className="mx-auto w-full max-w-[68rem] py-10">
-        <Reveal step={1}>
-          <h1 className="max-w-[19ch] text-[clamp(2.25rem,5.6vw,4.75rem)] font-medium leading-[1.02] tracking-[-0.035em]">
-            An AI business analyst that{" "}
-            <span className="text-accent">proves every number</span> before she says it.
+    <Section as="header" wide className="pt-8 pb-14 sm:pt-10 sm:pb-20">
+      {/*
+        Headline and the ask sit side by side so the demonstration below them
+        starts high enough to be seen without scrolling. Stacked, the panel
+        began below the fold and the page read as static again.
+      */}
+      <div className="grid items-end gap-x-16 gap-y-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+        <Reveal>
+          <h1 className="v-display max-w-[14ch] text-[clamp(2.25rem,4.6vw,3.75rem)]">
+            She proves every number before she says it.
           </h1>
         </Reveal>
 
-        <Reveal step={2}>
-          <p className="mt-8 max-w-[52ch] text-[clamp(1.0625rem,1.7vw,1.375rem)] leading-[1.45] text-ink-muted">
-            She writes the analysis code, runs it in an isolated sandbox, and files the code and the
-            exact cells it read next to the figure. No traceable source, no number.
+        <Reveal step={1}>
+          <p className="max-w-[38ch] text-body text-ink-muted">
+            Ask a question about your spreadsheet. Vera works the answer out in front of you, and
+            shows you where it came from.
           </p>
-        </Reveal>
 
-        <Reveal step={3}>
-          <div className="mt-10">
-            <SpeakToVera />
+          <div className="mt-6 flex flex-wrap items-center gap-3">
+            <Cta href="/ask">Ask her something</Cta>
+            <Cta href="/open" tone="secondary">
+              Watch the cold open
+            </Cta>
           </div>
         </Reveal>
       </div>
 
-      <Reveal step={4}>
-        <dl className="grid gap-x-12 gap-y-8 border-t border-line pt-8 sm:grid-cols-3">
-          <div>
-            <dt className="v-label">Live claim</dt>
-            <dd className="mt-2 text-body text-ink-muted">Computed, and traceable to source cells</dd>
-          </div>
-          <div>
-            <dt className="v-label">Benchmark</dt>
-            <dd className="mt-2 text-body text-ink-muted">
-              <span className="v-nums font-mono">{questionCount}</span> questions, scored offline
-            </dd>
-          </div>
-          <div>
-            <dt className="v-label">When she cannot trace it</dt>
-            <dd className="mt-2 text-body text-ink-muted">She shows no number</dd>
-          </div>
-        </dl>
+      <Reveal step={2} className="mt-10 sm:mt-12">
+        <ProofSequence />
       </Reveal>
-    </header>
+    </Section>
   );
 }

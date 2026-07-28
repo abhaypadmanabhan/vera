@@ -56,7 +56,8 @@ export interface Bar_ {
 /**
  * Decide whether the headline figure and its context can share one axis, and
  * return the bars if they can. Returns null whenever a chart would mislead:
- * a non-numeric figure, fewer than two bars, mixed signs, or too wide a spread.
+ * a non-numeric figure, a negative one, fewer than two bars, mixed signs, or
+ * too wide a spread.
  */
 export function contextSeries(
   value: number | string,
@@ -65,29 +66,51 @@ export function contextSeries(
 ): Bar_[] | null {
   if (typeof value !== "number" || !Number.isFinite(value)) return null;
 
+  /*
+   * A loss gets tiles, not bars. `ContextChart` plots on an X domain anchored
+   * at 0, so an all-negative series — which passed the same-sign check happily —
+   * put EVERY bar outside its own axis and drew a blank plot. The demo file has
+   * real losses, so this was reachable, and a chart that renders nothing is
+   * worse than the tiles, which state the same grounded figures in full.
+   *
+   * This subsumes the zero case: a bar of 0 draws nothing either.
+   */
+  if (value <= 0) return null;
+
   const comparable = context.filter(
     (figure): figure is ContextFigure & { value: number } =>
       typeof figure.value === "number" && Number.isFinite(figure.value),
   );
   if (comparable.length === 0) return null;
 
+  /*
+   * Keep the figures that can share an axis WITH THE ANSWER, and let the rest
+   * be stated as tiles beside the chart.
+   *
+   * This used to be all-or-nothing, and the first live run showed why that was
+   * wrong: the real context was a prior-period total (130,259.58), a percentage
+   * change (+10.4) and a share (6.3). One figure out of scale killed the whole
+   * chart, even though the answer and the prior period are the same quantity a
+   * year apart — the single most useful comparison on the slide.
+   */
+  const sameSign = (figure: number) => figure >= 0;
+  const inScale = (figure: number) => {
+    const a = Math.abs(value);
+    const b = Math.abs(figure);
+    if (a === 0 || b === 0) return false;
+    return Math.max(a, b) / Math.min(a, b) <= MAX_SPREAD;
+  };
+
   const bars: Bar_[] = [
     { label: claimLabel, value, isAnswer: true },
     ...comparable
+      .filter((figure) => sameSign(figure.value) && inScale(figure.value))
       .slice(0, MAX_BARS - 1)
       .map((figure) => ({ label: figure.description, value: figure.value, isAnswer: false })),
   ];
 
-  // Mixed signs on one axis need a zero baseline and a diverging treatment.
-  // A deck slide is the wrong place for that, so it falls back to tiles.
-  const positive = bars.every((bar) => bar.value >= 0);
-  const negative = bars.every((bar) => bar.value <= 0);
-  if (!positive && !negative) return null;
-
-  const magnitudes = bars.map((bar) => Math.abs(bar.value)).filter((size) => size > 0);
-  if (magnitudes.length < 2) return null;
-  const spread = Math.max(...magnitudes) / Math.min(...magnitudes);
-  if (spread > MAX_SPREAD) return null;
+  // One bar is not a comparison. Below that the slide states the figures instead.
+  if (bars.length < 2) return null;
 
   return bars;
 }
@@ -149,6 +172,8 @@ export function ContextChart({
             margin={{ top: 2, right: 8, bottom: 2, left: 0 }}
             barCategoryGap="26%"
           >
+            {/* Anchored at 0, so every bar must be non-negative — `contextSeries`
+                rejects a negative answer rather than plotting off-axis. */}
             <XAxis type="number" domain={[0, domainMax]} hide />
             <YAxis
               type="category"

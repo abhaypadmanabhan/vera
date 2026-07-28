@@ -287,6 +287,43 @@ describe("suggestFollowUps on a Netflix-shaped file", () => {
     }
   });
 
+  /*
+   * Macroscope on PR #42. The identifier ratio was measured against every row,
+   * including the empty ones, so a key with nulls looked like a quantity: 90
+   * distinct values over 100 rows is 0.90, under the 0.95 threshold, even
+   * though every populated row holds a unique value. `seq` was then totalled
+   * and compared — "Which genre had the highest seq?".
+   */
+  it("reads a sparsely populated integer key as an identifier, not a quantity", () => {
+    const sparseKeyProfile: DatasetProfile = {
+      ...netflixProfile,
+      filename: "watchlog.csv",
+      rowCount: 100,
+      columns: [
+        column({
+          name: "seq",
+          kind: "integer",
+          nullCount: 10,
+          distinctCount: 90,
+          sampleValues: ["10432", "10433", "10434", "10435", "10436"],
+        }),
+        column({ name: "genre", distinctCount: 9 }),
+      ],
+    };
+    const finding: Finding = {
+      ...verified,
+      grounding: { ...verified.grounding, columns: ["seq"] },
+    };
+
+    const suggestions = suggestFollowUps(finding, sparseKeyProfile);
+
+    expect(suggestions.join(" ").toLowerCase()).not.toContain("seq");
+    expect(suggestions.length).toBeGreaterThan(0);
+    for (const suggestion of suggestions) {
+      expect(classifyQuestion(suggestion, sparseKeyProfile).allowed).toBe(true);
+    }
+  });
+
   it("counts rows when the filename offers no honest noun", () => {
     const bareProfile: DatasetProfile = {
       ...netflixProfile,

@@ -1,31 +1,41 @@
 /*
- * Landing primitives — DESIGN.md v3 tokens only. No new colour, no new family.
+ * Landing primitives — DESIGN.md v4 tokens only. No new colour, no new family,
+ * no size outside the scale.
  *
- * The whole page is one scroll narrative, so everything here is built for
- * reading from across a room: hairline rules instead of cards, mono eyebrows
- * instead of chrome, and figures that are always tabular.
+ * Deliberately thin. `Section` owns horizontal gutter and measure and NOTHING
+ * else: vertical rhythm is set per section, because a uniform `py-36` on every
+ * band is the tell the vault names first ("200-290px voids that read as
+ * unfinished"). Each section below picks its own top and bottom.
  */
 import Link from "next/link";
 import type { ReactNode } from "react";
 
 /**
- * The one CTA idiom. Repeats in the hero and at the very bottom; both point at
- * the live demo, so it is a link and not a button.
+ * The CTA pair. Primary is the ink pill into the live demo; secondary is a
+ * hairline link into the recorded cold open. Both say what happens next.
  */
-export function SpeakToVera({ tone = "solid" }: { tone?: "solid" | "quiet" }) {
+export function Cta({
+  href,
+  children,
+  tone = "primary",
+}: {
+  href: string;
+  children: ReactNode;
+  tone?: "primary" | "secondary";
+}) {
   const base =
-    "group inline-flex items-center gap-3 rounded-full px-7 py-3.5 text-lead font-medium transition-[transform,background-color,border-color] duration-[260ms] ease-settle motion-safe:hover:-translate-y-0.5";
+    "group inline-flex items-center gap-3 rounded-full px-6 py-3 text-body font-medium transition-[transform,background-color,border-color,color] duration-[260ms] ease-settle motion-safe:hover:-translate-y-px";
 
   return (
     <Link
-      href="/ask"
+      href={href}
       className={
-        tone === "solid"
+        tone === "primary"
           ? `${base} bg-ink text-bg hover:bg-accent`
-          : `${base} border border-line-strong text-ink hover:border-accent hover:text-accent`
+          : `${base} border border-line-strong text-ink hover:border-ink hover:text-ink`
       }
     >
-      Speak to Vera
+      {children}
       <span
         aria-hidden
         className="transition-transform duration-[260ms] ease-settle motion-safe:group-hover:translate-x-1"
@@ -36,46 +46,50 @@ export function SpeakToVera({ tone = "solid" }: { tone?: "solid" | "quiet" }) {
   );
 }
 
-/** Section wrapper: the page's vertical rhythm lives here and nowhere else. */
+/** Horizontal gutter + measure. Vertical rhythm is the caller's business. */
 export function Section({
-  eyebrow,
   children,
   className = "",
+  wide = false,
+  as: Tag = "section",
 }: {
-  eyebrow?: string;
   children: ReactNode;
   className?: string;
+  wide?: boolean;
+  as?: "section" | "header" | "footer";
 }) {
   return (
-    <section className={`border-t border-line px-6 py-28 sm:px-10 sm:py-36 ${className}`}>
-      <div className="mx-auto w-full max-w-[68rem]">
-        {eyebrow ? <p className="v-label mb-14">{eyebrow}</p> : null}
-        {children}
-      </div>
-    </section>
+    <Tag className={`px-6 sm:px-12 ${className}`}>
+      <div className={`mx-auto w-full ${wide ? "max-w-[78rem]" : "max-w-[68rem]"}`}>{children}</div>
+    </Tag>
   );
 }
 
 /**
- * Fades a block in as it enters the viewport. Transform + opacity only, and
- * `prefers-reduced-motion` is handled in globals.css, which forces the end
- * state — so the content is never left invisible.
+ * Re-exported so every call site keeps importing `Reveal` from here. The
+ * implementation moved to its own client module when it became an
+ * IntersectionObserver — this file stays a server component.
  */
-export function Reveal({
-  children,
-  step = 0,
-  className = "",
-}: {
-  children: ReactNode;
-  step?: number;
-  className?: string;
-}) {
+export { Reveal } from "./reveal";
+
+/**
+ * The one icon on the page that is not a directional arrow. It marks a verified
+ * figure, which is the single thing the accent is allowed to mean — a hairline
+ * check, not a coloured status dot.
+ */
+export function CheckMark({ className = "" }: { className?: string }) {
   return (
-    <div
-      className={`v-reveal-slow ${className}`}
-      style={{ "--step": step } as React.CSSProperties}
+    <svg
+      viewBox="0 0 16 16"
+      aria-hidden
+      className={`size-4 ${className}`}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
     >
-      {children}
-    </div>
+      <path d="M2.5 8.5 6 12l7.5-8" />
+    </svg>
   );
 }

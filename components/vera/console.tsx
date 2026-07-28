@@ -49,6 +49,20 @@ export function Console({
   const upload = prep.summary ? (prep.upload ?? undefined) : undefined;
 
   /**
+   * The file THIS run was actually answered about, frozen when the question was
+   * submitted.
+   *
+   * `activeDataset` is live: it flips the moment a prep reports. A question
+   * asked against the demo file while an upload was still preparing would
+   * therefore be answered on the demo file and then rendered with the uploaded
+   * file's name, row count and columns — a real number attributed to a file it
+   * never touched. That is precisely the claim PRD §6 exists to protect, so the
+   * run holds its own dataset and the ask screen keeps the live one.
+   */
+  const [ranAgainst, setRanAgainst] = useState<DatasetSummary | null>(null);
+  const runDataset = ranAgainst ?? activeDataset;
+
+  /**
    * Chips are the uploaded file's own questions once it is prepared — the route
    * already filtered them through the guardrail. A failed prep offers none
    * rather than offering a question about a file she is no longer reading.
@@ -68,9 +82,10 @@ export function Console({
       setAsked(trimmed);
       setStartedAt(Date.now());
       setSubmitted(true);
+      setRanAgainst(activeDataset);
       void start(trimmed, activeDataset.id, upload);
     },
-    [activeDataset.id, start, upload],
+    [activeDataset, start, upload],
   );
 
   const submit = useCallback(() => ask(question), [ask, question]);
@@ -81,6 +96,7 @@ export function Console({
     setAsked("");
     setQuestion("");
     setStartedAt(0);
+    setRanAgainst(null);
   }, [reset]);
 
   // Settled only once the stream has ENDED — a multi-finding deck keeps
@@ -90,15 +106,15 @@ export function Console({
   const phase = !submitted ? "ask" : settled ? "finding" : "working";
   const profile = useMemo(
     () => ({
-      datasetId: activeDataset.id,
-      filename: activeDataset.filename,
-      rowCount: activeDataset.rowCount,
-      columns: activeDataset.columns,
-      duplicateRowCount: activeDataset.duplicateRowCount,
+      datasetId: runDataset.id,
+      filename: runDataset.filename,
+      rowCount: runDataset.rowCount,
+      columns: runDataset.columns,
+      duplicateRowCount: runDataset.duplicateRowCount,
       crossChecks: [],
-      notes: activeDataset.notes,
+      notes: runDataset.notes,
     }),
-    [activeDataset],
+    [runDataset],
   );
 
   /**
@@ -135,9 +151,10 @@ export function Console({
       setAsked(nextQuestion);
       setStartedAt(Date.now());
       setSubmitted(true);
+      setRanAgainst(activeDataset);
       void start(nextQuestion, activeDataset.id, upload);
     },
-    [activeDataset.id, start, upload],
+    [activeDataset, start, upload],
   );
 
   return (
@@ -172,7 +189,7 @@ export function Console({
         <DeckPlayer
           deck={deck}
           finding={firstVerified}
-          dataset={activeDataset}
+          dataset={runDataset}
           benchmark={benchmark}
           isMock={isMock}
           suggestedFollowUps={suggestedFollowUps}
@@ -184,7 +201,7 @@ export function Console({
         <FindingScreen
           question={asked}
           finding={finding}
-          dataset={activeDataset}
+          dataset={runDataset}
           onReset={askAgain}
         />
       )}

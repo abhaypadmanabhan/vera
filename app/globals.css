@@ -297,16 +297,23 @@
    * Scroll reveal. Driven by `components/landing/reveal.tsx`, which sets
    * `data-shown` when the block enters the viewport.
    *
-   * The default state is VISIBLE, and the hidden state only exists where motion
-   * is welcome. That way a reduced-motion reader, or anyone whose JavaScript
-   * never arrives, reads the page rather than a blank one.
+   * The default state is VISIBLE, and it is the only state this stylesheet can
+   * reach on its own. The hidden start state lives behind `.v-js`, a class that
+   * `reveal.tsx` stamps on `<html>` from its own mount effect — so it exists
+   * only once the reveal code is present AND running AND able to undo it. With
+   * JavaScript off, blocked, or a bundle that never arrives, the class is never
+   * added, these rules never match, and the reader gets the page rather than a
+   * permanently blank one. Same for a reduced-motion reader, who never enters
+   * the media query at all.
+   *
+   * Progressive enhancement, not a fallback: nothing is hidden speculatively.
    */
   .v-rise {
     opacity: 1;
   }
 
   @media (prefers-reduced-motion: no-preference) {
-    .v-rise {
+    .v-js .v-rise {
       opacity: 0;
       transform: translate3d(0, 16px, 0);
       transition:
@@ -315,7 +322,7 @@
       transition-delay: calc(var(--step, 0) * 90ms);
     }
 
-    .v-rise[data-shown] {
+    .v-js .v-rise[data-shown] {
       opacity: 1;
       transform: translate3d(0, 0, 0);
     }

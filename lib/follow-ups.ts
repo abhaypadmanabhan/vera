@@ -83,10 +83,19 @@ function looksLikeYears(column: ColumnProfile): boolean {
   );
 }
 
-/** Almost as many distinct values as rows: a key, not a quantity. */
+/**
+ * Almost as many distinct values as rows: a key, not a quantity.
+ *
+ * Measured against the POPULATED rows. A key with nulls is still a key — 90
+ * distinct values over 100 rows is 0.90 and slips under the threshold, even
+ * when all 90 populated rows are unique — and the column was then totalled and
+ * compared as if it were an amount.
+ */
 function looksLikeIdentifier(column: ColumnProfile, rowCount: number): boolean {
-  if (column.kind !== "integer" || rowCount === 0) return false;
-  return column.distinctCount >= rowCount * IDENTIFIER_DISTINCT_RATIO;
+  if (column.kind !== "integer") return false;
+  const populated = rowCount - column.nullCount;
+  if (populated <= 0) return false;
+  return column.distinctCount >= populated * IDENTIFIER_DISTINCT_RATIO;
 }
 
 /** A handful of small whole numbers: a rating scale or a code, not a quantity. */

@@ -77,3 +77,197 @@ the absence of an exception.
 **How to apply:** for anything that costs money or destroys state, the proof is an independent
 observation of the new state, not the return value of the call that was supposed to change it.
 Poll until the world agrees.
+
+---
+
+## 2026-07-27 — A design doc can be the thing that generates the AI tells
+
+**What happened:** DESIGN.md v3 prescribed uppercase mono micro-labels as *the* label idiom, a 16px
+prose size, and two families with mono carrying every figure. Every screen obediently shipped them.
+The builder's own `AI Design Tells.md` lists "uppercase mono micro-labels", "mono used as a UI font"
+and "type at 11–13px" as three of its top ten reject items. The house style and the house rules were
+in direct conflict, and the house style won by default because it was the file in the repo.
+
+**Why it matters:** consistency with a spec is not the same as quality. A rule applied everywhere
+produces a page that is uniformly wrong rather than patchily wrong, which is harder to see and
+easier to defend.
+
+**How to apply:** when an external reference (the vault) and the in-repo spec disagree about a
+*tell*, reconcile at the token layer and update the spec in the same change — one edit to `.v-label`
+fixed every call site. And read the reject list before building, not after: `CLAUDE.md` now points
+at both vaults so the next agent starts there.
+
+---
+
+## 2026-07-27 — "Fits" is a claim about pixels; assert it with pixels
+
+**What happened:** the deck's `working` slide declared a three-row grid and rendered six children.
+The overflow was invisible in code review, invisible to `tsc`, invisible to 413 passing tests, and
+completely obvious in a screenshot: the cells table printed straight through the evidence prose.
+The `meaning` slide had the mirror bug — two hard-coded rows for one figure, most of the stage empty.
+
+**Why it matters:** layout defects are the one class where the type system and the test suite have
+nothing to say. Both slides had been shipped and reviewed.
+
+**How to apply:** for any layout claim, run a real browser and assert geometry, not appearance —
+a script that walks every leaf text node, intersects their bounding boxes, and fails on any
+overlap found four real defects in one pass across 1440/768/390 and light/dark. Two caveats it
+taught: skip `.sr-only` nodes (clipped, but still report rects) and skip closed `<details>`
+content (Chrome reports rects for it), or the audit drowns in false positives.
+
+---
+
+## 2026-07-27 — A utility that "merges classes" can be quietly deleting them
+
+**What happened:** `cn()` was `twMerge(clsx(...))` on tailwind-merge's stock config, which has no
+knowledge of this repo's design tokens. It cannot tell `text-small` (a size) from `text-danger`
+(a colour) — both are `text-*` with an unrecognised name — so it filed them in one group and kept
+the last: `cn("text-small text-danger")` → `"text-danger"`. Every element written that way had been
+rendering at the browser's default 16px since the token scale was introduced. No error, no warning,
+and `tsc`, ESLint, `next build` and 413 tests all pass with it in place.
+
+**Why it matters:** the failure is silent *and* invisible in review — the source reads correctly.
+It only shows up if you measure the computed font size in a browser, which nobody does by default.
+
+**How to apply:** any Tailwind project with a custom `@theme` must teach tailwind-merge its token
+names via `extendTailwindMerge` — `font-size`, `text-color`, `bg-color`, `border-color` at minimum.
+Verify it with a one-liner that prints `cn()` output for a size+colour pair, and keep the token
+lists next to a comment pointing back at `@theme`. More generally: when a helper's job is to
+*remove* things, test what it removes, not just that it runs.
+
+---
+
+## 2026-07-27 — JSX eats the space when an expression opens a line, and this build shows it
+
+**What happened:** `{facts.questionCount} ordinary questions…` — space present in the source, on the
+same line — rendered as **"21ordinary"**. Same for `<span>{count}</span> that needed…` → "11that".
+It was invisible in review (the source reads correctly) and invisible in a downscaled screenshot;
+it only showed up when the rendered `innerText` was read back. A previous pass hit the identical
+bug and worked around it locally without anyone writing down the rule.
+
+**Why it matters:** the copy is the product on a landing page. A glued word reads as a typo made by
+whoever wrote it, and there is no lint rule and no test that catches it.
+
+**How to apply:** when an expression container or element is the FIRST token on a JSX line and text
+follows it, write the space explicitly as `{" "}` on its own line. And verify copy the only way that
+is real — read `document.body.innerText` back from the running page. A one-line regex over that
+text (`/\d[a-zA-Z]{3,}/`) catches the whole class across every route in seconds; it is now part of
+the landing verification script.
+
+---
+
+## 2026-07-27 — An IntersectionObserver silently loses anything you jump past
+
+**What happened:** scroll reveals were switched from a load animation to an IntersectionObserver.
+Scrolling normally, everything appeared. Jumping to the bottom, **12 of 23 blocks never revealed and
+stayed at `opacity: 0` permanently** — the element went from below the viewport to above it in one
+step, its intersection ratio was 0 before and 0 after, nothing changed, so the callback never ran.
+An anchor link, End, or a fast flick reproduces it.
+
+**Why it matters:** the failure mode is a blank page section, and it only appears on the navigation
+paths people actually use in a hurry. Testing by scrolling smoothly hides it completely.
+
+**How to apply:** an observer alone is not enough for reveal-on-scroll. Pair it with a
+rAF-throttled scroll/resize check that reveals anything whose top has risen above the fold line, and
+have both paths remove themselves once shown. Test it by JUMPING — `window.scrollTo(0,
+document.body.scrollHeight)` — and asserting the count of revealed elements, not by watching it.
+
+---
+
+## 2026-07-27 — A plan measured against a stale local ref is a plan for a repo that does not exist
+
+**What happened:** the CodeRabbit split was worked out carefully — six batches, worst slice 75
+files, "measured, not estimated" — and it was unexecutable. It had been measured against the local
+`dev`, which was **95 commits behind `origin/dev`**. Against the real remote, three of the six batch
+tips were *already merged* (GitHub refuses a PR with no commits between base and head), and the true
+diff was 81 commits / 125 files rather than 172 / 120. Recomputing against `origin/dev` gave four
+slices, worst case 50 — better than the plan it replaced.
+
+**Why it matters:** every number in the plan was real. `git rev-list` had not lied. The measurement
+was simply taken against a ref that no longer described the branch anyone would merge into, and
+nothing about the output says which ref it used. Following the plan literally would have created
+three empty PRs and three with wrong bases, and the failure would have looked like a GitHub problem.
+
+**How to apply:** compare against `origin/<base>`, never the local tracking branch, and `git fetch`
+first. Before acting on any inherited plan that carries measurements, re-derive one of its numbers —
+one command would have caught this. And check the cheap disqualifier before the expensive work: `git
+merge-base --is-ancestor <tip> origin/dev` decides whether a batch has anything left in it at all.
+
+---
+
+## 2026-07-27 — "Skipped" from a bot is a status, not a reason
+
+**What happened:** the four split PRs were opened and three came back `Review skipped`. The obvious
+reading — after a whole plan built around a 100-file limit — was that the slices were still too big.
+They were not: 50, 38 and 32 files. The actual reason was in the message body:
+`.coderabbit.yaml` lists only `dev` and `main` under `reviews.auto_review.base_branches`, and a
+stacked PR's base is a `review/*` branch. Same word, unrelated cause, and the fix
+(`@coderabbitai review`) was printed in the skip notice itself.
+
+**Why it matters:** the split was the fix for the previous skip, so a second skip read as the fix
+having failed. Acting on that reading means re-splitting work that did not need re-splitting.
+
+**How to apply:** read the whole message before matching it to the failure you were expecting —
+especially when a bot reuses one word for several conditions. And when a plan introduces a new base
+branch, check what the CI and review config say about base branches *before* opening the PRs; the
+config was in the repo the entire time and answers it in four lines.
+
+---
+
+## 2026-07-28 — A test that passes with the bug still in place is worth nothing
+
+**What happened:** across one session, four separate tests were written to prove a fix and all four
+passed *before* the fix was applied. A dedup fixture whose two rows differed in a second column, so
+neither was ever a duplicate. A measure-selection fixture with one numeric column, so the
+`numeric[0]` fallback picked it either way. A second attempt at the same test using `widget_count`
+as the control — which the old substring regex also rejected, because "wIDget" contains `id`. And a
+deck test that drove the real narration burst but never actually read the value the fix changed,
+confirmed by reverting and watching all 41 tests stay green.
+
+**Why it matters:** each of those tests looked like proof and was written *specifically* as proof.
+Green told us nothing, and in three of the four cases the fixture was wrong in a way that is
+invisible unless you run it against the old code.
+
+**How to apply:** proving a fix means running the new test against the OLD code and watching it
+fail. Revert exactly one hunk, run, confirm red, restore, confirm green — and if it stays green,
+the fixture does not discriminate and the test is not evidence yet. When it cannot be made to
+discriminate (no DOM, no browser), say so explicitly instead of letting a green suite imply a
+proof that was never obtained.
+
+---
+
+## 2026-07-28 — Partition parallel agents by file, and the boundary holds
+
+**What happened:** six agents worked one repo concurrently on 27 review findings. They were given
+disjoint file sets — down to which *test* files each owned — and forbidden from git, `pnpm build`
+and `pnpm dev`. All 19 modified source files mapped to exactly one owner; no agent wrote outside
+its slice; the full suite went 413 → 463 with no cross-slice breakage.
+
+**Why it matters:** the usual failure of parallel agents is two of them editing one file and
+producing garbage. The constraint that prevented it was mechanical, not a request for care: the
+partition was computed from the findings' own file paths before any agent started.
+
+**How to apply:** group the work by the files it must touch, not by topic, and give each agent an
+explicit list including tests. Forbid anything that writes shared state — `.next/`, the git index,
+`package.json` — and have the orchestrator run the build and own every commit. Two findings on one
+file belong to one agent even when they are unrelated; two unrelated files can share an agent
+freely. Tell each agent which fixes already landed, or it will "fix" them again.
+
+---
+
+## 2026-07-28 — A reviewer's example can be wrong while its finding is right
+
+**What happened:** a bot reported that a substring regex rejected `daily_sales`, `monthly_revenue`
+and `paid_amount` as measures. Two were real. `daily_sales` was not — "day" is not a substring of
+"daily" — and a test written around that example passed with the bug still in place. The same
+session saw a suggested diff that referenced local variables no longer in the file, and another
+whose fix would have deleted the feature it was meant to protect.
+
+**Why it matters:** the finding was correct and worth fixing; the example was the part that got
+copied into the test, and it was the part that was false. The repo's own comment had already
+absorbed the same bad example from an earlier pass.
+
+**How to apply:** verify the reviewer's *reproduction*, not just its conclusion — the finding and
+the example are separate claims. Fix the root cause, then write the test from a case you confirmed
+yourself. And when an example turns out to be wrong, correct it where it was copied to, or the next
+reader derives a rule from a failure that cannot happen.

@@ -137,8 +137,28 @@ function meaningLine(figure: ContextFigure): string {
 export function evidenceHeadline(evidence: SchemaEvidence | null): string {
   if (!evidence) return "Rows behind the answer";
   return evidence.contradictingRows === 0
-    ? "One thing changes the answer — every row agrees"
+    ? "One thing changes the answer — and nothing in the file disagreed"
     : "One thing changes the answer — what the rows said";
+}
+
+/**
+ * What the check actually proved, in one sentence.
+ *
+ * `SchemaEvidence` counts the rows that SUPPORT the claim and the rows that
+ * CONTRADICT it, and permits rows that do neither — a value that reads validly
+ * both ways is ambiguous, not agreement. The demo evidence is 5,952 supporting
+ * and 0 contradicting on a 9,994-row file, so "every row agrees" was a false
+ * statement of proof on a slide Vera narrates (PRD §6). Zero contradictions
+ * proves that nothing disagreed, and that is the most this line may say.
+ *
+ * The ambiguous count is deliberately not computed: `grounding.rowCount` is how
+ * many rows the ANSWER touched, not how many the schema check read, and
+ * subtracting one from the other would invent a figure no code produced.
+ */
+function agreementLine(evidence: SchemaEvidence): string {
+  return evidence.contradictingRows === 0
+    ? "I checked it against every row before I used it, and not one of them disagreed."
+    : "I checked it against every row before I used it.";
 }
 
 /**
@@ -151,13 +171,10 @@ function displayName(filename: string): string {
 }
 
 function caveatLine(evidence: SchemaEvidence): string {
-  const unanimous = evidence.contradictingRows === 0;
   return (
     "There is something in this file worth knowing about. " +
     "Taken at face value it would have sent the answer badly wrong, and nothing would have warned you. " +
-    (unanimous
-      ? "I checked it against every row before I used it, and they all agree."
-      : "I checked it against every row before I used it.")
+    agreementLine(evidence)
   );
 }
 
@@ -281,9 +298,7 @@ function buildSingleDeck(
           focus: "consequence",
           spoken:
             "Taken at face value it would have sent the answer badly wrong, and nothing would have warned you. " +
-            (evidence.contradictingRows === 0
-              ? "I checked it against every row before I used it, and they all agree."
-              : "I checked it against every row before I used it."),
+            agreementLine(evidence),
         },
       ],
       covers: [
@@ -461,9 +476,7 @@ function buildMultiDeck(
             focus: "consequence",
             spoken:
               "Taken at face value it would have sent the answer badly wrong, and nothing would have warned you. " +
-              (evidence.contradictingRows === 0
-                ? "I checked it against every row before I used it, and they all agree."
-                : "I checked it against every row before I used it."),
+              agreementLine(evidence),
           },
         ],
         covers: [
@@ -573,14 +586,30 @@ const DEICTIC_WORD_LIMIT = 2;
  * that never answered it — on stage that reads as Vera ignoring the question.
  * A long question needs a phrase hit or two separate topics; a three-word one
  * still routes on a single keyword, which is the whole point of asking it.
+ *
+ * `fromIndex` is the slide the viewer is looking at, and it breaks ties. Every
+ * per-finding slide in a multi-finding deck carries the SAME topics — each
+ * working slide claims "code" — so scores tie constantly, and keeping the first
+ * one sent "show me the code" asked while viewing the second finding back to
+ * the FIRST finding's code. A deictic follow-up points at what is on screen, so
+ * a tie resolves to the slide presenting the same finding, then to the nearest.
  */
-export function matchSlide(question: string, deck: Deck): Slide | null {
+export function matchSlide(question: string, deck: Deck, fromIndex = 0): Slide | null {
   const asked = question.toLowerCase();
   const words = new Set(asked.split(/[^a-z0-9]+/).filter((w) => w.length > 2));
   const deictic = contentWords(words).size <= DEICTIC_WORD_LIMIT;
+  // A slide with no `findingIndex` belongs to the only finding there is.
+  const fromFinding = deck.slides[fromIndex]?.findingIndex ?? 0;
 
-  let best: { slide: Slide; score: number } | null = null;
-  for (const slide of deck.slides) {
+  type Candidate = { slide: Slide; score: number; sameFinding: boolean; distance: number };
+  const outranks = (candidate: Candidate, incumbent: Candidate): boolean => {
+    if (candidate.score !== incumbent.score) return candidate.score > incumbent.score;
+    if (candidate.sameFinding !== incumbent.sameFinding) return candidate.sameFinding;
+    return candidate.distance < incumbent.distance;
+  };
+
+  let best: Candidate | null = null;
+  for (const [index, slide] of deck.slides.entries()) {
     let score = 0;
     for (const topic of slide.covers) {
       if (topic.includes(" ")) {
@@ -589,7 +618,14 @@ export function matchSlide(question: string, deck: Deck): Slide | null {
         score += 2;
       }
     }
-    if (score > 0 && (!best || score > best.score)) best = { slide, score };
+    if (score === 0) continue;
+    const candidate: Candidate = {
+      slide,
+      score,
+      sameFinding: (slide.findingIndex ?? 0) === fromFinding,
+      distance: Math.abs(index - fromIndex),
+    };
+    if (!best || outranks(candidate, best)) best = candidate;
   }
 
   if (!best) return null;

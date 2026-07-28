@@ -33,7 +33,21 @@ export function buildAuditProgram(
     "            reordered = True",
     "    if not reordered:",
     "        cells_coerced = int((before[shared_columns] != prepared_shared).to_numpy().sum())",
-    "        after = prepared.drop_duplicates()",
+    /*
+     * De-duplicate on the SOURCE rows, not the prepared ones.
+     *
+     * `prepared.drop_duplicates()` deletes rows that only became identical
+     * during prep — two genuinely different source records reading `$1` and `1`
+     * coerce to the same value, and one of them was then silently destroyed
+     * while `duplicatesDropped` reported it as an exact repeat. The invariant
+     * this audit exists to hold is that prep removes only rows that were
+     * already exact repeats in the file the user gave us.
+     *
+     * Both frames are guarded above to the same length and both carry a default
+     * RangeIndex; `.to_numpy()` makes the mask positional so alignment cannot
+     * quietly reorder it.
+     */
+    "        after = prepared[~before.duplicated().to_numpy()]",
     `        after.to_csv(${JSON.stringify(cleanPath)}, index=False)`,
     "        counts = {",
     '            "rowsBefore": int(len(before)),',

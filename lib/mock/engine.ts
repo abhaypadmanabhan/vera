@@ -48,11 +48,30 @@ function buildMockCode(dataset: ResolvedDataset, numericColumn: string | null): 
     );
   }
 
+  if (!numericColumn) {
+    lines.push("", "print(len(df))");
+    return lines.join("\n");
+  }
+
+  /*
+   * Strip the symbols before summing, because `numericTotal` below strips exactly
+   * the same ones to get the number printed beside this code.
+   *
+   * A currency column is text to pandas: `df["Amount"].sum()` on "$1.00", "$2.00"
+   * concatenates to "$1.00$2.00" and `round()` then raises TypeError. The panel
+   * used to show that bare `.sum()` next to a total computed off the cleaned
+   * values — a figure the code on screen could not have produced, which is the
+   * one thing PRD §6 says we never do.
+   */
+  const column = JSON.stringify(numericColumn);
   lines.push(
     "",
-    numericColumn
-      ? `print(round(df[${JSON.stringify(numericColumn)}].sum(), 2))`
-      : "print(len(df))",
+    `df[${column}] = pd.to_numeric(`,
+    `    df[${column}].astype(str).str.replace(r"[$,%\\s]", "", regex=True),`,
+    '    errors="coerce",',
+    ")",
+    "",
+    `print(round(df[${column}].sum(), 2))`,
   );
   return lines.join("\n");
 }
@@ -94,11 +113,22 @@ function groundingFrom(dataset: ResolvedDataset, preferred: string[] = []): Grou
     });
   });
 
-  const rowCount = schema.rowCount > 0 ? schema.rowCount : 24;
+  /*
+   * However many rows the file has, including none.
+   *
+   * This used to fall back to 24 when the body was empty — a leftover from the
+   * era of the one hardcoded Superstore answer. A header-only upload then
+   * produced a "verified" finding claiming 24 records, with stdout `24`, that
+   * nothing had counted.
+   */
+  const rowCount = schema.rowCount;
   return {
     columns: usedColumns,
     rowCount,
-    rowRange: [0, Math.max(rowCount - 1, 0)],
+    // Null, not [0, 0], when there are no body rows: a range says "row 0 was
+    // read", and on a header-only file no row was. `verifyGrounding` on the
+    // real path already returns null here; this is the mock catching up.
+    rowRange: rowCount > 0 ? [0, rowCount - 1] : null,
     sampleCells,
     // Real, counted proof from the profiler — not decoration.
     schemaEvidence: dataset.profile.columns
@@ -139,8 +169,28 @@ function humanize(column: string): string {
 const MEASURE_NAME =
   /(sales|revenue|profit|margin|amount|total|price|cost|spend|value|quantity|units|count)/i;
 
-/** A stamp or a key: numeric in the file, never a quantity to add up. */
-const NOT_A_MEASURE = /(year|month|day|date|id|code|zip|postal|phone|lat|lon|rank)/i;
+/**
+ * A stamp or a key: numeric in the file, never a quantity to add up.
+ *
+ * Matched against the column's WORDS, not its raw text. As a substring this
+ * pattern rejected real measures — `id` fires inside `paid_amount`, `month`
+ * inside `monthly_revenue` — so the mock fell through to a worse column while
+ * the name it skipped was exactly the measure being asked about.
+ */
+const NOT_A_MEASURE_WORD =
+  /^(years?|months?|days?|dates?|ids?|codes?|zips?|postal|phones?|lat|lon|longitude|latitude|ranks?)$/i;
+
+/** `OrderYear` -> ["Order", "Year"]; `paid_amount` -> ["paid", "amount"]. */
+function nameWords(name: string): string[] {
+  return name
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .split(/[^A-Za-z0-9]+/)
+    .filter(Boolean);
+}
+
+function isStampOrKey(name: string): boolean {
+  return nameWords(name).some((word) => NOT_A_MEASURE_WORD.test(word));
+}
 
 function measureColumn(dataset: ResolvedDataset) {
   const numeric = dataset.profile.columns.filter(
@@ -148,9 +198,9 @@ function measureColumn(dataset: ResolvedDataset) {
   );
   return (
     numeric.find(
-      (column) => MEASURE_NAME.test(column.name) && !NOT_A_MEASURE.test(column.name),
+      (column) => MEASURE_NAME.test(column.name) && !isStampOrKey(column.name),
     ) ??
-    numeric.find((column) => !NOT_A_MEASURE.test(column.name)) ??
+    numeric.find((column) => !isStampOrKey(column.name)) ??
     numeric[0] ??
     null
   );
@@ -202,7 +252,14 @@ function numericTotal(dataset: ResolvedDataset): Measured | null {
   for (const row of schema.sampleRows) {
     const raw = row[index];
     if (raw === undefined) continue;
-    const value = Number(raw.replace(/[$,%\s]/g, ""));
+    const cleaned = raw.replace(/[$,%\s]/g, "");
+    // An empty cell is not a zero. `Number("")` is 0 and finite, so a blank used
+    // to land in `count` as well as `total`: a column of 10 and one blank
+    // reported an average of 5 across "2 records", and the group it sat in got a
+    // subtotal of 0 it had never reported. `to_numeric(errors="coerce")` in the
+    // code panel drops the same cells.
+    if (cleaned === "") continue;
+    const value = Number(cleaned);
     if (!Number.isFinite(value)) continue;
     total += value;
     count += 1;
@@ -231,9 +288,19 @@ const VERIFIED_FINDING = (dataset: ResolvedDataset, attempts: number): Finding =
   const dateColumn = dataset.profile.columns.find(
     (column) => column.kind === "date" && column.dateFormat !== null,
   );
+  /*
+   * The category column is part of the grounding whenever there is a breakdown.
+   * Every subtotal cites it in `columnsUsed`, so leaving it out meant the
+   * headline had source cells under it and the figures printed beside the
+   * headline had none — proof for the number the eye lands on, and nothing for
+   * the ones it lands on next.
+   */
+  const groupedBy = measured?.breakdown[0]?.column;
   const grounding = groundingFrom(
     dataset,
-    [measured?.column, dateColumn?.name].filter((name): name is string => Boolean(name)),
+    [measured?.column, dateColumn?.name, groupedBy].filter(
+      (name): name is string => Boolean(name),
+    ),
   );
 
   // No numeric column anywhere — fall back to counting records, which every

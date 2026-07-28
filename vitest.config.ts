@@ -10,5 +10,7 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["tests/**/*.test.ts"],
+    // Refuses to run in a configuration that could spend money. See the file.
+    setupFiles: ["tests/setup/money-rule.ts"],
   },
 });
