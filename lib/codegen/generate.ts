@@ -228,6 +228,20 @@ export function parseCodegenResponse(
   return output;
 }
 
+/**
+ * A column name as prose. The codegen prompt forbids raw schema identifiers in
+ * a headline, and `toLowerCase()` alone does not honour that — `net_sales_usd`
+ * lowercases to `net_sales_usd`. The mock path has to obey the same rule as the
+ * model, or the mock demonstrates a headline the real path would reject.
+ */
+function spokenColumn(name: string): string {
+  return name
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
 function mockResponse(request: CodegenRequest): string {
   const dateColumn = request.profile.columns.find(
     (column) => column.kind === "date" && column.dateFormat,
@@ -272,7 +286,7 @@ function mockResponse(request: CodegenRequest): string {
       ? `Sums ${numericColumn.name} after applying the profiled schema constraints.`
       : "Counts the dataset rows after loading the profiled CSV.",
     headline: numericColumn
-      ? `The total ${numericColumn.name.toLowerCase()} across the file is {value}.`
+      ? `The total ${spokenColumn(numericColumn.name)} across the file is {value}.`
       : "The file holds {value} records.",
     columnsUsed,
     context: numericColumn

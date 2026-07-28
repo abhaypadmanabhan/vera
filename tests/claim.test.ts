@@ -10,6 +10,47 @@ import { reconcileClaim, VALUE_SLOT } from "../lib/claim";
 describe("reconcileClaim", () => {
   const question = "What were total sales in Q3 2018?";
 
+  /*
+   * CodeRabbit on PR #40: the literal matcher did not capture a leading minus,
+   * so a headline stating a loss directly could never be reconciled against the
+   * executed negative value. It was discarded and rebuilt — safe, but it threw
+   * away correct wording on every loss, and the benchmark has one (Tables).
+   */
+  it("keeps a headline whose negative figure IS the executed value", () => {
+    const result = reconcileClaim({
+      headline: "The Tables sub-category lost -3,000.50 over the period.",
+      question: "How much profit did the Tables sub-category make?",
+      value: -3000.5,
+      fallback: "Sums Profit over Tables.",
+    });
+
+    expect(result.source).toBe("verified-literal");
+    expect(result.claim).toContain("-3,000.50");
+  });
+
+  it("still rebuilds when a negative figure is NOT the executed value", () => {
+    const result = reconcileClaim({
+      headline: "The Tables sub-category lost -9,999.00 over the period.",
+      question: "How much profit did the Tables sub-category make?",
+      value: -3000.5,
+      fallback: "Sums Profit over Tables.",
+    });
+
+    expect(result.source).toBe("rebuilt");
+    expect(result.claim).not.toContain("9,999");
+  });
+
+  it("reads a year range as two years, not as a negative", () => {
+    const result = reconcileClaim({
+      headline: "Sales grew across 2018-2019 to reach 143,787.36.",
+      question: "What was sales growth from 2018-2019?",
+      value: 143787.36,
+      fallback: "Sums Sales.",
+    });
+
+    expect(result.source).toBe("verified-literal");
+  });
+
   it("places the executed value into the model's slot", () => {
     const result = reconcileClaim({
       headline: `Sales in the third quarter of 2018 came to ${VALUE_SLOT} dollars.`,

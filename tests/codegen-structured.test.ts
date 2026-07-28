@@ -466,3 +466,29 @@ describe("structured pandas codegen", () => {
     ).toThrow();
   });
 });
+
+/*
+ * CodeRabbit on PR #40: the mock path built its headline with
+ * `numericColumn.name.toLowerCase()`, which leaves a snake_case identifier
+ * intact. The codegen prompt forbids raw schema identifiers in a headline, so
+ * the mock was demonstrating a sentence the real path is required to reject.
+ */
+describe("the mock headline obeys the same rule as the model", () => {
+  it("renders a column name as prose, not as an identifier", async () => {
+    const snakeProfile = profileDataset(
+      "snake",
+      "snake.csv",
+      "order_date,net_sales_usd\n15/04/2019,100\n03/02/2018,50\n",
+    );
+
+    const output = await generatePandasCode({
+      question: "What were total sales?",
+      profile: snakeProfile,
+      sampleRows: [["15/04/2019", "100"]],
+      sandboxPath: "/workspace/data.csv",
+    });
+
+    expect(output.headline).not.toContain("net_sales_usd");
+    expect(output.headline).toContain("net sales usd");
+  });
+});

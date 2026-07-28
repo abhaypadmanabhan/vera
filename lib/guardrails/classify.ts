@@ -38,10 +38,28 @@ function words(value: string): string[] {
     .filter(Boolean);
 }
 
+/**
+ * Singular and plural spellings of one alias.
+ *
+ * `missingInformation()`'s `asksFor` patterns accept plural phrasing, so a file
+ * whose column is `Discounts` was asked about happily and then reported as not
+ * carrying discount information — the question was allowed by one half of the
+ * guardrail and refused by the other. Matching both spellings makes the two
+ * halves agree. (Two gates over one artifact, derived from different evidence,
+ * is the same shape as the prep-gate bug in `tasks/lessons.md` 2026-07-26.)
+ */
+function spellings(alias: string): string[] {
+  if (alias.endsWith("s")) return [alias, alias.slice(0, -1)];
+  if (/(?:s|x|z|ch|sh)$/.test(alias)) return [alias, `${alias}es`];
+  return [alias, `${alias}s`];
+}
+
 function availableInformation(profile: DatasetProfile): AvailableInformation {
   const fields = profile.columns.map((column) => new Set(words(column.name)));
   const hasWord = (...aliases: string[]) =>
-    fields.some((field) => aliases.some((alias) => field.has(alias)));
+    fields.some((field) =>
+      aliases.some((alias) => spellings(alias).some((form) => field.has(form))),
+    );
   const hasWords = (...required: string[]) =>
     fields.some((field) => required.every((word) => field.has(word)));
 

@@ -1,7 +1,7 @@
 import { env } from "node:process";
 import { currentSpan, type Span } from "braintrust";
 import { z } from "zod";
-import { MOCK_MODE } from "../config";
+import { MOCK_MODE, TRACE_PAYLOADS } from "../config";
 
 export const FIREWORKS_BASE_URL = "https://api.fireworks.ai/inference/v1";
 
@@ -146,9 +146,23 @@ export function createFireworksClient(
         telemetrySpan = null;
       }
       try {
+        /*
+         * The prompt carries the dataset profile and sample rows of the user's
+         * file. It is logged verbatim only when the builder has opted in; by
+         * default the span records the shape of the call, not its contents.
+         */
         telemetrySpan?.log({
-          input: request.messages,
-          metadata: { model: FIREWORKS_MODEL_ID, maxTokens: request.maxTokens },
+          input: TRACE_PAYLOADS ? request.messages : undefined,
+          metadata: {
+            model: FIREWORKS_MODEL_ID,
+            maxTokens: request.maxTokens,
+            messageCount: request.messages.length,
+            promptChars: request.messages.reduce(
+              (total, message) => total + message.content.length,
+              0,
+            ),
+            payloadsRedacted: !TRACE_PAYLOADS,
+          },
         });
       } catch {
         // Telemetry is never load-bearing.
@@ -195,7 +209,13 @@ export function createFireworksClient(
         const usage = parsed.data.usage;
         try {
           telemetrySpan?.log({
-            output: choice.message.content,
+            // The completion is the generated program plus the headline; it can
+            // quote the sample rows back. Same opt-in as the prompt.
+            output: TRACE_PAYLOADS ? choice.message.content : undefined,
+            metadata: {
+              finishReason: choice.finish_reason,
+              completionChars: choice.message.content.length,
+            },
             metrics: usage
               ? {
                   prompt_tokens: usage.prompt_tokens,

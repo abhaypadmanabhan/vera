@@ -143,6 +143,33 @@ describe("classifyQuestion", () => {
     expect(classifyQuestion("What was gross margin?", profile)).toEqual({ allowed: true });
   });
 
+  /*
+   * CodeRabbit on PR #40: `availableInformation()` matched a column word against
+   * the exact singular alias, while `missingInformation()`'s patterns accept
+   * plural phrasing. A file whose column is `Discounts` therefore had the
+   * question allowed by one half of the guardrail and refused by the other.
+   */
+  it("recognises a plural column name as the information being asked for", () => {
+    const profile = profileDataset(
+      "plural-columns",
+      "plural-columns.csv",
+      "OrderDate,Discounts,Costs\n15/04/2019,0.10,60\n",
+    );
+
+    expect(classifyQuestion("What was the average discount?", profile)).toEqual({
+      allowed: true,
+    });
+    expect(classifyQuestion("What were total costs?", profile)).toEqual({
+      allowed: true,
+    });
+  });
+
+  it("still refuses when the file genuinely lacks the information", () => {
+    expect(classifyQuestion("What was the average discount?", salesOnlyProfile).allowed).toBe(
+      false,
+    );
+  });
+
   it("allows a ready-made margin without separately requiring profit", () => {
     const profile = profileDataset(
       "margin",
