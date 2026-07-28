@@ -1,0 +1,11 @@
+# CodeRabbit reviews every PR in this repo. Phase PRs target `dev`, not the
+# default branch, so `dev` must be listed explicitly or reviews are skipped.
+reviews:
+  auto_review:
+    enabled: true
+    base_branches:
+      - dev
+      - main
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false

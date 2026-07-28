@@ -1,0 +1,410 @@
+@import "tailwindcss";
+@import "./deck.css";
+
+/*
+ * Vera design tokens — DESIGN.md v4.
+ *
+ * Calm, editorial, ink-on-paper. Neutrals carry ~90% of the surface, ONE accent
+ * (interactive + verified), semantic colour only for status. Light is primary;
+ * dark exists because the charts have to read in both. Swap token values, never
+ * components.
+ *
+ * v4 reconciles the system with the builder's UI-UX vault, which flags three
+ * things v3 shipped as its defaults:
+ *   - uppercase mono micro-labels, and mono used as a general UI font
+ *   - marketing body type below an 18px floor
+ *   - a flat background with no field and no grain
+ * Each is fixed at the token layer here rather than per component.
+ *
+ * Every chart colour below was validated with the dataviz skill's palette
+ * validator against the real surfaces:
+ *   light  accent #0073cf + danger #cc272e on #fdfdfe  → all six checks PASS
+ *   dark   accent #3093ec + danger #e24947 on #121416  → all six checks PASS
+ * Do not re-step them without re-running that validator.
+ */
+
+:root {
+  color-scheme: light;
+
+  --v-bg: oklch(0.99 0.002 250);
+  /* Not pure white. A surface at oklch(1 0 0) reads as a hole in the page. */
+  --v-surface: oklch(0.995 0.002 250);
+  --v-sunk: oklch(0.975 0.003 250);
+  --v-line: oklch(0.92 0.004 250);
+  --v-line-strong: oklch(0.86 0.006 250);
+  --v-ink: oklch(0.24 0.011 250);
+  --v-ink-muted: oklch(0.5 0.014 250);
+  --v-accent: oklch(0.55 0.17 250);
+  --v-accent-wash: oklch(0.96 0.02 250);
+  --v-warn: oklch(0.62 0.14 70);
+  --v-warn-wash: oklch(0.965 0.03 70);
+  --v-danger: oklch(0.55 0.2 25);
+
+  /* The one shadow in the system: a hairline lift, never a stack. */
+  --v-lift: 0 1px 2px oklch(0.22 0.01 250 / 0.05), 0 8px 24px oklch(0.22 0.01 250 / 0.04);
+
+  /*
+   * Background field. Grain keeps a pale page from reading as dead; the blooms
+   * are what make it read as alive. At 0.05 they were invisible — a page with a
+   * background nobody can see has no background.
+   */
+  --v-grain-opacity: 0.035;
+  --v-bloom-opacity: 0.2;
+  --v-bloom-two-opacity: 0.15;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+
+    --v-bg: oklch(0.19 0.006 250);
+    --v-surface: oklch(0.225 0.008 250);
+    --v-sunk: oklch(0.165 0.006 250);
+    --v-line: oklch(0.3 0.009 250);
+    --v-line-strong: oklch(0.38 0.01 250);
+    --v-ink: oklch(0.96 0.003 250);
+    --v-ink-muted: oklch(0.72 0.014 250);
+    --v-accent: oklch(0.65 0.16 250);
+    --v-accent-wash: oklch(0.28 0.04 250);
+    --v-warn: oklch(0.74 0.13 70);
+    --v-warn-wash: oklch(0.29 0.04 70);
+    --v-danger: oklch(0.62 0.19 25);
+
+    --v-lift: 0 1px 2px oklch(0 0 0 / 0.4), 0 8px 24px oklch(0 0 0 / 0.28);
+
+    --v-grain-opacity: 0.05;
+    --v-bloom-opacity: 0.2;
+    --v-bloom-two-opacity: 0.16;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --v-bg: oklch(0.19 0.006 250);
+  --v-surface: oklch(0.225 0.008 250);
+  --v-sunk: oklch(0.165 0.006 250);
+  --v-line: oklch(0.3 0.009 250);
+  --v-line-strong: oklch(0.38 0.01 250);
+  --v-ink: oklch(0.96 0.003 250);
+  --v-ink-muted: oklch(0.72 0.014 250);
+  --v-accent: oklch(0.65 0.16 250);
+  --v-accent-wash: oklch(0.28 0.04 250);
+  --v-warn: oklch(0.74 0.13 70);
+  --v-warn-wash: oklch(0.29 0.04 70);
+  --v-danger: oklch(0.62 0.19 25);
+
+  --v-lift: 0 1px 2px oklch(0 0 0 / 0.4), 0 8px 24px oklch(0 0 0 / 0.28);
+
+  --v-grain-opacity: 0.05;
+  --v-bloom-opacity: 0.2;
+  --v-bloom-two-opacity: 0.16;
+}
+
+@theme inline {
+  --color-bg: var(--v-bg);
+  --color-surface: var(--v-surface);
+  --color-sunk: var(--v-sunk);
+  --color-line: var(--v-line);
+  --color-line-strong: var(--v-line-strong);
+  --color-ink: var(--v-ink);
+  --color-ink-muted: var(--v-ink-muted);
+  --color-accent: var(--v-accent);
+  --color-accent-wash: var(--v-accent-wash);
+  --color-warn: var(--v-warn);
+  --color-warn-wash: var(--v-warn-wash);
+  --color-danger: var(--v-danger);
+
+  /*
+   * Three families, one job each. `--font-display` is the voice, `--font-sans`
+   * is every other word, `--font-mono` is code, cells, column names, filenames
+   * and timings — technical surfaces only.
+   */
+  --font-display: var(--font-newsreader), ui-serif, Georgia, "Times New Roman", serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SFMono-Regular", monospace;
+
+  /*
+   * Six sizes. That is the whole scale.
+   * Floors from the vault: no sans below 15px, no mono below 13.5px, prose 18px.
+   */
+  --text-micro: 0.875rem; /* 14 — mono meta: timings, filenames, exit codes */
+  --text-micro--line-height: 1.45;
+  --text-small: 0.9375rem; /* 15 — the sans floor: captions, labels, dense UI */
+  --text-small--line-height: 1.5;
+  --text-body: 1.125rem; /* 18 — prose */
+  --text-body--line-height: 1.6;
+  --text-lead: 1.375rem; /* 22 — the claim, the question */
+  --text-lead--line-height: 1.4;
+  --text-title: 2.25rem; /* 36 — screen and section headings */
+  --text-title--line-height: 1.1;
+  --text-figure: 4.5rem; /* 72 — the headline finding, and nothing else */
+  --text-figure--line-height: 1;
+
+  --ease-settle: cubic-bezier(0.22, 1, 0.36, 1);
+  --shadow-lift: var(--v-lift);
+}
+
+@layer base {
+  html {
+    background-color: var(--v-bg);
+    color: var(--v-ink);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    /* The page never scrolls sideways; wide content scrolls inside itself. */
+    overflow-x: hidden;
+  }
+
+  ::selection {
+    background-color: var(--v-accent-wash);
+    color: var(--v-ink);
+  }
+
+  /* One focus treatment, everywhere. Visible on every keyboard-reachable thing. */
+  :focus-visible {
+    outline: 2px solid var(--v-accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /*
+   * Headings are the display face by default, so no component has to remember
+   * to ask for it. Anything that must stay in the UI face opts out with
+   * `font-sans`.
+   */
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    font-weight: 400;
+    letter-spacing: -0.018em;
+  }
+}
+
+@layer components {
+  /*
+   * The display treatment, for the few places that are not an `h1`/`h2`/`h3` —
+   * a headline figure, a slide title. Serif, close-set, balanced.
+   */
+  .v-display {
+    font-family: var(--font-display);
+    font-weight: 400;
+    letter-spacing: -0.022em;
+    line-height: 1.04;
+    text-wrap: balance;
+  }
+
+  /*
+   * The one label idiom. Sentence-case Inter at the 15px floor — NOT uppercase
+   * mono. v3's mono/uppercase/0.1em label was the single most repeated AI tell
+   * in the app; every call site inherits the fix from here.
+   */
+  .v-label {
+    font-family: var(--font-sans);
+    font-size: 0.9375rem;
+    line-height: 1.4;
+    font-weight: 500;
+    letter-spacing: 0;
+    color: var(--v-ink-muted);
+  }
+
+  /*
+   * A chapter marker, in the body family, for content that genuinely is a
+   * sequence. Never a mono kicker, and never on content that is not ordered.
+   */
+  .v-marker {
+    font-family: var(--font-sans);
+    font-size: 0.9375rem;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    color: var(--v-ink-muted);
+  }
+
+  /* Technical strings: code, cells, column names, filenames, timings. */
+  .v-mono {
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
+
+  .v-nums {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+
+  .v-card {
+    background-color: var(--v-surface);
+    border: 1px solid var(--v-line);
+    border-radius: 16px;
+  }
+}
+
+@layer utilities {
+  /*
+   * The page background: paper grain plus one very slow accent bloom. Fixed,
+   * inert, behind everything. Without it the page is flat white, which the
+   * vault calls the strongest AI tell after coloured status dots.
+   */
+  .v-field {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    overflow: hidden;
+  }
+
+  /*
+   * Two blooms on different periods, so the field never repeats a pose. One
+   * layer drifting on a single loop reads as a slide; two out of phase reads as
+   * weather. Transform only — the gradients themselves never change.
+   */
+  .v-field::before {
+    position: absolute;
+    inset: -40%;
+    content: "";
+    opacity: var(--v-bloom-opacity);
+    background:
+      radial-gradient(34rem 26rem at 14% 4%, var(--v-accent), transparent 68%),
+      radial-gradient(42rem 30rem at 88% 96%, var(--v-accent), transparent 70%);
+    animation: v-drift-a 52s var(--ease-settle) infinite alternate;
+    will-change: transform;
+  }
+
+  .v-field-two {
+    position: absolute;
+    inset: -40%;
+    opacity: var(--v-bloom-two-opacity);
+    background:
+      radial-gradient(30rem 24rem at 78% 12%, var(--v-accent), transparent 66%),
+      radial-gradient(36rem 28rem at 8% 82%, var(--v-accent), transparent 68%);
+    animation: v-drift-b 73s var(--ease-settle) infinite alternate;
+    will-change: transform;
+  }
+
+  .v-field::after {
+    position: absolute;
+    inset: 0;
+    content: "";
+    opacity: var(--v-grain-opacity);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23g)'/%3E%3C/svg%3E");
+  }
+
+  /*
+   * Scroll reveal. Driven by `components/landing/reveal.tsx`, which sets
+   * `data-shown` when the block enters the viewport.
+   *
+   * The default state is VISIBLE, and it is the only state this stylesheet can
+   * reach on its own. The hidden start state lives behind `.v-js`, a class that
+   * `reveal.tsx` stamps on `<html>` from its own mount effect — so it exists
+   * only once the reveal code is present AND running AND able to undo it. With
+   * JavaScript off, blocked, or a bundle that never arrives, the class is never
+   * added, these rules never match, and the reader gets the page rather than a
+   * permanently blank one. Same for a reduced-motion reader, who never enters
+   * the media query at all.
+   *
+   * Progressive enhancement, not a fallback: nothing is hidden speculatively.
+   */
+  .v-rise {
+    opacity: 1;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .v-js .v-rise {
+      opacity: 0;
+      transform: translate3d(0, 16px, 0);
+      transition:
+        opacity 640ms var(--ease-settle),
+        transform 640ms var(--ease-settle);
+      transition-delay: calc(var(--step, 0) * 90ms);
+    }
+
+    .v-js .v-rise[data-shown] {
+      opacity: 1;
+      transform: translate3d(0, 0, 0);
+    }
+  }
+
+  /* Staged reveal: elements settle in, ~60ms apart. Transform + opacity only. */
+  .v-reveal {
+    animation: v-reveal 400ms var(--ease-settle) both;
+    animation-delay: calc(var(--step, 0) * 60ms);
+  }
+
+  .v-reveal-slow {
+    animation: v-reveal 520ms var(--ease-settle) both;
+    animation-delay: calc(var(--step, 0) * 90ms);
+  }
+
+  /* The live dot. Opacity only — nothing on this page throbs or spins. */
+  .v-breathe {
+    animation: v-breathe 1.8s var(--ease-settle) infinite;
+  }
+}
+
+@keyframes v-reveal {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes v-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+@keyframes v-drift-a {
+  from {
+    transform: translate3d(-2%, -1%, 0) scale(1);
+  }
+  to {
+    transform: translate3d(4%, 3%, 0) scale(1.14);
+  }
+}
+
+@keyframes v-drift-b {
+  from {
+    transform: translate3d(3%, 2%, 0) scale(1.1);
+  }
+  to {
+    transform: translate3d(-3%, -2%, 0) scale(0.96);
+  }
+}
+
+/* prefers-reduced-motion kills all of it. DESIGN.md "Motion". */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+
+  .v-reveal,
+  .v-reveal-slow,
+  .v-breathe {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  .v-field::before,
+  .v-field-two {
+    animation: none !important;
+  }
+}

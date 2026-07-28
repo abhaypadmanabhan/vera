@@ -1,0 +1,82 @@
+/*
+ * Scoped to the landing page only — globals.css is shared, so nothing here
+ * leaks out of components/landing/**.
+ *
+ * The page background used to be duplicated here as a pair of drifting washes.
+ * It now lives in globals.css as `.v-field`, mounted once in app/layout.tsx for
+ * every page; the copy has been deleted rather than left to fight with it.
+ */
+
+/*
+ * Official vendor wordmarks, rendered as masks so they take the page's own
+ * muted ink in both themes without altering the artwork. Sizes below preserve
+ * each mark's real aspect ratio at a shared ~14px cap height.
+ */
+.logo {
+  display: block;
+  flex: none;
+  background-color: currentColor;
+  mask-position: center;
+  mask-repeat: no-repeat;
+  mask-size: contain;
+}
+
+/*
+ * Daytona ships a glyph, not a wordmark — the other three are lockups that
+ * already carry their name. The glyph is set square and slightly taller than
+ * the wordmarks' cap height so it does not read as smaller, and the name is set
+ * beside it in our own type.
+ */
+.daytonaLogo {
+  width: 1.0625rem;
+  height: 1.0625rem;
+  mask-image: url("/logos/daytona.svg");
+}
+
+.fireworksLogo {
+  width: 6.8125rem;
+  height: 0.875rem;
+  mask-image: url("/logos/fireworks.svg");
+}
+
+.braintrustLogo {
+  width: 5.5625rem;
+  height: 0.875rem;
+  mask-image: url("/logos/braintrust.svg");
+}
+
+.elevenLabsLogo {
+  width: 6.75rem;
+  height: 0.875rem;
+  mask-image: url("/logos/elevenlabs.svg");
+}
+
+/*
+ * The benchmark measure. Each track fills to its real proportion once, on the
+ * page's settle curve, delayed to land just behind its own label so the eye
+ * reads the score before the bar arrives.
+ *
+ * Transform only — this used to animate `width`, which is neither on the
+ * compositor nor allowed by the motion rules.
+ */
+.fill {
+  transform: scaleX(var(--fill));
+  animation: landing-fill 760ms var(--ease-settle) both;
+  animation-delay: calc(var(--step, 0) * 90ms + 120ms);
+}
+
+@keyframes landing-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(var(--fill));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The track keeps its real proportion; it simply never travels to get there. */
+  .fill {
+    animation: none;
+  }
+}

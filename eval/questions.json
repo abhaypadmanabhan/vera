@@ -1,0 +1,216 @@
+{
+  "dataset": "data/superstore.csv",
+  "scoring": {
+    "type": "numeric_relative_epsilon",
+    "relative_epsilon": 0.0001,
+    "absolute_floor": 1e-09,
+    "rule": "pass if abs(actual - expected) <= max(absolute_floor, relative_epsilon * abs(expected)); strings compared case-insensitively after trimming"
+  },
+  "braintrust_mapping": {
+    "input": "input",
+    "expected": "expected"
+  },
+  "headline_question_id": "q18_sales_2018_q3",
+  "story": "OrderDate is uniformly DD/MM/YYYY. A naive month-first parse silently drops 5,952 rows, so 2018 Q3 sales reads $50,517.26 instead of the correct $143,787.36.",
+  "baseline_fairness": "Vera's model only ever sees the schema profile plus sample rows — never the 2.3 MB file. The no-execution baseline gets identical context and is simply not allowed to run code. Same prompt, one executes.",
+  "questions": [
+    {
+      "id": "q01_total_sales",
+      "input": "What were total sales across the whole dataset?",
+      "expected": 2297200.86,
+      "unit": "USD",
+      "difficulty": "easy",
+      "trap": false,
+      "how_computed": "sum(Sales)"
+    },
+    {
+      "id": "q02_total_profit",
+      "input": "What was total profit?",
+      "expected": 286397.02,
+      "unit": "USD",
+      "difficulty": "easy",
+      "trap": false,
+      "how_computed": "sum(Profit)"
+    },
+    {
+      "id": "q03_profit_margin_pct",
+      "input": "What was the overall profit margin percentage?",
+      "expected": 12.47,
+      "unit": "percent",
+      "difficulty": "easy",
+      "trap": false,
+      "how_computed": "sum(Profit)/sum(Sales)*100"
+    },
+    {
+      "id": "q04_region_highest_sales",
+      "input": "Which region had the highest sales?",
+      "expected": "West",
+      "unit": "label",
+      "difficulty": "easy",
+      "trap": false,
+      "how_computed": "groupby(Region).Sales.sum().idxmax"
+    },
+    {
+      "id": "q05_region_lowest_sales",
+      "input": "Which region had the lowest sales?",
+      "expected": "South",
+      "unit": "label",
+      "difficulty": "easy",
+      "trap": false,
+      "how_computed": "groupby(Region).Sales.sum().idxmin"
+    },
+    {
+      "id": "q06_west_sales",
+      "input": "What were total sales in the West region?",
+      "expected": 725457.82,
+      "unit": "USD",
+      "difficulty": "easy",
+      "trap": false,
+      "how_computed": "West sales"
+    },
+    {
+      "id": "q07_most_profitable_category",
+      "input": "Which product category was most profitable?",
+      "expected": "Technology",
+      "unit": "label",
+      "difficulty": "easy",
+      "trap": false,
+      "how_computed": "groupby(Category).Profit.sum().idxmax"
+    },
+    {
+      "id": "q08_technology_profit",
+      "input": "How much profit did the Technology category generate?",
+      "expected": 145454.95,
+      "unit": "USD",
+      "difficulty": "easy",
+      "trap": false,
+      "how_computed": "Technology profit"
+    },
+    {
+      "id": "q09_worst_subcategory",
+      "input": "Which sub-category lost the most money?",
+      "expected": "Tables",
+      "unit": "label",
+      "difficulty": "easy",
+      "trap": false,
+      "how_computed": "groupby(Sub-Category).Profit.sum().idxmin"
+    },
+    {
+      "id": "q10_tables_profit",
+      "input": "How much profit did the Tables sub-category make (a loss)?",
+      "expected": -17725.48,
+      "unit": "USD",
+      "difficulty": "easy",
+      "trap": false,
+      "how_computed": "Tables profit"
+    },
+    {
+      "id": "q11_top_segment",
+      "input": "Which customer segment generated the most sales?",
+      "expected": "Consumer",
+      "unit": "label",
+      "difficulty": "easy",
+      "trap": false,
+      "how_computed": "groupby(Segment).Sales.sum().idxmax"
+    },
+    {
+      "id": "q12_avg_discount",
+      "input": "What was the average discount across all orders?",
+      "expected": 0.1562,
+      "unit": "ratio",
+      "difficulty": "easy",
+      "trap": false,
+      "how_computed": "mean(Discount)"
+    },
+    {
+      "id": "q13_total_quantity",
+      "input": "How many total units (quantity) were sold?",
+      "expected": 37873,
+      "unit": "units",
+      "difficulty": "easy",
+      "trap": false,
+      "how_computed": "sum(Quantity)"
+    },
+    {
+      "id": "q14_unique_orders",
+      "input": "How many unique orders are in the dataset?",
+      "expected": 5009,
+      "unit": "orders",
+      "difficulty": "trap",
+      "trap": true,
+      "notes": "9,994 rows but only 5,009 unique OrderIDs. A model that never executes often conflates rows with orders.",
+      "how_computed": "nunique(OrderID)"
+    },
+    {
+      "id": "q15_lowest_margin_category",
+      "input": "Which category had the lowest profit margin?",
+      "expected": "Furniture",
+      "unit": "label",
+      "difficulty": "medium",
+      "trap": false,
+      "how_computed": "min margin by category (Furniture)"
+    },
+    {
+      "id": "q16_sales_2019",
+      "input": "What were total sales in 2019?",
+      "expected": 733215.26,
+      "unit": "USD",
+      "difficulty": "easy",
+      "trap": false,
+      "notes": "Uses the clean OrderYear column, not OrderDate.",
+      "how_computed": "OrderYear==2019 sales"
+    },
+    {
+      "id": "q17_sales_growth_2018_2019",
+      "input": "What was sales growth from 2018 to 2019?",
+      "expected": 20.36,
+      "unit": "percent",
+      "difficulty": "medium",
+      "trap": false,
+      "how_computed": "(yr2019/yr2018-1)*100 using OrderYear"
+    },
+    {
+      "id": "q18_sales_2018_q3",
+      "input": "What were total sales in Q3 2018?",
+      "expected": 143787.36,
+      "naive_answer": 50517.26,
+      "unit": "USD",
+      "difficulty": "trap",
+      "trap": true,
+      "notes": "Requires parsing OrderDate with format='%d/%m/%Y'. Naive month-first pd.to_datetime silently drops 5,952 rows.",
+      "how_computed": "to_datetime(OrderDate, format='%d/%m/%Y'); filter year==2018 & quarter==3; sum(Sales)"
+    },
+    {
+      "id": "q19_sales_july_2018",
+      "input": "What were total sales in July 2018?",
+      "expected": 39261.96,
+      "naive_answer": 16571.28,
+      "unit": "USD",
+      "difficulty": "trap",
+      "trap": true,
+      "notes": "Monthly date-derived figure. Same DD/MM trap as Q3.",
+      "how_computed": "to_datetime(OrderDate, format='%d/%m/%Y'); filter year==2018 & month==7; sum(Sales)"
+    },
+    {
+      "id": "q20_sales_2017_q4",
+      "input": "What were total sales in Q4 2017?",
+      "expected": 182297.01,
+      "naive_answer": 34734.45,
+      "unit": "USD",
+      "difficulty": "trap",
+      "trap": true,
+      "notes": "Another quarterly date-derived figure that only comes out right with day-first parsing.",
+      "how_computed": "to_datetime(OrderDate, format='%d/%m/%Y'); filter year==2017 & quarter==4; sum(Sales)"
+    },
+    {
+      "id": "q21_row_count",
+      "input": "How many rows (line items) are in the dataset?",
+      "expected": 9994,
+      "unit": "rows",
+      "difficulty": "trap",
+      "trap": true,
+      "notes": "Paired with q14: 9,994 rows vs 5,009 unique OrderIDs. No-execution models often conflate them.",
+      "how_computed": "len(df)"
+    }
+  ]
+}

@@ -58,6 +58,30 @@ executed code, the UI must say **unverified** — never fall back to a guess.
 
 - Every coding task: use the **`superpowers`** skill.
 - Anything touching UI: also use the **`frontend-design`** skill and the **shadcn MCP**.
+- Anything with a chart, meter, stat tile or dashboard: load the **`dataviz`** skill first.
+
+## Reference vaults (read before designing or delegating)
+
+Two Obsidian vaults are the standing references for this repo. Read the relevant one
+**before** you write UI code or fan out agents — not after.
+
+**Design — `/Users/abhayp/Documents/Obsidian Vault/UI-UX/`**
+Entry point `UI-UX Home.md`. Minimum read before touching any surface:
+`Design Foundations.md` (spacing 4/8/12/16/24/32/48/64/96, type scale, AA contrast),
+`AI Design Tells.md` (**the reject list — check every screen against it**),
+`Typography.md`, `Color Systems.md`, `Checklists.md` (the anti-slop gate).
+For the landing page also read `SaaS Landing Page Patterns.md` +
+`Story-Driven Website Playbook.md`; for the in-app screens, `B2B SaaS Playbook.md`.
+Where the vault and `DESIGN.md` disagree on a *tell* (uppercase mono micro-labels,
+flat backgrounds, three identical cards, 11–13px type), **the vault wins** — DESIGN.md v4
+has been reconciled to it.
+
+**Orchestration — `/Users/abhayp/Documents/Obsidian Vault/Herdr/`**
+Entry point `START HERE.md`. Before any fan-out: `System/Orchestration Protocol.md` →
+`System/Agent Roster.md` → `Herdr/Herdr - Gotchas and Limits.md`. Use the `herd` CLI
+wrapper in `bin/`, not raw `herdr` calls. Non-negotiables: results travel through
+`tasks/<id>.result.md` files (never terminal scraping); budget-check before every spawn;
+**two tasks must never write the same file** — same file ⇒ different phase.
 
 ## Definition of done
 

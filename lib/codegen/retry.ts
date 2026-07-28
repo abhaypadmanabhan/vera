@@ -1,0 +1,338 @@
+import { LIMITS } from "../config";
+import type {
+  ContextFigure,
+  DatasetProfile,
+  ExecutionResult,
+  GeneratedCode,
+  StageEvent,
+  Valence,
+} from "../types";
+import type { CodegenOutput, CodegenRequest } from "./generate";
+import { PolicyViolationError } from "./python-policy";
+
+export interface CodeGenerator {
+  generate(
+    request: CodegenRequest & { attempt: number },
+  ): Promise<CodegenOutput>;
+}
+
+export interface CodeExecutor {
+  execute(request: {
+    code: string;
+    csvPath: string;
+    timeoutMs: number;
+    signal: AbortSignal;
+  }): Promise<ExecutionResult>;
+}
+
+interface RetryOptions {
+  question: string;
+  profile: DatasetProfile;
+  sampleRows: string[][];
+  sandboxPath: string;
+  generator: CodeGenerator;
+  executor: CodeExecutor;
+  maxRetries?: number;
+  runBudgetMs?: number;
+  executionTimeoutMs?: number;
+  now?: () => number;
+}
+
+class BudgetExceededError extends Error {
+  constructor() {
+    super("The analysis exceeded its total wall-clock budget.");
+    this.name = "BudgetExceededError";
+  }
+}
+
+function toGeneratedCode(output: CodegenOutput): GeneratedCode {
+  return {
+    language: "python",
+    source: output.code,
+    explanation: output.explanation,
+    lineCount: output.code.split("\n").length,
+  };
+}
+
+async function withinBudget<T>(
+  run: (signal: AbortSignal) => Promise<T>,
+  remainingMs: number,
+): Promise<T> {
+  if (remainingMs <= 0) throw new BudgetExceededError();
+
+  const controller = new AbortController();
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timeout = setTimeout(() => {
+      controller.abort();
+      reject(new BudgetExceededError());
+    }, remainingMs);
+  });
+
+  try {
+    return await Promise.race([run(controller.signal), deadline]);
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
+  }
+}
+
+/** What a successful run hands to the safeguard. */
+export interface RetryOutcome {
+  execution: ExecutionResult;
+  code: GeneratedCode;
+  /** Plain-English one-liner for the hero slide, free of code jargon. */
+  headline: string;
+  /** Columns the model said it used — checked against the real schema downstream. */
+  columnsUsed: string[];
+  /** Context declarations awaiting executed-value grounding. */
+  context: Array<Omit<ContextFigure, "value">>;
+  valence: Valence;
+  attempts: number;
+}
+
+export async function* runCodegenWithRetries(
+  options: RetryOptions,
+): AsyncGenerator<StageEvent, RetryOutcome | null> {
+  const now = options.now ?? Date.now;
+  const startedAt = now();
+  const rawRequestedRetries = options.maxRetries ?? LIMITS.maxRetries;
+  const requestedRetries = Number.isFinite(rawRequestedRetries)
+    ? Math.floor(rawRequestedRetries)
+    : 0;
+  const maxAttempts =
+    1 + Math.max(0, Math.min(requestedRetries, LIMITS.maxRetries));
+  const runBudgetMs = options.runBudgetMs ?? LIMITS.runBudgetMs;
+  const executionTimeoutMs =
+    options.executionTimeoutMs ?? LIMITS.executionTimeoutMs;
+  const elapsed = () => Math.max(0, now() - startedAt);
+  const remaining = () => runBudgetMs - elapsed();
+  let previousFailure: CodegenRequest["previousFailure"];
+  let lastCode: GeneratedCode | null = null;
+
+  const stage = (
+    fields: Omit<Extract<StageEvent, { type: "stage" }>, "type" | "elapsedMs">,
+  ): StageEvent => ({
+    type: "stage",
+    ...fields,
+    elapsedMs: elapsed(),
+  });
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    yield stage({
+      stage: "writing_code",
+      status: "active",
+      detail:
+        attempt === 1
+          ? "Generating pandas from the profiled schema"
+          : `Attempt ${attempt} — fixing the previous execution error`,
+      attempt,
+    });
+
+    let output: CodegenOutput;
+    try {
+      output = await withinBudget(
+        (signal) =>
+          options.generator.generate({
+            question: options.question,
+            profile: options.profile,
+            sampleRows: options.sampleRows,
+            sandboxPath: options.sandboxPath,
+            previousFailure,
+            attempt,
+            signal,
+          }),
+        remaining(),
+      );
+      if (remaining() <= 0) throw new BudgetExceededError();
+    } catch (error) {
+      const timedOut = error instanceof BudgetExceededError;
+      // A policy rejection names exactly what is wrong with the program, which
+      // is the same correctable shape as a stderr — so it is retried, not
+      // surfaced. Two live findings died at `attempts: 1` on a read_csv path
+      // violation before this existed. Anything else (network, auth, budget)
+      // still fails fast rather than burning another paid call.
+      if (
+        error instanceof PolicyViolationError &&
+        !timedOut &&
+        attempt < maxAttempts &&
+        remaining() > 0
+      ) {
+        yield stage({
+          stage: "writing_code",
+          status: "failed",
+          detail: "The generated code broke a safety rule — asking again",
+          attempt,
+        });
+        previousFailure = {
+          stderr: error.message,
+          failingCode: error.code,
+        };
+        continue;
+      }
+      yield stage({
+        stage: "writing_code",
+        status: "failed",
+        detail: timedOut
+          ? "Total analysis budget exhausted during code generation"
+          : `Fireworks failed: ${error instanceof Error ? error.message : "unknown error"}`,
+        attempt,
+      });
+      yield {
+        type: "finding",
+        finding: {
+          verdict: "unverified",
+          reason: timedOut ? "timeout" : "upstream_error",
+          detail: timedOut
+            ? "The total run budget expired before code generation completed."
+            : error instanceof Error
+              ? error.message
+              : "Fireworks code generation failed.",
+          code: lastCode,
+          attempts: attempt,
+        },
+        elapsedMs: elapsed(),
+      };
+      return null;
+    }
+
+    lastCode = toGeneratedCode(output);
+    yield stage({
+      stage: "writing_code",
+      status: "complete",
+      detail: `Generated ${lastCode.lineCount} lines of pandas`,
+      attempt,
+    });
+    yield stage({
+      stage: "running_sandbox",
+      status: "active",
+      detail: attempt === 1 ? "Executing generated code" : "Re-running corrected code",
+      attempt,
+    });
+
+    let execution: ExecutionResult;
+    try {
+      const timeoutMs = Math.min(executionTimeoutMs, remaining());
+      execution = await withinBudget(
+        (signal) =>
+          options.executor.execute({
+            code: output.code,
+            csvPath: options.sandboxPath,
+            timeoutMs,
+            signal,
+          }),
+        remaining(),
+      );
+      if (remaining() <= 0) throw new BudgetExceededError();
+    } catch (error) {
+      const timedOut = error instanceof BudgetExceededError;
+      yield stage({
+        stage: "running_sandbox",
+        status: "failed",
+        detail: timedOut
+          ? "Total analysis budget exhausted during execution"
+          : `Executor failed: ${error instanceof Error ? error.message : "unknown error"}`,
+        attempt,
+      });
+      if (timedOut) {
+        yield {
+          type: "finding",
+          finding: {
+            verdict: "unverified",
+            reason: "timeout",
+            detail: error.message,
+            code: lastCode,
+            attempts: attempt,
+          },
+          elapsedMs: elapsed(),
+        };
+        return null;
+      }
+
+      const stderr =
+        error instanceof Error ? error.message : "Code execution failed.";
+      previousFailure = {
+        stderr,
+        failingCode: output.code,
+      };
+      if (attempt === maxAttempts) {
+        yield stage({
+          stage: "verifying",
+          status: "failed",
+          detail: "Retry cap reached — blocking an unverified answer",
+          attempt,
+        });
+        yield {
+          type: "finding",
+          finding: {
+            verdict: "unverified",
+            reason: "retry_exhausted",
+            detail: `${maxAttempts} attempts failed. Last error: ${stderr}`,
+            code: lastCode,
+            attempts: attempt,
+          },
+          elapsedMs: elapsed(),
+        };
+        return null;
+      }
+      continue;
+    }
+
+    if (execution.exitCode === 0 && execution.value !== null) {
+      yield stage({
+        stage: "running_sandbox",
+        status: "complete",
+        detail: `Exit 0 in ${execution.durationMs}ms`,
+        attempt,
+      });
+      return {
+        execution,
+        code: lastCode,
+        headline: output.headline,
+        columnsUsed: output.columnsUsed,
+        context: output.context,
+        valence: output.valence,
+        attempts: attempt,
+      };
+    }
+
+    const stderr =
+      execution.stderr.trim() ||
+      execution.stdout.trim() ||
+      `Execution exited ${execution.exitCode} without a usable result.`;
+    yield stage({
+      stage: "running_sandbox",
+      status: "failed",
+      detail: `${stderr.slice(0, 240)}${
+        stderr.length > 240 ? "…" : ""
+      }`,
+      attempt,
+    });
+    previousFailure = {
+      stderr,
+      failingCode: output.code,
+    };
+
+    if (attempt === maxAttempts) {
+      yield stage({
+        stage: "verifying",
+        status: "failed",
+        detail: "Retry cap reached — blocking an unverified answer",
+        attempt,
+      });
+      yield {
+        type: "finding",
+        finding: {
+          verdict: "unverified",
+          reason: "retry_exhausted",
+          detail: `${maxAttempts} attempts failed. Last error: ${stderr}`,
+          code: lastCode,
+          attempts: attempt,
+        },
+        elapsedMs: elapsed(),
+      };
+      return null;
+    }
+  }
+
+  return null;
+}
