@@ -71,23 +71,35 @@ export function contextSeries(
   );
   if (comparable.length === 0) return null;
 
+  /*
+   * Keep the figures that can share an axis WITH THE ANSWER, and let the rest
+   * be stated as tiles beside the chart.
+   *
+   * This used to be all-or-nothing, and the first live run showed why that was
+   * wrong: the real context was a prior-period total (130,259.58), a percentage
+   * change (+10.4) and a share (6.3). One figure out of scale killed the whole
+   * chart, even though the answer and the prior period are the same quantity a
+   * year apart — the single most useful comparison on the slide.
+   */
+  const sameSign = (figure: number) => (value >= 0 ? figure >= 0 : figure <= 0);
+  const inScale = (figure: number) => {
+    const a = Math.abs(value);
+    const b = Math.abs(figure);
+    if (a === 0 || b === 0) return false;
+    return Math.max(a, b) / Math.min(a, b) <= MAX_SPREAD;
+  };
+
   const bars: Bar_[] = [
     { label: claimLabel, value, isAnswer: true },
     ...comparable
+      .filter((figure) => sameSign(figure.value) && inScale(figure.value))
       .slice(0, MAX_BARS - 1)
       .map((figure) => ({ label: figure.description, value: figure.value, isAnswer: false })),
   ];
 
-  // Mixed signs on one axis need a zero baseline and a diverging treatment.
-  // A deck slide is the wrong place for that, so it falls back to tiles.
-  const positive = bars.every((bar) => bar.value >= 0);
-  const negative = bars.every((bar) => bar.value <= 0);
-  if (!positive && !negative) return null;
-
-  const magnitudes = bars.map((bar) => Math.abs(bar.value)).filter((size) => size > 0);
-  if (magnitudes.length < 2) return null;
-  const spread = Math.max(...magnitudes) / Math.min(...magnitudes);
-  if (spread > MAX_SPREAD) return null;
+  // One bar is not a comparison. Below that the slide states the figures instead.
+  if (bars.length < 2) return null;
+  if (Math.abs(value) === 0) return null;
 
   return bars;
 }

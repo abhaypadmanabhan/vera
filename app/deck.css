@@ -653,23 +653,45 @@
   mask-image: linear-gradient(to bottom, #000 calc(100% - 2.5rem), transparent);
 }
 
+/*
+ * Long lines WRAP, they do not scroll off the edge.
+ *
+ * The first live run generated an 18-line program whose longest line ran past
+ * the panel: `format='%d/%m/%` and then nothing. It was reachable by scrolling,
+ * but a slide being presented is read, not driven — a sliced line reads as a
+ * broken render. The continuation is indented so a wrapped line still scans as
+ * one statement.
+ */
 .deck-code-block {
   margin: 0;
   font-family: var(--font-mono);
   font-size: clamp(0.8125rem, 0.95vw, 1rem);
   line-height: 1.75;
-  white-space: pre;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   tab-size: 2;
 }
 
-.deck-code-block code,
-.deck-code-block span {
+/*
+ * Two columns per line: the number, then the code. A negative text-indent does
+ * the same job in one line, but it pushes the number outside the content box —
+ * inside a scroll container the browser clips it and the gutter disappears.
+ */
+.deck-code-block code {
   display: block;
 }
 
+/*
+ * One line = one grid row: the number, then the code. `span` must NOT also be
+ * caught by a `display: block` rule below this one — it was, and the later
+ * declaration silently cancelled the grid, collapsing the gutter to "01import".
+ */
+.deck-code-block span {
+  display: grid;
+  grid-template-columns: 2.75rem minmax(0, 1fr);
+}
+
 .deck-code-block i {
-  display: inline-block;
-  width: 2.75rem;
   color: var(--v-ink-muted);
   font-style: normal;
   user-select: none;
