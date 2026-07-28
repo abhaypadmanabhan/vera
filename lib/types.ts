@@ -148,7 +148,8 @@ export type BlockReason =
   | "not_grounded"
   | "retry_exhausted"
   | "timeout"
-  | "upstream_error";
+  | "upstream_error"
+  | "question_not_answerable";
 
 export const BLOCK_REASON_COPY: Record<BlockReason, string> = {
   code_error: "The analysis code failed to run.",
@@ -157,6 +158,7 @@ export const BLOCK_REASON_COPY: Record<BlockReason, string> = {
   retry_exhausted: "Two attempts were made and neither produced a traceable number.",
   timeout: "The analysis took too long and was stopped.",
   upstream_error: "A service Vera depends on did not respond.",
+  question_not_answerable: "Vera chose not to answer this from this file.",
 };
 
 /**

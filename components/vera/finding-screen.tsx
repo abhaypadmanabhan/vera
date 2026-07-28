@@ -249,6 +249,8 @@ function UnverifiedFinding({
   finding: Extract<Finding, { verdict: "unverified" }>;
   onReset: () => void;
 }) {
+  const isQuestionRefusal = finding.reason === "question_not_answerable";
+
   return (
     <div className="mx-auto w-full max-w-2xl px-6 pt-4 pb-24">
       <p className="v-reveal text-small text-ink-muted" style={{ ["--step" as string]: 0 }}>
@@ -258,29 +260,40 @@ function UnverifiedFinding({
       <div className="v-reveal-slow mt-6" style={{ ["--step" as string]: 1 }}>
         <p className="inline-flex items-center gap-2 rounded-full border border-warn/40 bg-warn-wash px-3 py-1.5 text-micro text-ink">
           <ShieldAlert className="size-3.5 text-warn" aria-hidden />
-          Unverified — no number released
+          {isQuestionRefusal
+            ? "Not answerable from this file — no number released"
+            : "Unverified — no number released"}
         </p>
         <h1 className="mt-6 text-title font-medium text-balance text-ink">
           {BLOCK_REASON_COPY[finding.reason]}
         </h1>
         <p className="mt-4 max-w-[62ch] text-body text-ink-muted">
-          Vera will not state a figure she cannot trace back to executed code and real cells. The
-          run is shown below exactly as it happened.
+          {isQuestionRefusal
+            ? finding.detail
+            : "Vera will not state a figure she cannot trace back to executed code and real cells. The run is shown below exactly as it happened."}
         </p>
-      </div>
-
-      <div className="v-reveal mt-8 border-b border-line" style={{ ["--step" as string]: 2 }}>
-        <Disclosure label="What went wrong" meta={`${finding.attempts} attempts`}>
-          <p className="rounded-xl border border-line bg-sunk p-4 font-mono text-micro leading-[1.7] text-ink">
-            {finding.detail}
+        {isQuestionRefusal && (
+          <p className="mt-4 max-w-[62ch] text-body text-ink-muted">
+            Try asking for a total, average, count, comparison, or trend that can be calculated from
+            this file.
           </p>
-        </Disclosure>
-        {finding.code && (
-          <Disclosure label="The code Vera attempted" meta={`${finding.code.lineCount} lines`}>
-            <CodeBlock source={finding.code.source} />
-          </Disclosure>
         )}
       </div>
+
+      {!isQuestionRefusal && (
+        <div className="v-reveal mt-8 border-b border-line" style={{ ["--step" as string]: 2 }}>
+          <Disclosure label="What went wrong" meta={`${finding.attempts} attempts`}>
+            <p className="rounded-xl border border-line bg-sunk p-4 font-mono text-micro leading-[1.7] text-ink">
+              {finding.detail}
+            </p>
+          </Disclosure>
+          {finding.code && (
+            <Disclosure label="The code Vera attempted" meta={`${finding.code.lineCount} lines`}>
+              <CodeBlock source={finding.code.source} />
+            </Disclosure>
+          )}
+        </div>
+      )}
 
       <button
         type="button"

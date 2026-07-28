@@ -1,4 +1,5 @@
 import { env } from "node:process";
+import { currentSpan, type Span } from "braintrust";
 import { z } from "zod";
 import { MOCK_MODE } from "../config";
 
@@ -127,21 +128,50 @@ export function createFireworksClient(
       request.signal?.addEventListener("abort", onExternalAbort, { once: true });
       const timeout = setTimeout(() => timeoutController.abort(), timeoutMs);
 
+      /*
+       * Braintrust tracing.
+       *
+       * Fireworks is called over raw fetch, not through an AI SDK, so there is
+       * no client for Braintrust's auto-instrumentation to patch. The analyze
+       * route establishes the parent analysis context; this manual span records
+       * the raw fetch as its child.
+       */
+      let telemetrySpan: Span | null = null;
       try {
-        const response = await fetchImpl(`${FIREWORKS_BASE_URL}/chat/completions`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: FIREWORKS_MODEL_ID,
-            messages: request.messages,
-            response_format: request.responseFormat,
-            max_tokens: request.maxTokens,
-          }),
-          signal: timeoutController.signal,
+        telemetrySpan = currentSpan().startSpan({
+          name: "fireworks.chat",
+          type: "llm",
         });
+      } catch {
+        telemetrySpan = null;
+      }
+      try {
+        telemetrySpan?.log({
+          input: request.messages,
+          metadata: { model: FIREWORKS_MODEL_ID, maxTokens: request.maxTokens },
+        });
+      } catch {
+        // Telemetry is never load-bearing.
+      }
+
+      try {
+        const response = await fetchImpl(
+          `${FIREWORKS_BASE_URL}/chat/completions`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model: FIREWORKS_MODEL_ID,
+              messages: request.messages,
+              response_format: request.responseFormat,
+              max_tokens: request.maxTokens,
+            }),
+            signal: timeoutController.signal,
+          },
+        );
 
         if (!response.ok) {
           throw new FireworksError(
@@ -163,6 +193,20 @@ export function createFireworksClient(
 
         const choice = parsed.data.choices[0];
         const usage = parsed.data.usage;
+        try {
+          telemetrySpan?.log({
+            output: choice.message.content,
+            metrics: usage
+              ? {
+                  prompt_tokens: usage.prompt_tokens,
+                  completion_tokens: usage.completion_tokens,
+                  tokens: usage.total_tokens,
+                }
+              : undefined,
+          });
+        } catch {
+          // Telemetry is never load-bearing.
+        }
         return {
           content: choice.message.content,
           finishReason: choice.finish_reason,
@@ -189,6 +233,11 @@ export function createFireworksClient(
           { cause: error },
         );
       } finally {
+        try {
+          telemetrySpan?.end();
+        } catch {
+          // Telemetry is never load-bearing.
+        }
         clearTimeout(timeout);
         request.signal?.removeEventListener("abort", onExternalAbort);
       }

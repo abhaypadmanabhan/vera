@@ -1,3 +1,4 @@
+import { reconcileClaim } from "./claim";
 import { csvSchema } from "./csv";
 import { generatePandasCode } from "./codegen/generate";
 import { runCodegenWithRetries } from "./codegen/retry";
@@ -155,7 +156,17 @@ export const realAnalyst: Analyst = {
         unit: null,
         // Plain-English headline for the hero slide. The technical one-liner
         // (column names, date formats) belongs on the code slide, not here.
-        claim: result.headline || result.code.explanation,
+        //
+        // The model writes this sentence BEFORE the code runs, so it is never
+        // trusted to carry the figure — `reconcileClaim` places the executed
+        // value and discards any sentence quoting a number the code did not
+        // produce (PRD §6).
+        claim: reconcileClaim({
+          headline: result.headline,
+          question: request.question,
+          value: result.execution.value as number | string,
+          fallback: result.code.explanation,
+        }).claim,
         code: result.code,
         execution: result.execution,
         grounding: verdict.grounding,

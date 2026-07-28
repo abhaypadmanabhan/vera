@@ -73,6 +73,25 @@ describe("deck", () => {
     const deck = buildDeck("q", verified, profile);
     expect(matchSlide("which region had the highest profit margin", deck)).toBeNull();
   });
+
+  /*
+   * Single-word topics are common English: the headline slide claims "total"
+   * and the code slide claims "run". Without a length guard these hijacked new
+   * questions back to an old slide, which on stage reads as Vera ignoring you.
+   */
+  it("does not let one stray keyword hijack a new question", () => {
+    const deck = buildDeck("What were total sales in Q3 2018?", verified, profile);
+    expect(matchSlide("what were total sales by region?", deck)).toBeNull();
+    expect(matchSlide("which category should we run a promotion on?", deck)).toBeNull();
+    expect(matchSlide("how many units were sold in the total east region", deck)).toBeNull();
+  });
+
+  it("still routes a short deictic follow-up on a single keyword", () => {
+    const deck = buildDeck("What were total sales in Q3 2018?", verified, profile);
+    expect(matchSlide("show me the code", deck)?.kind).toBe("code");
+    expect(matchSlide("which cells?", deck)?.kind).toBe("cells");
+    expect(matchSlide("recap", deck)?.kind).toBe("summary");
+  });
 });
 
 describe("presenter beats", () => {

@@ -5,7 +5,8 @@ import { LIMITS } from "@/lib/config";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { resolveDataset, resolveUpload } from "@/lib/datasets";
 import { encodeEvent } from "@/lib/stream";
-import type { AnalysisRequest, StageEvent } from "@/lib/types";
+import { beginAnalysisTrace } from "@/lib/braintrust/logger";
+import type { AnalysisRequest, Finding, StageEvent } from "@/lib/types";
 
 export const runtime = "nodejs";
 
@@ -93,20 +94,67 @@ export async function POST(request: Request): Promise<Response> {
   let iterator: AsyncIterator<StageEvent> | null = null;
   let aborted = false;
   let iteratorClosed = false;
+  let pendingNext: Promise<IteratorResult<StageEvent>> | null = null;
+  let iteratorClose: Promise<void> | null = null;
+  let abortFinalization: Promise<void> | null = null;
 
-  const closeIterator = async (): Promise<void> => {
-    if (iteratorClosed || !iterator) return;
+  // Braintrust Logs: one trace per real run, written once the stream settles.
+  // Normal completion allows a bounded flush; telemetry failure never fails it.
+  let finding: Finding | null = null;
+  let traced = false;
+  const analysisTrace = beginAnalysisTrace({
+    question: analysisRequest.question,
+    datasetId: parsed.data.datasetId,
+  });
+  const trace = async (error?: string): Promise<void> => {
+    if (traced) return;
+    traced = true;
+    await analysisTrace.finish({
+      finding,
+      error,
+      durationMs: Date.now() - startedAt,
+    });
+  };
+
+  const closeIterator = (): Promise<void> => {
+    if (iteratorClose) return iteratorClose;
+    if (iteratorClosed || !iterator) return Promise.resolve();
     iteratorClosed = true;
-    try {
-      await iterator.return?.();
-    } catch {
-      // Cleanup errors cannot be delivered after the response has been cancelled.
-    }
+    iteratorClose = (async () => {
+      try {
+        await iterator?.return?.();
+      } catch {
+        // Cleanup errors cannot be delivered after the response has been cancelled.
+      }
+    })();
+    return iteratorClose;
+  };
+  const finishAbortedTrace = (error: string): Promise<void> => {
+    abortFinalization ??= (async () => {
+      const inFlight = pendingNext;
+      const workSettled = Promise.all([
+        closeIterator(),
+        inFlight?.then(
+          () => undefined,
+          () => undefined,
+        ) ?? Promise.resolve(),
+      ]);
+      let settleTimeout: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([
+        workSettled,
+        new Promise<void>((resolve) => {
+          settleTimeout = setTimeout(resolve, LIMITS.runBudgetMs);
+        }),
+      ]);
+      if (settleTimeout) clearTimeout(settleTimeout);
+      await trace(error);
+    })();
+    return abortFinalization;
   };
   const onAbort = (): void => {
     aborted = true;
     resolveAbort();
-    void closeIterator();
+    void finishAbortedTrace("Analysis aborted.");
   };
   request.signal.addEventListener("abort", onAbort, { once: true });
   if (request.signal.aborted) onAbort();
@@ -120,20 +168,34 @@ export async function POST(request: Request): Promise<Response> {
       }
 
       try {
-        iterator ??= getAnalyst().run(analysisRequest)[Symbol.asyncIterator]();
-        const result = await Promise.race([iterator.next(), abortPromise]);
+        const next = analysisTrace.run(() => {
+          iterator ??= getAnalyst().run(analysisRequest)[Symbol.asyncIterator]();
+          return iterator.next();
+        });
+        pendingNext = next;
+        void next.then(
+          () => {
+            if (pendingNext === next) pendingNext = null;
+          },
+          () => {
+            if (pendingNext === next) pendingNext = null;
+          },
+        );
+        const result = await Promise.race([next, abortPromise]);
         if (result === abortedResult || aborted) {
           controller.close();
           request.signal.removeEventListener("abort", onAbort);
-          void closeIterator();
+          void finishAbortedTrace("Analysis aborted.");
           return;
         }
         if (result.done) {
           iteratorClosed = true;
+          await trace();
           controller.close();
           request.signal.removeEventListener("abort", onAbort);
           return;
         }
+        if (result.value.type === "finding") finding = result.value.finding;
         controller.enqueue(encoder.encode(encodeEvent(result.value)));
       } catch (error) {
         if (!aborted) {
@@ -142,6 +204,7 @@ export async function POST(request: Request): Promise<Response> {
             message: error instanceof Error ? error.message : "Analysis failed.",
             elapsedMs: Date.now() - startedAt,
           };
+          await trace(event.message);
           controller.enqueue(encoder.encode(encodeEvent(event)));
         }
         controller.close();
@@ -153,7 +216,7 @@ export async function POST(request: Request): Promise<Response> {
       aborted = true;
       resolveAbort();
       request.signal.removeEventListener("abort", onAbort);
-      void closeIterator();
+      void finishAbortedTrace("Analysis cancelled.");
     },
   });
 

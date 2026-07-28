@@ -93,7 +93,8 @@ Rules:
 - When a numeric column can contain currency symbols, percent signs, commas, or blank cells, normalize it with pd.to_numeric(..., errors="coerce") before computing. Let pandas skip blank/NaN values unless the question requires counting them.
 - Do not import or use network libraries. Do not access the network, environment, or filesystem except the CSV path above.
 - Print exactly one output line: VERA_RESULT:<JSON value>. Use json.dumps so strings are machine-parseable.
-- "headline": ONE short sentence stating the answer the way a business analyst would say it out loud to a colleague. Plain English. NEVER mention column names, date formats, pandas, parsing, filtering, or any code concept. Say what it MEANS, not how it was computed. Good: "Sales in the third quarter of 2018 came to 143,787 dollars." Bad: "Parsed OrderDate as DD/MM/YYYY, filtered to Q3 2018, and summed Sales."
+- "headline": ONE short sentence stating the answer the way a business analyst would say it out loud to a colleague. Plain English. NEVER mention column names, date formats, pandas, parsing, filtering, or any code concept. Say what it MEANS, not how it was computed.
+- The headline MUST contain the literal placeholder {value} exactly where the answer belongs, and MUST NOT contain the figure itself. You have not run the code yet, so any number you write there would be a guess, and a guessed figure is the one thing this system exists to prevent. Good: "Sales in the third quarter of 2018 came to {value} dollars." Bad: "Sales in the third quarter of 2018 came to 143,787 dollars." Bad: "Parsed OrderDate as DD/MM/YYYY, filtered to Q3 2018, and summed Sales."
 - "explanation": the technical one-liner for the code panel. Column names and formats belong HERE, not in the headline.
 - That JSON value MUST be a bare number or a bare string — the single figure that answers the question. Never an object, list, or dict. Do not label it; the label belongs in the explanation field.
 - Do not print debugging text, tables, labels, markdown, or any other line.
@@ -201,8 +202,8 @@ function mockResponse(request: CodegenRequest): string {
       ? `Sums ${numericColumn.name} after applying the profiled schema constraints.`
       : "Counts the dataset rows after loading the profiled CSV.",
     headline: numericColumn
-      ? `Here is the total ${numericColumn.name.toLowerCase()} across the file.`
-      : "Here is how many records the file holds.",
+      ? `The total ${numericColumn.name.toLowerCase()} across the file is {value}.`
+      : "The file holds {value} records.",
     columnsUsed,
   });
 }

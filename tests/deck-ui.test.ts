@@ -130,21 +130,28 @@ describe("deck slide presentation", () => {
     }
   });
 
-  it("shows the presenter orb in its speaking state during audio playback", () => {
+  it("tells the presenter orb's three states apart, and hides it from the reader", () => {
     const slide = buildDeck("What were sales in Q3 2018?", finding, profile).slides[0];
-    const markup = renderToStaticMarkup(
-      createElement(DeckSlide, {
-        slide,
-        finding,
-        dataset,
-        activeFocus: slide.beats[0]?.focus ?? null,
-        speaking: true,
-      }),
-    );
+    const render = (speaking: boolean, narrating: boolean) =>
+      renderToStaticMarkup(
+        createElement(DeckSlide, {
+          slide,
+          finding,
+          dataset,
+          activeFocus: slide.beats[0]?.focus ?? null,
+          speaking,
+          narrating,
+        }),
+      );
 
-    expect(markup).toContain("presenter-orb-speaking");
-    expect(markup).toContain("presenter-orb-core");
-    expect(markup).toContain("presenter-orb-wave");
+    expect(render(true, true)).toContain('data-state="speaking"');
+    expect(render(false, true)).toContain('data-state="idle"');
+    expect(render(false, false)).toContain('data-state="stopped"');
+
+    // The shader only mounts in the browser, so the static ring is what the
+    // server renders — and it is what reduced motion is left with.
+    expect(render(true, true)).toContain("presenter-orb-still");
+    expect(render(true, true)).toContain("aria-hidden");
   });
 
   it("keeps the benchmark explicitly separate from the live proof", () => {
