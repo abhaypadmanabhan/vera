@@ -9,26 +9,44 @@ export type RateLimitResult =
   | { allowed: true; remaining: number }
   | { allowed: false; retryAfterMs: number };
 
+/**
+ * Which budget a request draws from.
+ *
+ * "analysis" is the money guard proper — Fireworks plus a sandbox run per
+ * request. "narration" is one call per narrated slide (a whole slide's beats
+ * are synthesised in a single request), so a single deck spends several; kept
+ * separate so a talkative deck can never starve the analysis it is narrating.
+ */
+export type RateLimitBucket = "analysis" | "narration";
+
+const BUDGETS: Record<RateLimitBucket, { requests: number; windowMs: number }> = {
+  analysis: LIMITS.rateLimit,
+  narration: LIMITS.narrationRateLimit,
+};
+
 const windows = new Map<string, RateLimitWindow>();
 
 export function checkRateLimit(
   ip: string,
   now = Date.now(),
+  bucket: RateLimitBucket = "analysis",
 ): RateLimitResult {
-  const current = windows.get(ip);
+  const budget = BUDGETS[bucket];
+  const key = `${bucket}:${ip}`;
+  const current = windows.get(key);
 
   if (!current || now >= current.resetAt) {
-    windows.set(ip, {
+    windows.set(key, {
       count: 1,
-      resetAt: now + LIMITS.rateLimit.windowMs,
+      resetAt: now + budget.windowMs,
     });
     return {
       allowed: true,
-      remaining: LIMITS.rateLimit.requests - 1,
+      remaining: budget.requests - 1,
     };
   }
 
-  if (current.count >= LIMITS.rateLimit.requests) {
+  if (current.count >= budget.requests) {
     return {
       allowed: false,
       retryAfterMs: current.resetAt - now,
@@ -38,6 +56,6 @@ export function checkRateLimit(
   current.count += 1;
   return {
     allowed: true,
-    remaining: LIMITS.rateLimit.requests - current.count,
+    remaining: budget.requests - current.count,
   };
 }

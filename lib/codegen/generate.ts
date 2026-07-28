@@ -119,7 +119,10 @@ Return JSON only, matching this schema exactly:
 ${JSON.stringify(CODEGEN_JSON_SCHEMA, null, 2)}
 
 Rules:
-- Read the CSV only from ${JSON.stringify(request.sandboxPath)} with pandas.read_csv.
+- Your first statement after the imports MUST be exactly this line, copied character for character:
+  df = pd.read_csv(${JSON.stringify(request.sandboxPath)})
+  Do not shorten, tidy, or substitute that path — it is the only file you may read, and any other
+  path is rejected before the code runs. Read it exactly once.
 - Use the exact column names, null counts, kinds, and sample values in the profile.
 - Treat every profile note as a hard constraint.
 - When touching a date column with a proven dateFormat, call pd.to_datetime with format="<that exact format>".

@@ -59,3 +59,40 @@ runs a full demo. Parallelisable across 3 agents (UI / API+types / data).
 2. Each phase ends with a PR into `dev` + a "how to verify" summary, then **STOP** for review.
 3. Phase 1 must stay runnable with zero keys forever — later phases add a real path, they do not
    replace the mock path.
+
+---
+
+## Phase 11 — P2 narration batching (`p11/narration`, 2026-07-26)
+
+Plan: one `/api/speak` call per SLIDE instead of per beat, using ElevenLabs
+`convertWithTimestamps` so beat boundaries (which drive the UI focus) come from
+character-level alignment — exact, not estimated — with a proportional fallback
+if alignment is absent. STOP aborts the single in-flight fetch and pauses the
+one audio element, so no later beat can arrive after an interrupt.
+
+- [ ] `lib/voice/tts.ts`: `speakBeats()` + pure `beatEndsFromAlignment()`
+- [ ] `app/api/speak/route.ts`: `{ texts: [] }` in, `{ audio, beatEndsSeconds }` out; mock 204 + narration bucket untouched
+- [ ] `components/vera/narration-player.ts`: framework-free, unit-testable player
+- [ ] `use-narration-audio.ts`: thin wrapper; `deck-player.tsx`: 2-line change
+- [ ] Tests: call count per deck, interrupt proofs, route batching + rate limit
+- [ ] Gates: tsc / eslint / vitest / next build clean
+
+## p11/multi-finding — 2026-07-26 (TASK.md, branch `p11/multi-finding`)
+
+Multi-finding deck, OFF by default behind `LIMITS.maxFindingsPerDeck` (default 1 — cost is
+linear in findings; builder turns it up when he signs off on spend).
+
+- [x] `lib/config.ts`: `maxFindingsPerDeck: 1` with the money comment
+- [x] `lib/deck.ts`: `buildDeck(question, Finding | Finding[], profile)` — 1 verified →
+      byte-identical single deck; >1 → opener / per-finding slides with `findingIndex` /
+      tying summary; unverified findings are absent, never hedged
+- [x] `app/api/analyze/route.ts`: `runDeckQuestions` — follow-ups from the free,
+      guardrail-filtered suggestion machinery; failed follow-up findings swallowed;
+      hand-built iterator so `return()` still closes the analyst promptly on cancel
+- [x] `hooks/use-analysis.ts` + `console.tsx`: accumulate findings, deck from verified list
+- [x] `deck-player.tsx` (shared, minimal): per-slide finding resolution, caveat index from
+      last id segment, multi-figure summary branch
+- [x] Tests: `tests/deck-multi.test.ts` (14) + `tests/analyze-multifinding.test.ts` (6)
+- [x] Gates: `tsc --noEmit`, `eslint .`, `vitest run` (381 passed), `next build` — all clean
+- [x] Mock-mode smoke over HTTP, zero keys: single-finding stream unchanged, refusal forwarded
+- [ ] Commit + push. No PR, no merge.

@@ -26,21 +26,36 @@ export function ComparisonChart({ bars, caption }: { bars: ComparisonBar[]; capt
 
   return (
     <figure className="m-0">
-      <div className="mx-auto h-[220px] w-full max-w-[400px]" aria-hidden>
+      {/*
+        This is the punchline of the cold open and it gets the stage: the whole
+        column, and enough height that the difference between the two marks is
+        legible from across a room.
+      */}
+      <div
+        className="mx-auto w-full max-w-[38rem]"
+        style={{ height: "clamp(15rem, 40vh, 24rem)" }}
+        aria-hidden
+      >
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={bars} margin={{ top: 28, right: 8, bottom: 0, left: 8 }}>
+          <BarChart data={bars} margin={{ top: 36, right: 8, bottom: 0, left: 8 }}>
             <YAxis type="number" domain={[0, max * 1.12]} hide />
+            {/*
+              `height` has to be given explicitly: the axis defaults to 30px,
+              which is not enough for a 16px tick plus its margin, and the
+              column names were being sliced through the middle.
+            */}
             <XAxis
               type="category"
               dataKey="label"
               axisLine={false}
               tickLine={false}
-              tick={{ fill: "var(--color-ink-muted)", fontSize: 13 }}
-              tickMargin={10}
+              height={46}
+              tick={{ fill: "var(--color-ink-muted)", fontSize: 16 }}
+              tickMargin={14}
             />
             <Bar
               dataKey="value"
-              barSize={24}
+              barSize={64}
               radius={[4, 4, 0, 0]}
               isAnimationActive={!reduced}
               animationDuration={600}
@@ -55,9 +70,9 @@ export function ComparisonChart({ bars, caption }: { bars: ComparisonBar[]; capt
               <LabelList
                 dataKey="display"
                 position="top"
-                offset={10}
+                offset={12}
                 fill="var(--color-ink)"
-                fontSize={14}
+                fontSize={19}
                 fontFamily="var(--font-mono)"
               />
             </Bar>
@@ -65,20 +80,27 @@ export function ComparisonChart({ bars, caption }: { bars: ComparisonBar[]; capt
         </ResponsiveContainer>
       </div>
 
-      <figcaption className="mt-3 text-micro text-ink-muted">{caption}</figcaption>
+      <figcaption className="mt-4 text-center text-small text-ink-muted">{caption}</figcaption>
 
-      {/* Text alternative — the chart is never the only place a number lives. */}
-      <table className="sr-only">
-        <caption>{caption}</caption>
-        <tbody>
-          {bars.map((bar) => (
-            <tr key={bar.label}>
-              <th scope="row">{bar.label}</th>
-              <td>{bar.display}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {/*
+        Text alternative — the chart is never the only place a number lives.
+        The clip lives on a wrapper `div`, not on the table: a table ignores
+        `width: 1px` and lays out at min-content, so `sr-only` on the table
+        itself leaves a ~630px box hanging past the right edge of the viewport.
+      */}
+      <div className="sr-only">
+        <table>
+          <caption>{caption}</caption>
+          <tbody>
+            {bars.map((bar) => (
+              <tr key={bar.label}>
+                <th scope="row">{bar.label}</th>
+                <td>{bar.display}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </figure>
   );
 }

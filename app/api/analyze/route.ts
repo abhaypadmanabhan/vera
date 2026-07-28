@@ -8,12 +8,118 @@ import {
   resolveDataset,
   resolveUpload,
 } from "@/lib/datasets";
+import { suggestFollowUps } from "@/lib/follow-ups";
 import { getPrep } from "@/lib/prepare/store";
 import { encodeEvent } from "@/lib/stream";
 import { beginAnalysisTrace } from "@/lib/braintrust/logger";
-import type { AnalysisRequest, Finding, StageEvent } from "@/lib/types";
+import type {
+  AnalysisRequest,
+  Analyst,
+  Finding,
+  StageEvent,
+} from "@/lib/types";
 
 export const runtime = "nodejs";
+
+/**
+ * Run the asked question, then — only while `maxFindings` allows — the
+ * follow-up questions Vera would have suggested anyway.
+ *
+ * The money shape of this (TASK.md, read twice): the DEFAULT is one question,
+ * and with one question this iterable is exactly the old single
+ * `analyst.run(request)` pass. Every finding beyond the first is its own
+ * codegen + sandbox run, so the ceiling lives in one named config value
+ * (`LIMITS.maxFindingsPerDeck`) and the builder turns it up only when he has
+ * signed off on spend per deck. The HTTP rate limit and the per-process paid
+ * run cap are untouched: one request is still one rate-limit token, and a
+ * multi-finding deck can never spend more than `maxFindings` runs.
+ *
+ * The honesty shape: the asked question's outcome always streams, verified or
+ * not (the refusal path is the product). A FOLLOW-UP that fails to verify is
+ * simply absent — its finding event is swallowed here so the deck never
+ * hedges, and the run stops rather than spending more on a broken thread.
+ * Follow-up questions come from `suggestFollowUps`, which is free (no model
+ * call), derived from the columns the executed code actually read, and already
+ * filtered through the guardrail — the analyst then re-checks each one.
+ *
+ * The iterator is hand-built, NOT an async generator: an async generator
+ * queues `return()` behind a pending inner `next()`, which would leave the
+ * underlying analyst run hanging (and billing) after the client cancels. Here
+ * `return()` propagates to the active inner iterator immediately — the same
+ * prompt close the route has always relied on.
+ */
+export function runDeckQuestions(
+  analyst: Analyst,
+  request: AnalysisRequest,
+  maxFindings: number,
+): AsyncIterable<StageEvent> {
+  const ceiling = Math.max(1, Math.floor(maxFindings));
+  const asked = new Set([request.question.trim().toLowerCase()]);
+  const suggestionProfile = request.analysisProfile ?? request.dataset.profile;
+
+  return {
+    [Symbol.asyncIterator]() {
+      let inner: AsyncIterator<StageEvent> | null = null;
+      let current = request;
+      let runs = 0;
+      let isAskedQuestion = true;
+      let finding: Finding | null = null;
+      let finished = false;
+
+      const finish = async (): Promise<IteratorResult<StageEvent>> => {
+        finished = true;
+        const active = inner;
+        inner = null;
+        if (active?.return) await active.return();
+        return { done: true, value: undefined };
+      };
+
+      const next = async (): Promise<IteratorResult<StageEvent>> => {
+        for (;;) {
+          if (finished) return { done: true, value: undefined };
+
+          if (!inner) {
+            if (runs >= ceiling) return finish();
+            isAskedQuestion = runs === 0;
+            runs += 1;
+            finding = null;
+            inner = analyst.run(current)[Symbol.asyncIterator]();
+          }
+
+          const result = await inner.next();
+          if (result.done) {
+            inner = null;
+            if (!finding || finding.verdict !== "verified") return finish();
+            const nextQuestion = suggestFollowUps(finding, suggestionProfile).find(
+              (candidate) => !asked.has(candidate.trim().toLowerCase()),
+            );
+            if (!nextQuestion) return finish();
+            asked.add(nextQuestion.trim().toLowerCase());
+            current = { ...request, question: nextQuestion };
+            continue;
+          }
+
+          const event = result.value;
+          if (event.type === "finding") {
+            finding = event.finding;
+            if (!isAskedQuestion && event.finding.verdict !== "verified") {
+              // Absent, never presented: a failed follow-up leaves no finding
+              // event behind for the deck to hedge over.
+              continue;
+            }
+          }
+          return { done: false, value: event };
+        }
+      };
+
+      return {
+        next,
+        return: finish,
+      };
+    },
+  };
+}
+
 
 const requestSchema = z.object({
   question: z
@@ -184,7 +290,11 @@ export async function POST(request: Request): Promise<Response> {
 
       try {
         const next = analysisTrace.run(() => {
-          iterator ??= getAnalyst().run(analysisRequest)[Symbol.asyncIterator]();
+          iterator ??= runDeckQuestions(
+            getAnalyst(),
+            analysisRequest,
+            LIMITS.maxFindingsPerDeck,
+          )[Symbol.asyncIterator]();
           return iterator.next();
         });
         pendingNext = next;
@@ -210,7 +320,11 @@ export async function POST(request: Request): Promise<Response> {
           request.signal.removeEventListener("abort", onAbort);
           return;
         }
-        if (result.value.type === "finding") finding = result.value.finding;
+        // The trace records the ASKED question's finding; later finding events
+        // belong to follow-up questions in the same deck.
+        if (result.value.type === "finding" && finding === null) {
+          finding = result.value.finding;
+        }
         controller.enqueue(encoder.encode(encodeEvent(result.value)));
       } catch (error) {
         if (!aborted) {

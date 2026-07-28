@@ -166,15 +166,15 @@ export function ColdOpen() {
         </div>
 
         {beat >= LAST_BEAT && (
-          <div className="v-reveal-slow mx-auto mt-6 w-full max-w-2xl">
+          <div className="v-reveal-slow mx-auto mt-8 w-full max-w-3xl">
             <ComparisonChart
               bars={BARS}
               caption="Q3 2018 sales from superstore.csv — the same 9,994-row file, answered two ways."
             />
-            <p className="mt-6 text-center text-lead font-medium text-balance text-ink">
+            <p className="v-display mx-auto mt-10 max-w-[22ch] text-center text-[clamp(1.75rem,3.4vw,3rem)] text-ink">
               Same file. Same question. One of them ran the code.
             </p>
-            <p className="mt-3 text-center text-small text-ink-muted">
+            <p className="mt-4 text-center text-small text-ink-muted">
               <span className="font-mono text-ink">OrderDate</span> is DD/MM/YYYY —{" "}
               <span className="v-nums font-mono text-ink">
                 {ROWS_DROPPED.toLocaleString("en-US")}
@@ -230,17 +230,44 @@ function Panel({
         shown ? "translate-y-0 opacity-100" : "translate-y-3 opacity-0",
       )}
     >
-      <p className="flex items-center gap-2 text-body font-medium text-ink">
+      {/*
+        The state is carried by the mark's FORM — a crossed ring against a
+        ticked one — so the pair still reads with the colour removed. A pair of
+        red-and-blue dots would say nothing to a reader who cannot separate
+        them, and a coloured status dot is the first thing on the vault's
+        reject list.
+      */}
+      <p className="flex items-center gap-2.5 text-body font-medium text-ink">
         <span
           aria-hidden
-          className={cn("size-2 rounded-full", tone === "danger" ? "bg-danger" : "bg-accent")}
-        />
+          className={cn("shrink-0", tone === "danger" ? "text-danger" : "text-accent")}
+        >
+          <svg viewBox="0 0 20 20" fill="none" className="size-[1.0625rem]" aria-hidden>
+            <circle cx="10" cy="10" r="8.25" stroke="currentColor" strokeWidth="1.4" />
+            {tone === "danger" ? (
+              <path
+                d="M7.2 7.2 12.8 12.8M12.8 7.2 7.2 12.8"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+              />
+            ) : (
+              <path
+                d="M6.4 10.3 8.9 12.8 13.6 7.6"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            )}
+          </svg>
+        </span>
         {title}
       </p>
       <p className="mt-1 text-small text-ink-muted">{subtitle}</p>
 
       <p
-        className="v-nums mt-5 font-mono font-normal tracking-[-0.03em] text-ink"
+        className="v-nums v-display mt-5 text-ink"
         style={{ fontSize: "clamp(2.25rem, 4.2vw, 4rem)", lineHeight: 1 }}
       >
         {figure}

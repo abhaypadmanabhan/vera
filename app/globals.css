@@ -1,15 +1,24 @@
 @import "tailwindcss";
+@import "./deck.css";
 
 /*
- * Vera design tokens — DESIGN.md v3.
+ * Vera design tokens — DESIGN.md v4.
  *
- * Apple-clean: neutrals carry ~90% of the surface, ONE accent (interactive +
- * verified), semantic colour only for status. Light is primary; dark exists
- * because the charts have to read in both. Swap token values, never components.
+ * Calm, editorial, ink-on-paper. Neutrals carry ~90% of the surface, ONE accent
+ * (interactive + verified), semantic colour only for status. Light is primary;
+ * dark exists because the charts have to read in both. Swap token values, never
+ * components.
+ *
+ * v4 reconciles the system with the builder's UI-UX vault, which flags three
+ * things v3 shipped as its defaults:
+ *   - uppercase mono micro-labels, and mono used as a general UI font
+ *   - marketing body type below an 18px floor
+ *   - a flat background with no field and no grain
+ * Each is fixed at the token layer here rather than per component.
  *
  * Every chart colour below was validated with the dataviz skill's palette
  * validator against the real surfaces:
- *   light  accent #0073cf + danger #cc272e on #fbfcfd  → all six checks PASS
+ *   light  accent #0073cf + danger #cc272e on #fdfdfe  → all six checks PASS
  *   dark   accent #3093ec + danger #e24947 on #121416  → all six checks PASS
  * Do not re-step them without re-running that validator.
  */
@@ -18,11 +27,12 @@
   color-scheme: light;
 
   --v-bg: oklch(0.99 0.002 250);
-  --v-surface: oklch(1 0 0);
+  /* Not pure white. A surface at oklch(1 0 0) reads as a hole in the page. */
+  --v-surface: oklch(0.995 0.002 250);
   --v-sunk: oklch(0.975 0.003 250);
   --v-line: oklch(0.92 0.004 250);
   --v-line-strong: oklch(0.86 0.006 250);
-  --v-ink: oklch(0.22 0.01 250);
+  --v-ink: oklch(0.24 0.011 250);
   --v-ink-muted: oklch(0.5 0.014 250);
   --v-accent: oklch(0.55 0.17 250);
   --v-accent-wash: oklch(0.96 0.02 250);
@@ -32,6 +42,15 @@
 
   /* The one shadow in the system: a hairline lift, never a stack. */
   --v-lift: 0 1px 2px oklch(0.22 0.01 250 / 0.05), 0 8px 24px oklch(0.22 0.01 250 / 0.04);
+
+  /*
+   * Background field. Grain keeps a pale page from reading as dead; the blooms
+   * are what make it read as alive. At 0.05 they were invisible — a page with a
+   * background nobody can see has no background.
+   */
+  --v-grain-opacity: 0.035;
+  --v-bloom-opacity: 0.2;
+  --v-bloom-two-opacity: 0.15;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -52,6 +71,10 @@
     --v-danger: oklch(0.62 0.19 25);
 
     --v-lift: 0 1px 2px oklch(0 0 0 / 0.4), 0 8px 24px oklch(0 0 0 / 0.28);
+
+    --v-grain-opacity: 0.05;
+    --v-bloom-opacity: 0.2;
+    --v-bloom-two-opacity: 0.16;
   }
 }
 
@@ -72,6 +95,10 @@
   --v-danger: oklch(0.62 0.19 25);
 
   --v-lift: 0 1px 2px oklch(0 0 0 / 0.4), 0 8px 24px oklch(0 0 0 / 0.28);
+
+  --v-grain-opacity: 0.05;
+  --v-bloom-opacity: 0.2;
+  --v-bloom-two-opacity: 0.16;
 }
 
 @theme inline {
@@ -88,19 +115,28 @@
   --color-warn-wash: var(--v-warn-wash);
   --color-danger: var(--v-danger);
 
+  /*
+   * Three families, one job each. `--font-display` is the voice, `--font-sans`
+   * is every other word, `--font-mono` is code, cells, column names, filenames
+   * and timings — technical surfaces only.
+   */
+  --font-display: var(--font-newsreader), ui-serif, Georgia, "Times New Roman", serif;
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, "SFMono-Regular", monospace;
 
-  /* Six sizes. That is the whole scale. */
-  --text-micro: 0.75rem; /* 12 — labels, timings, captions */
-  --text-micro--line-height: 1.4;
-  --text-small: 0.875rem; /* 14 — secondary, dense UI */
+  /*
+   * Six sizes. That is the whole scale.
+   * Floors from the vault: no sans below 15px, no mono below 13.5px, prose 18px.
+   */
+  --text-micro: 0.875rem; /* 14 — mono meta: timings, filenames, exit codes */
+  --text-micro--line-height: 1.45;
+  --text-small: 0.9375rem; /* 15 — the sans floor: captions, labels, dense UI */
   --text-small--line-height: 1.5;
-  --text-body: 1rem; /* 16 — prose */
-  --text-body--line-height: 1.55;
-  --text-lead: 1.25rem; /* 20 — the claim, the question */
-  --text-lead--line-height: 1.35;
-  --text-title: 2rem; /* 32 — screen titles */
+  --text-body: 1.125rem; /* 18 — prose */
+  --text-body--line-height: 1.6;
+  --text-lead: 1.375rem; /* 22 — the claim, the question */
+  --text-lead--line-height: 1.4;
+  --text-title: 2.25rem; /* 36 — screen and section headings */
   --text-title--line-height: 1.1;
   --text-figure: 4.5rem; /* 72 — the headline finding, and nothing else */
   --text-figure--line-height: 1;
@@ -134,23 +170,65 @@
     border-radius: 4px;
   }
 
+  /*
+   * Headings are the display face by default, so no component has to remember
+   * to ask for it. Anything that must stay in the UI face opts out with
+   * `font-sans`.
+   */
   h1,
   h2,
   h3 {
-    letter-spacing: -0.02em;
+    font-family: var(--font-display);
+    font-weight: 400;
+    letter-spacing: -0.018em;
   }
 }
 
 @layer components {
-  /* The only label idiom on the page. */
+  /*
+   * The display treatment, for the few places that are not an `h1`/`h2`/`h3` —
+   * a headline figure, a slide title. Serif, close-set, balanced.
+   */
+  .v-display {
+    font-family: var(--font-display);
+    font-weight: 400;
+    letter-spacing: -0.022em;
+    line-height: 1.04;
+    text-wrap: balance;
+  }
+
+  /*
+   * The one label idiom. Sentence-case Inter at the 15px floor — NOT uppercase
+   * mono. v3's mono/uppercase/0.1em label was the single most repeated AI tell
+   * in the app; every call site inherits the fix from here.
+   */
   .v-label {
-    font-family: var(--font-mono);
-    font-size: 0.75rem;
+    font-family: var(--font-sans);
+    font-size: 0.9375rem;
     line-height: 1.4;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
+    font-weight: 500;
+    letter-spacing: 0;
     color: var(--v-ink-muted);
+  }
+
+  /*
+   * A chapter marker, in the body family, for content that genuinely is a
+   * sequence. Never a mono kicker, and never on content that is not ordered.
+   */
+  .v-marker {
+    font-family: var(--font-sans);
+    font-size: 0.9375rem;
+    font-weight: 500;
     font-variant-numeric: tabular-nums;
+    color: var(--v-ink-muted);
+  }
+
+  /* Technical strings: code, cells, column names, filenames, timings. */
+  .v-mono {
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
   }
 
   .v-nums {
@@ -166,6 +244,83 @@
 }
 
 @layer utilities {
+  /*
+   * The page background: paper grain plus one very slow accent bloom. Fixed,
+   * inert, behind everything. Without it the page is flat white, which the
+   * vault calls the strongest AI tell after coloured status dots.
+   */
+  .v-field {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    overflow: hidden;
+  }
+
+  /*
+   * Two blooms on different periods, so the field never repeats a pose. One
+   * layer drifting on a single loop reads as a slide; two out of phase reads as
+   * weather. Transform only — the gradients themselves never change.
+   */
+  .v-field::before {
+    position: absolute;
+    inset: -40%;
+    content: "";
+    opacity: var(--v-bloom-opacity);
+    background:
+      radial-gradient(34rem 26rem at 14% 4%, var(--v-accent), transparent 68%),
+      radial-gradient(42rem 30rem at 88% 96%, var(--v-accent), transparent 70%);
+    animation: v-drift-a 52s var(--ease-settle) infinite alternate;
+    will-change: transform;
+  }
+
+  .v-field-two {
+    position: absolute;
+    inset: -40%;
+    opacity: var(--v-bloom-two-opacity);
+    background:
+      radial-gradient(30rem 24rem at 78% 12%, var(--v-accent), transparent 66%),
+      radial-gradient(36rem 28rem at 8% 82%, var(--v-accent), transparent 68%);
+    animation: v-drift-b 73s var(--ease-settle) infinite alternate;
+    will-change: transform;
+  }
+
+  .v-field::after {
+    position: absolute;
+    inset: 0;
+    content: "";
+    opacity: var(--v-grain-opacity);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23g)'/%3E%3C/svg%3E");
+  }
+
+  /*
+   * Scroll reveal. Driven by `components/landing/reveal.tsx`, which sets
+   * `data-shown` when the block enters the viewport.
+   *
+   * The default state is VISIBLE, and the hidden state only exists where motion
+   * is welcome. That way a reduced-motion reader, or anyone whose JavaScript
+   * never arrives, reads the page rather than a blank one.
+   */
+  .v-rise {
+    opacity: 1;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .v-rise {
+      opacity: 0;
+      transform: translate3d(0, 16px, 0);
+      transition:
+        opacity 640ms var(--ease-settle),
+        transform 640ms var(--ease-settle);
+      transition-delay: calc(var(--step, 0) * 90ms);
+    }
+
+    .v-rise[data-shown] {
+      opacity: 1;
+      transform: translate3d(0, 0, 0);
+    }
+  }
+
   /* Staged reveal: elements settle in, ~60ms apart. Transform + opacity only. */
   .v-reveal {
     animation: v-reveal 400ms var(--ease-settle) both;
@@ -204,6 +359,24 @@
   }
 }
 
+@keyframes v-drift-a {
+  from {
+    transform: translate3d(-2%, -1%, 0) scale(1);
+  }
+  to {
+    transform: translate3d(4%, 3%, 0) scale(1.14);
+  }
+}
+
+@keyframes v-drift-b {
+  from {
+    transform: translate3d(3%, 2%, 0) scale(1.1);
+  }
+  to {
+    transform: translate3d(-3%, -2%, 0) scale(0.96);
+  }
+}
+
 /* prefers-reduced-motion kills all of it. DESIGN.md "Motion". */
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -222,1051 +395,9 @@
     opacity: 1 !important;
     transform: none !important;
   }
-}
 
-/* Keynote player — open planes, hairlines, and typography instead of card chrome. */
-.deck-shell {
-  color-scheme: light;
-  --v-bg: oklch(0.99 0.002 250);
-  --v-surface: oklch(1 0 0);
-  --v-sunk: oklch(0.975 0.003 250);
-  --v-line: oklch(0.92 0.004 250);
-  --v-line-strong: oklch(0.86 0.006 250);
-  --v-ink: oklch(0.22 0.01 250);
-  --v-ink-muted: oklch(0.5 0.014 250);
-  --v-accent: oklch(0.55 0.17 250);
-  --v-accent-wash: oklch(0.96 0.02 250);
-  --v-warn: oklch(0.62 0.14 70);
-  --deck-gutter: clamp(2.75rem, 5.4vw, 5.5rem);
-  position: relative;
-  display: grid;
-  grid-template-rows: 4.5rem minmax(0, 1fr) 9.25rem;
-  min-height: 100dvh;
-  overflow: hidden;
-  background: var(--v-bg);
-  color: var(--v-ink);
-}
-
-.deck-topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 var(--deck-gutter);
-  position: relative;
-  z-index: 3;
-}
-
-.deck-wordmark {
-  font-size: 1.15rem;
-  font-weight: 600;
-  letter-spacing: -0.04em;
-}
-
-.deck-link,
-.deck-mock,
-.deck-reference {
-  font-family: var(--font-mono);
-  font-size: 0.68rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.deck-link {
-  color: var(--v-ink-muted);
-  transition: color 150ms var(--ease-settle);
-}
-
-.deck-link:hover {
-  color: var(--v-ink);
-}
-
-.deck-stop {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.48rem;
-  min-height: 2rem;
-  padding: 0.3rem 0.45rem 0.3rem 0.55rem;
-  border: 1px solid var(--v-line-strong);
-  border-radius: 0.45rem;
-  background: var(--v-surface);
-  color: var(--v-ink);
-  font-size: 0.7rem;
-  font-weight: 500;
-  transition:
-    border-color 220ms var(--ease-settle),
-    transform 220ms var(--ease-settle);
-}
-
-.deck-stop:hover {
-  border-color: var(--v-ink-muted);
-}
-
-.deck-stop:active {
-  transform: scale(0.98);
-}
-
-.deck-stop:focus-visible {
-  outline: 2px solid var(--v-accent);
-  outline-offset: 2px;
-}
-
-.deck-stop-mark {
-  width: 0.52rem;
-  height: 0.52rem;
-  border-radius: 0.12rem;
-  background: currentColor;
-}
-
-.deck-stop kbd {
-  padding: 0.15rem 0.28rem;
-  border: 1px solid var(--v-line);
-  border-radius: 0.25rem;
-  background: var(--v-sunk);
-  color: var(--v-ink-muted);
-  font-family: var(--font-mono);
-  font-size: 0.55rem;
-  font-weight: 400;
-}
-
-.deck-mock {
-  color: var(--v-warn);
-}
-
-.deck-reference {
-  color: var(--v-accent);
-  animation: deck-reference-in 320ms var(--ease-settle) both;
-}
-
-.deck-stage {
-  position: relative;
-  min-height: 0;
-  cursor: default;
-}
-
-.deck-layer {
-  position: absolute;
-  inset: 0;
-}
-
-.deck-layer-in {
-  animation: deck-in 260ms var(--ease-settle) both;
-}
-
-.deck-layer-out {
-  animation: deck-out 260ms var(--ease-settle) both;
-}
-
-.deck-slide {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  padding: clamp(1.5rem, 3.5vh, 3.25rem) var(--deck-gutter) clamp(2.5rem, 4vh, 3.5rem);
-}
-
-.deck-slide h1 {
-  text-wrap: balance;
-}
-
-.deck-focus {
-  transform: translate3d(0, 0, 0);
-  opacity: 1;
-  transition:
-    transform 420ms var(--ease-settle),
-    opacity 420ms var(--ease-settle);
-}
-
-.deck-focus-active {
-  transform: translate3d(0, -3px, 0);
-}
-
-.deck-focus-receded {
-  opacity: 0.24;
-}
-
-/*
- * The presenter orb — ElevenLabs' `Orb` from their shadcn registry
- * (components/ui/orb.tsx), driven by components/vera/presenter-orb.tsx.
- *
- * The shader takes hex, not oklch, so the accent reaches it through
- * --deck-orb-*: two stops on --v-accent's own hue (250), no second hue, no
- * glow, no drop shadow. They are deliberately softer than --v-accent itself —
- * the shader's colour ramp lands most of the orb near the midpoint of the two
- * stops, so feeding it the full accent paints a saturated pinwheel instead of
- * the calm wash DESIGN.md asks for. The static ring underneath is the whole orb
- * whenever the shader is not running — reduced motion, no WebGL, or on the
- * server.
- */
-.presenter-orb {
-  --deck-orb-1: #73a3d5; /* oklch(0.70 0.090 250) */
-  --deck-orb-2: #caddf2; /* oklch(0.89 0.035 250) */
-
-  position: absolute;
-  z-index: 8;
-  top: -3.75rem;
-  left: -3.75rem;
-  width: 7.5rem;
-  height: 7.5rem;
-  border-radius: 50%;
-  pointer-events: none;
-  opacity: 0;
-  transition:
-    transform 620ms cubic-bezier(0.32, 0.72, 0, 1),
-    opacity 260ms var(--ease-settle);
-  will-change: transform;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:where(:not([data-theme="light"])) .presenter-orb {
-    --deck-orb-1: #5590cc; /* oklch(0.64 0.110 250) */
-    --deck-orb-2: #b1d2f4; /* oklch(0.85 0.060 250) */
-  }
-}
-
-:root[data-theme="dark"] .presenter-orb {
-  --deck-orb-1: #5590cc;
-  --deck-orb-2: #b1d2f4;
-}
-
-.presenter-orb-still {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 5.5rem;
-  height: 5.5rem;
-  border-radius: 50%;
-  transform: translate3d(-50%, -50%, 0);
-  border: 1px solid color-mix(in oklch, var(--v-accent), transparent 84%);
-  transition:
-    border-color 260ms var(--ease-settle),
-    background-color 260ms var(--ease-settle);
-}
-
-.presenter-orb-canvas {
-  position: absolute;
-  inset: 0;
-  /* Softens the shader disc's rim into an orb instead of a cut circle. */
-  mask-image: radial-gradient(circle at 50% 50%, #000 44%, transparent 68%);
-}
-
-.presenter-orb-visible {
-  opacity: 1;
-}
-
-/* Three states, told with static properties so they survive reduced motion. */
-.presenter-orb-visible[data-state="speaking"] {
-  opacity: 1;
-}
-
-.presenter-orb-visible[data-state="idle"] {
-  opacity: 0.62;
-}
-
-.presenter-orb-visible[data-state="stopped"] {
-  opacity: 0.34;
-}
-
-.presenter-orb[data-state="speaking"] .presenter-orb-still {
-  border-color: color-mix(in oklch, var(--v-accent), transparent 64%);
-  background-color: color-mix(in oklch, var(--v-accent-wash), transparent 58%);
-}
-
-.presenter-orb[data-state="stopped"] .presenter-orb-still {
-  border-color: color-mix(in oklch, var(--v-line-strong), transparent 24%);
-}
-
-.deck-question {
-  display: flex;
-  height: 100%;
-  max-width: 76rem;
-  flex-direction: column;
-  justify-content: center;
-  padding-bottom: 4vh;
-}
-
-.deck-question h1 {
-  max-width: 16ch;
-  font-size: clamp(3.8rem, 8.2vw, 8.5rem);
-  font-weight: 500;
-  line-height: 0.96;
-  letter-spacing: -0.065em;
-}
-
-.deck-question-meta {
-  width: min(50rem, 68vw);
-  margin-top: clamp(2rem, 5vh, 4rem);
-}
-
-.deck-question-meta p {
-  padding-bottom: 1.4rem;
-  border-bottom: 1px solid var(--v-line-strong);
-  color: var(--v-ink-muted);
-  font-size: clamp(1.05rem, 1.65vw, 1.55rem);
-}
-
-.deck-question-meta span {
-  display: block;
-  margin-top: 1.1rem;
-  color: var(--v-ink-muted);
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
-}
-
-.deck-headline {
-  display: flex;
-  height: 100%;
-  flex-direction: column;
-  justify-content: center;
-  padding-bottom: 5vh;
-}
-
-.deck-verified {
-  margin-bottom: 2.5vh;
-  color: var(--v-accent);
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.deck-figure,
-.deck-summary-figure {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  font-weight: 400;
-  letter-spacing: -0.075em;
-  line-height: 0.86;
-}
-
-.deck-figure {
-  font-size: clamp(4.5rem, 11.7vw, 12rem);
-}
-
-.deck-claim {
-  margin-top: clamp(2rem, 5vh, 3.75rem);
-}
-
-.deck-claim p {
-  max-width: 44ch;
-  font-size: clamp(1.35rem, 2vw, 2rem);
-  font-weight: 500;
-  line-height: 1.22;
-}
-
-.deck-claim span {
-  display: block;
-  margin-top: 1.3rem;
-  color: var(--v-ink-muted);
-  font-size: 0.88rem;
-}
-
-.deck-trap {
-  display: grid;
-  height: 100%;
-  grid-template-columns: minmax(18rem, 0.9fr) minmax(30rem, 1.35fr);
-  grid-template-rows: 1fr auto;
-  column-gap: 5vw;
-  align-items: center;
-}
-
-.deck-trap > h1 {
-  max-width: 8ch;
-  font-size: clamp(3.8rem, 7.6vw, 8rem);
-  font-weight: 500;
-  line-height: 0.95;
-  letter-spacing: -0.06em;
-}
-
-.deck-trap-counts {
-  display: grid;
-  grid-template-columns: 1fr 0.72fr;
-  gap: 3vw;
-  padding-left: 5vw;
-  border-left: 1px solid var(--v-line-strong);
-}
-
-.deck-trap-counts > div {
-  min-width: 0;
-}
-
-.deck-trap-counts strong {
-  display: block;
-  font-family: var(--font-mono);
-  font-size: clamp(3.4rem, 7vw, 7rem);
-  font-weight: 400;
-  line-height: 1;
-  letter-spacing: -0.06em;
-}
-
-.proof-bar {
-  display: block;
-  height: 2px;
-  margin: 1.65rem 0 1rem;
-  background: var(--v-line-strong);
-}
-
-.proof-bar-full {
-  background: var(--v-accent);
-}
-
-.deck-trap-counts p {
-  color: var(--v-ink-muted);
-  font-size: 1rem;
-}
-
-.deck-trap-method {
-  grid-column: 2;
-  align-self: start;
-  padding: 1.5rem 0 0 5vw;
-  border-top: 1px solid var(--v-line);
-  border-left: 1px solid var(--v-line-strong);
-}
-
-.deck-trap-method > p {
-  max-width: 66ch;
-  color: var(--v-ink-muted);
-  font-size: 0.88rem;
-}
-
-.deck-trap-method > div {
-  display: flex;
-  gap: 2rem;
-  margin-top: 1.5rem;
-}
-
-.deck-trap-method code {
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
-}
-
-.deck-code {
-  display: grid;
-  height: 100%;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-}
-
-.deck-code h1,
-.deck-cells h1 {
-  font-size: clamp(3.5rem, 7vw, 7.4rem);
-  font-weight: 500;
-  line-height: 0.95;
-  letter-spacing: -0.06em;
-}
-
-.deck-code > div > p {
-  margin-top: 1rem;
-  color: var(--v-ink-muted);
-  font-size: 0.95rem;
-}
-
-.deck-code-block {
-  margin-top: 2.2rem;
-  overflow: hidden;
-  font-family: var(--font-mono);
-  font-size: clamp(0.72rem, 1vw, 1rem);
-  line-height: 1.75;
-  white-space: pre-wrap;
-}
-
-.deck-code-block code,
-.deck-code-block span {
-  display: block;
-}
-
-.deck-code-block span:nth-child(2) {
-  margin: 0 -2vw;
-  padding: 0 2vw;
-  background: var(--v-accent-wash);
-  color: var(--v-accent);
-}
-
-.deck-code-block i {
-  display: inline-block;
-  width: 3.4rem;
-  color: var(--v-ink-muted);
-  font-style: normal;
-}
-
-.deck-code-meta,
-.deck-cells-meta {
-  color: var(--v-ink-muted);
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-}
-
-.deck-code-meta {
-  padding-top: 1rem;
-  border-top: 1px solid var(--v-line);
-}
-
-.deck-cells {
-  display: flex;
-  height: 100%;
-  flex-direction: column;
-}
-
-.deck-cells h1 {
-  max-width: 12ch;
-}
-
-.deck-cells > div {
-  margin-top: clamp(2rem, 5vh, 4rem);
-}
-
-.deck-cells table {
-  width: 100%;
-  border-collapse: collapse;
-  font-family: var(--font-mono);
-  font-size: clamp(0.72rem, 1.1vw, 1rem);
-  table-layout: fixed;
-}
-
-.deck-cells th,
-.deck-cells td {
-  overflow: hidden;
-  padding: clamp(0.7rem, 1.5vh, 1.25rem) 1rem;
-  border-bottom: 1px solid var(--v-line);
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.deck-cells th {
-  color: var(--v-ink-muted);
-  font-size: 0.68rem;
-  font-weight: 400;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.deck-cells tbody tr:first-child {
-  background: var(--v-accent-wash);
-  color: var(--v-accent);
-}
-
-.deck-cells-meta {
-  margin-top: auto;
-  padding-top: 1.2rem;
-}
-
-.deck-empty-cells {
-  padding: 2rem 0;
-  border-block: 1px solid var(--v-line);
-  color: var(--v-ink-muted);
-}
-
-.deck-summary {
-  display: grid;
-  height: 100%;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-}
-
-.deck-summary-head {
-  padding-bottom: 2.5vh;
-}
-
-.deck-summary-figure {
-  font-size: clamp(4.1rem, 9vw, 9.5rem);
-}
-
-.deck-summary-claim {
-  margin-top: 1.3rem;
-  color: var(--v-ink-muted);
-  font-size: clamp(1.05rem, 1.65vw, 1.55rem);
-}
-
-.deck-summary-grid {
-  display: grid;
-  min-height: 0;
-  grid-template-columns: 58% 42%;
-  border-top: 1px solid var(--v-line-strong);
-  border-bottom: 1px solid var(--v-line-strong);
-}
-
-.deck-proof-chart {
-  display: flex;
-  min-height: 0;
-  flex-direction: column;
-  padding: 2.2vh 4vw 1.6vh 0;
-  border-right: 1px solid var(--v-line-strong);
-}
-
-.deck-proof-chart > p {
-  font-size: 0.9rem;
-}
-
-.deck-proof-bars {
-  display: flex;
-  height: 100%;
-  min-height: 8rem;
-  align-items: stretch;
-  justify-content: center;
-  gap: 13%;
-  padding: 2vh 5% 0;
-  border-bottom: 1px solid var(--v-line-strong);
-}
-
-.deck-proof-bars > div {
-  position: relative;
-  display: grid;
-  width: min(9vw, 7rem);
-  grid-template-rows: 1fr auto auto;
-  text-align: center;
-}
-
-.deck-proof-bars span {
-  align-self: end;
-  height: 100%;
-  background: var(--v-line-strong);
-  transform-origin: bottom;
-}
-
-.deck-proof-bars span.is-accent {
-  background: var(--v-accent);
-}
-
-.deck-proof-bars strong {
-  margin-top: 0.55rem;
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
-  font-weight: 500;
-}
-
-.deck-proof-bars small {
-  margin-top: 0.3rem;
-  color: var(--v-ink-muted);
-  font-size: 0.68rem;
-}
-
-.deck-proof-counts {
-  display: grid;
-  grid-template-rows: 1fr 1fr;
-}
-
-.deck-proof-counts > div {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  padding-left: 5vw;
-}
-
-.deck-proof-counts > div + div {
-  border-top: 1px solid var(--v-line);
-}
-
-.deck-proof-counts strong {
-  font-family: var(--font-mono);
-  font-size: clamp(2.5rem, 5vw, 5.5rem);
-  font-weight: 400;
-  line-height: 1;
-  letter-spacing: -0.05em;
-}
-
-.deck-proof-counts span {
-  margin-top: 0.6rem;
-  color: var(--v-ink-muted);
-}
-
-.deck-benchmark {
-  position: relative;
-  padding-top: 1.45rem;
-  font-size: clamp(0.72rem, 1.25vw, 1rem);
-}
-
-.deck-benchmark summary {
-  display: flex;
-  align-items: baseline;
-  gap: 1.3rem;
-  cursor: pointer;
-  list-style: none;
-}
-
-.deck-benchmark summary::-webkit-details-marker {
-  display: none;
-}
-
-.deck-benchmark strong {
-  font-weight: 500;
-}
-
-.deck-benchmark span:first-of-type {
-  color: var(--v-accent);
-}
-
-.deck-benchmark em {
-  margin-left: auto;
-  color: var(--v-ink-muted);
-  font-style: normal;
-  font-size: 0.72rem;
-}
-
-.deck-benchmark-panel {
-  position: absolute;
-  z-index: 12;
-  right: 0;
-  bottom: calc(100% + 0.8rem);
-  width: min(34rem, 72vw);
-  padding: 1.35rem;
-  border: 1px solid var(--v-line);
-  border-radius: 0.75rem;
-  background: var(--v-surface);
-  box-shadow: var(--v-lift);
-}
-
-.deck-benchmark-panel > p {
-  font-weight: 500;
-}
-
-.deck-benchmark-panel ul {
-  display: grid;
-  max-height: 12rem;
-  gap: 0.45rem;
-  margin-top: 0.9rem;
-  overflow-y: auto;
-  color: var(--v-ink-muted);
-  font-size: 0.72rem;
-}
-
-.deck-benchmark-panel li::before {
-  margin-right: 0.55rem;
-  color: var(--v-line-strong);
-  content: "—";
-}
-
-.deck-benchmark-panel a {
-  display: inline-block;
-  margin-top: 1rem;
-  color: var(--v-accent);
-  font-weight: 500;
-}
-
-.deck-benchmark-panel small {
-  display: block;
-  margin-top: 0.85rem;
-  padding-top: 0.85rem;
-  border-top: 1px solid var(--v-line);
-  color: var(--v-ink-muted);
-  font-size: 0.65rem;
-  line-height: 1.45;
-}
-
-.deck-footer {
-  position: relative;
-  z-index: 4;
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: end;
-  gap: 1rem;
-  padding: 0 var(--deck-gutter) 1.4rem;
-}
-
-.deck-rail {
-  position: relative;
-  display: flex;
-  grid-column: 1 / -1;
-  justify-content: space-between;
-  height: 1rem;
-}
-
-.deck-rail::before {
-  position: absolute;
-  top: 50%;
-  right: 1rem;
-  left: 1rem;
-  height: 1px;
-  background: var(--v-line-strong);
-  content: "";
-}
-
-.deck-rail-fill {
-  position: absolute;
-  top: 50%;
-  right: 1rem;
-  left: 1rem;
-  height: 1px;
-  background: var(--v-accent);
-  transform-origin: left;
-  transition: transform 420ms var(--ease-settle);
-}
-
-.deck-node {
-  position: relative;
-  z-index: 2;
-  display: grid;
-  width: 2rem;
-  height: 2rem;
-  place-items: center;
-  border-radius: 50%;
-  background: var(--v-bg);
-  transform: translate3d(0, -0.5rem, 0);
-}
-
-.deck-node span {
-  width: 0.55rem;
-  height: 0.55rem;
-  border: 1px solid var(--v-line-strong);
-  border-radius: 50%;
-  background: var(--v-bg);
-  transition:
-    transform 200ms var(--ease-settle),
-    background 200ms var(--ease-settle);
-}
-
-.deck-node[aria-current="step"] span {
-  border-color: var(--v-accent);
-  background: var(--v-accent);
-  box-shadow: 0 0 0 4px var(--v-accent-wash);
-  transform: scale(1.08);
-}
-
-.deck-node:disabled {
-  cursor: default;
-}
-
-.deck-status {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 1rem;
-  color: var(--v-ink-muted);
-  font-size: 0.68rem;
-}
-
-.deck-status span:last-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.deck-follow-up {
-  display: flex;
-  width: min(24rem, 36vw);
-  border-bottom: 1px solid var(--v-line-strong);
-}
-
-.deck-follow-up input {
-  min-width: 0;
-  flex: 1;
-  padding: 0.45rem 0;
-  background: transparent;
-  color: var(--v-ink);
-  font-size: 0.78rem;
-  outline: none;
-}
-
-.deck-follow-up input::placeholder {
-  color: var(--v-ink-muted);
-}
-
-/*
- * "You might also ask" — quiet chips under the follow-up field. Deliberately
- * lighter than the field itself: an offer, not the primary action.
- */
-.deck-footer-left {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 0.6rem;
-}
-
-.deck-suggestions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-  max-width: min(42rem, 62vw);
-}
-
-.deck-suggestions-label {
-  color: var(--v-ink-muted);
-  font-size: 0.68rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.deck-suggestions button {
-  padding: 0.3rem 0.7rem;
-  border: 1px solid var(--v-line);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--v-ink-muted);
-  font-size: 0.74rem;
-  text-align: left;
-  transition:
-    border-color 150ms var(--ease-settle),
-    color 150ms var(--ease-settle);
-}
-
-.deck-suggestions button:hover,
-.deck-suggestions button:focus-visible {
-  border-color: var(--v-accent);
-  color: var(--v-accent);
-}
-
-.deck-follow-up button {
-  padding-left: 1rem;
-  color: var(--v-accent);
-  font-size: 0.72rem;
-  font-weight: 500;
-}
-
-@keyframes deck-in {
-  from {
-    opacity: 0;
-    transform: translate3d(0, 5px, 0);
-  }
-  to {
-    opacity: 1;
-    transform: translate3d(0, 0, 0);
-  }
-}
-
-@keyframes deck-out {
-  from {
-    opacity: 1;
-    transform: translate3d(0, 0, 0);
-  }
-  to {
-    opacity: 0;
-    transform: translate3d(0, -4px, 0);
-  }
-}
-
-@keyframes deck-reference-in {
-  from {
-    opacity: 0;
-    transform: translate3d(0, 4px, 0);
-  }
-  to {
-    opacity: 1;
-    transform: translate3d(0, 0, 0);
-  }
-}
-
-@media (max-width: 760px) {
-  .deck-shell {
-    grid-template-rows: 3.75rem minmax(0, 1fr) 9rem;
-  }
-
-  .deck-topbar,
-  .deck-slide,
-  .deck-footer {
-    padding-right: 1.25rem;
-    padding-left: 1.25rem;
-  }
-
-  .deck-mock,
-  .deck-link,
-  .deck-stop kbd {
-    display: none;
-  }
-
-  .deck-question h1,
-  .deck-trap > h1,
-  .deck-code h1,
-  .deck-cells h1 {
-    font-size: clamp(2.8rem, 13vw, 4.5rem);
-  }
-
-  .deck-question-meta {
-    width: 100%;
-  }
-
-  .deck-figure {
-    font-size: clamp(3.4rem, 16vw, 5.5rem);
-  }
-
-  .deck-trap {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: 2rem;
-  }
-
-  .deck-trap > h1 {
-    max-width: 10ch;
-    align-self: flex-start;
-  }
-
-  .deck-trap-counts,
-  .deck-trap-method {
-    width: 100%;
-    padding-left: 0;
-    border-left: 0;
-  }
-
-  .deck-trap-method {
-    display: none;
-  }
-
-  .deck-code-block {
-    font-size: 0.66rem;
-  }
-
-  .deck-code-block i {
-    width: 2rem;
-  }
-
-  .deck-summary-figure {
-    font-size: clamp(3rem, 14vw, 5rem);
-  }
-
-  .deck-summary-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .deck-proof-chart {
-    border-right: 0;
-  }
-
-  .deck-proof-counts {
-    display: none;
-  }
-
-  .deck-benchmark summary {
-    flex-wrap: wrap;
-    gap: 0.5rem 1rem;
-  }
-
-  .deck-benchmark em {
-    display: none;
-  }
-
-  .deck-footer {
-    grid-template-columns: 1fr;
-  }
-
-  .deck-follow-up {
-    width: 100%;
-  }
-
-  .deck-suggestions {
-    max-width: 100%;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .deck-layer-in,
-  .deck-layer-out,
-  .deck-reference {
-    animation: none;
-  }
-
-  .presenter-orb,
-  .deck-focus,
-  .deck-rail-fill {
-    transition: none;
-  }
-
-  /*
-   * presenter-orb.tsx never mounts the shader canvas under reduced motion; this
-   * is the belt to that pair of braces. What is left is the static ring.
-   */
-  .presenter-orb-canvas {
-    display: none;
-  }
-
-  .presenter-orb-still {
-    transition: none;
+  .v-field::before,
+  .v-field-two {
+    animation: none !important;
   }
 }

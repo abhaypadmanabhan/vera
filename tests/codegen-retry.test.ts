@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { LIMITS } from "@/lib/config";
+import { PolicyViolationError } from "@/lib/codegen/python-policy";
 import {
   type RetryOutcome,
   runCodegenWithRetries,
@@ -327,5 +328,82 @@ describe("codegen retry orchestration", () => {
         attempts: 2,
       },
     });
+  });
+
+  /*
+   * Braintrust logs from the 2026-07-26 live run: two findings died at
+   * `attempts: 1` with `upstream_error` and the message "Generated code must
+   * call pd.read_csv with /home/daytona/clean-45c436….csv exactly once" — one
+   * of them the follow-up that would have made a multi-finding deck. A policy
+   * rejection names precisely what is wrong, which is the same correctable
+   * shape as a stderr, so it must be retried rather than surfaced as a failure.
+   */
+  it("retries a policy rejection, feeding the reason back like a stderr", async () => {
+    const requests: Parameters<CodeGenerator["generate"]>[0][] = [];
+    const generator: CodeGenerator = {
+      async generate(request) {
+        requests.push(request);
+        if (request.attempt === 1) {
+          throw new PolicyViolationError(
+            "Generated code must call pd.read_csv with /workspace/data.csv exactly once.",
+            'print("VERA_RESULT:1")',
+          );
+        }
+        return generated(request.attempt);
+      },
+    };
+    const executor: CodeExecutor = {
+      async execute() {
+        return successfulExecution;
+      },
+    };
+
+    const { result } = await drain(
+      runCodegenWithRetries({
+        question: "answer it",
+        profile,
+        sampleRows: [],
+        sandboxPath: "/workspace/data.csv",
+        generator,
+        executor,
+      }),
+    );
+
+    expect(requests[1]?.previousFailure).toEqual({
+      stderr:
+        "Generated code must call pd.read_csv with /workspace/data.csv exactly once.",
+      failingCode: 'print("VERA_RESULT:1")',
+    });
+    expect(result?.execution).toEqual(successfulExecution);
+    expect(result?.attempts).toBe(2);
+  });
+
+  it("still fails fast on an upstream error that no retry can fix", async () => {
+    let calls = 0;
+    const generator: CodeGenerator = {
+      async generate() {
+        calls++;
+        throw new Error("Fireworks returned 401.");
+      },
+    };
+    const executor: CodeExecutor = {
+      async execute() {
+        return successfulExecution;
+      },
+    };
+
+    const { result } = await drain(
+      runCodegenWithRetries({
+        question: "answer it",
+        profile,
+        sampleRows: [],
+        sandboxPath: "/workspace/data.csv",
+        generator,
+        executor,
+      }),
+    );
+
+    expect(calls).toBe(1);
+    expect(result).toBeNull();
   });
 });

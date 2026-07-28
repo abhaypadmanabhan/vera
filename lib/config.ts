@@ -21,6 +21,26 @@ export const LIMITS = {
   executionTimeoutMs: 30_000,
   /** Requests per window per IP on money-spending routes. */
   rateLimit: { requests: 10, windowMs: 60_000 },
+  /**
+   * Narration gets its own budget. It costs one call per narrated slide (the
+   * slide's beats are synthesised in a single request — before that batching,
+   * the 2026-07-26 live run served 3 questions with 26 per-beat calls and hit
+   * a 429 mid sentence). Sharing one bucket meant a talkative deck could
+   * starve the analysis it was narrating. Still capped: this is decks per
+   * minute, not an open tap, and each call is short.
+   */
+  narrationRateLimit: { requests: 60, windowMs: 60_000 },
+  /**
+   * How many independently grounded findings one deck may carry (phase 11 P3).
+   *
+   * THE MONEY RULE, expressed as a number: cost is LINEAR in findings — every
+   * finding is its own codegen + sandbox run — and the builder has NOT signed
+   * off on spend per deck. So this is 1, and with 1 the pipeline is exactly
+   * what it was: one question, one finding, one deck. The builder turns it up
+   * here, deliberately, when he decides to pay for it. It is a ceiling, not a
+   * target: a deck with fewer verified findings simply ends earlier.
+   */
+  maxFindingsPerDeck: 1,
   /** Absolute cap on paid runs per server process. */
   maxPaidRunsPerProcess: 50,
   maxQuestionLength: 500,

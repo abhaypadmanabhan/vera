@@ -1,23 +1,36 @@
 import { z } from "zod";
 import { MOCK_MODE } from "@/lib/config";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { speakLine } from "@/lib/voice/tts";
+import { speakBeats } from "@/lib/voice/tts";
 
 export const runtime = "nodejs";
 
 /**
- * Vera's voice. Speaks ONE narration beat.
+ * Vera's voice. Speaks one slide's narration beats in a SINGLE ElevenLabs call.
  *
- * The honesty rule is enforced upstream and structurally: `buildDeck` returns zero
- * slides for an unverified finding, so an unproven number has no beats and there is
- * nothing for the client to ask this route to say.
+ * Beats used to be fetched one at a time — 26 calls served 3 questions on
+ * 2026-07-26 and a single local user hit a 429 mid-sentence. Now the client
+ * posts every beat of the slide at once, gets one audio clip plus the exact
+ * end time of each beat inside it, and walks the UI focus along those
+ * boundaries. What Vera says and when the focus moves are unchanged; only the
+ * number of round trips is not.
+ *
+ * The honesty rule is enforced upstream and structurally: `buildDeck` returns
+ * zero slides for an unverified finding, so an unproven number has no beats and
+ * there is nothing for the client to ask this route to say.
  *
  * Spends ElevenLabs credits. Silent (204) in mock mode so the mocked demo never
  * calls out and never pretends to have audio.
  */
 
 const bodySchema = z.object({
-  text: z.string().trim().min(1).max(600),
+  texts: z
+    .array(z.string().trim().min(1).max(600))
+    .min(1)
+    .max(12)
+    .refine((texts) => texts.join(" ").length <= 2_400, {
+      message: "Narration is too long.",
+    }),
 });
 
 function clientIp(request: Request): string {
@@ -34,7 +47,9 @@ export async function POST(request: Request): Promise<Response> {
     return new Response(null, { status: 204 });
   }
 
-  const rate = checkRateLimit(clientIp(request));
+  // Narration draws on its own budget: one call per slide means a single deck
+  // would otherwise consume the whole analysis allowance. See lib/config.ts.
+  const rate = checkRateLimit(clientIp(request), Date.now(), "narration");
   if (!rate.allowed) {
     return Response.json(
       { error: "Too many requests." },
@@ -58,13 +73,15 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   try {
-    const spoken = await speakLine(parsed.data.text, request.signal);
-    return new Response(new Uint8Array(spoken.audio), {
-      headers: {
-        "Content-Type": spoken.contentType,
-        "Cache-Control": "no-store",
+    const spoken = await speakBeats(parsed.data.texts, request.signal);
+    return Response.json(
+      {
+        audio: Buffer.from(spoken.audio).toString("base64"),
+        contentType: spoken.contentType,
+        beatEndsSeconds: spoken.beatEndsSeconds,
       },
-    });
+      { headers: { "Cache-Control": "no-store" } },
+    );
   } catch (error) {
     return Response.json(
       { error: error instanceof Error ? error.message : "Speech failed." },

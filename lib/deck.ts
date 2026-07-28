@@ -57,11 +57,27 @@ export interface Slide {
    * to the slide that already answered it.
    */
   covers: string[];
+  /**
+   * Which verified finding this slide presents, as an index into
+   * `Deck.findings`. Absent on a single-finding deck, where there is only one
+   * finding to present — the player treats absent as 0.
+   */
+  findingIndex?: number;
 }
+
+/** A finding the gate passed: the only kind a deck is allowed to present. */
+export type VerifiedFinding = Extract<Finding, { verdict: "verified" }>;
 
 export interface Deck {
   question: string;
   slides: Slide[];
+  /**
+   * The verified findings behind the slides, in the order they are presented.
+   * Only set when the deck carries MORE than one — a single-finding deck is
+   * exactly the shape it has always been, and the caller already holds the
+   * finding.
+   */
+  findings?: VerifiedFinding[];
 }
 
 const NO_DECK: Deck = { question: "", slides: [] };
@@ -155,19 +171,45 @@ function speakable(text: string): string {
 }
 
 /**
- * Turn a verified finding into a deck.
+ * Turn verified findings into a deck.
  *
- * An unverified finding gets NO deck — there is nothing to present and nothing to
- * speak. The caller renders the refusal state instead. This is the honesty rule
- * expressed structurally: no number, no narration, no slides.
+ * Accepts one finding (the shape it has always had) or an ordered list. The
+ * rules are the honesty rules, expressed structurally:
+ *
+ * - A finding that did not verify gets NO slides. It is absent from the deck —
+ *   never presented, never hedged, never "pending".
+ * - One verified finding produces exactly the deck it always has, byte for
+ *   byte — the cheapest proof that nothing broke.
+ * - Several verified findings compose into one narrative: an opener that
+ *   frames the set, each finding fully grounded on its own (figure, meaning,
+ *   caveat, working), and a summary that ties them together. No figure is ever
+ *   inferred from another finding — each one came out of its own executed run.
  */
 export function buildDeck(
   question: string,
-  finding: Finding,
+  finding: Finding | readonly Finding[],
   profile: DatasetProfile,
 ): Deck {
-  if (finding.verdict !== "verified") return { ...NO_DECK, question };
+  const list: readonly Finding[] = Array.isArray(finding) ? finding : [finding];
+  const verified = list.filter(
+    (candidate): candidate is VerifiedFinding => candidate.verdict === "verified",
+  );
+  if (verified.length === 0) return { ...NO_DECK, question };
+  const [only] = verified;
+  if (verified.length === 1 && only) return buildSingleDeck(question, only, profile);
+  return buildMultiDeck(question, verified, profile);
+}
 
+/**
+ * The single-finding deck. This is the deck Vera has always presented; the
+ * body below is unchanged, and `buildDeck` routes here whenever exactly one
+ * finding verified — even if others failed alongside it.
+ */
+function buildSingleDeck(
+  question: string,
+  finding: VerifiedFinding,
+  profile: DatasetProfile,
+): Deck {
   const figure = fmt(finding.value, finding.unit);
   const proven: SchemaEvidence[] = finding.grounding.schemaEvidence.filter(isProven);
   const slides: Slide[] = [];
@@ -296,6 +338,201 @@ export function buildDeck(
   });
 
   return { question, slides };
+}
+
+/** A count Vera can say out loud: "three things", never "3 things". */
+const COUNT_WORDS = [
+  "two",
+  "three",
+  "four",
+  "five",
+  "six",
+  "seven",
+  "eight",
+  "nine",
+  "ten",
+] as const;
+
+function countWord(count: number): string {
+  return COUNT_WORDS[count - 2] ?? String(count);
+}
+
+/**
+ * Where this finding sits in the set, as the lead of the sentence Vera says.
+ * The set has a shape — a first, a middle, a last — and saying so is what
+ * makes several findings one narrative rather than a queue of answers.
+ */
+function findingLead(index: number, total: number): string {
+  if (index === 0) return "The first answer is";
+  if (index === total - 1) return total === 2 ? "The second answer is" : "And the last answer is";
+  return "The next answer is";
+}
+
+/**
+ * Several independently verified findings, composed into one deck with a
+ * through-line. Every finding gets the same treatment the single finding
+ * always got — its own figure slide, its own meaning and caveat slides, its
+ * own working slide — because each one was its own executed run, grounded in
+ * its own cells. Nothing here derives one finding from another.
+ *
+ * Slide ids carry the finding index (`finding-1`, `caveat-1-0`, `working-1`)
+ * so they stay unique across the set, and every slide records `findingIndex`
+ * so the player renders it against the finding it belongs to.
+ */
+function buildMultiDeck(
+  question: string,
+  findings: readonly VerifiedFinding[],
+  profile: DatasetProfile,
+): Deck {
+  const total = findings.length;
+  const slides: Slide[] = [];
+
+  const openerSpoken =
+    `I have been through the file, and ${countWord(total)} things are worth your attention. ` +
+    "Each one was computed from the data itself, and I will show you the working for every one of them.";
+  slides.push({
+    id: "opener",
+    kind: "opener",
+    title: question,
+    subtitle: `${displayName(profile.filename)} · ${profile.rowCount.toLocaleString()} rows`,
+    spoken: openerSpoken,
+    beats: [{ focus: "question", spoken: openerSpoken }],
+    covers: ["question", "ask", "what did i ask", "findings", "set"],
+  });
+
+  findings.forEach((finding, index) => {
+    const figure = fmt(finding.value, finding.unit);
+    const lead = findingLead(index, total);
+    const proven: SchemaEvidence[] = finding.grounding.schemaEvidence.filter(isProven);
+
+    slides.push({
+      id: `finding-${index}`,
+      kind: "finding",
+      title: figure,
+      subtitle: finding.claim,
+      spoken: `${lead} ${figure}. ${speakable(finding.claim)}`,
+      beats: [
+        { focus: "figure", spoken: `${lead} ${figure}.` },
+        { focus: "claim", spoken: speakable(finding.claim) },
+      ],
+      covers: ["answer", "number", "result", "how much", "total", "figure"],
+      findingIndex: index,
+    });
+
+    if (finding.context.length > 0) {
+      const meaningLines = finding.context.map(meaningLine);
+      const meaningFocus = ["primary", "secondary", "tertiary"] as const;
+      slides.push({
+        id: `meaning-${index}`,
+        kind: "meaning",
+        title: "What that means",
+        subtitle: meaningLines.join(" "),
+        spoken: meaningLines.map(speakable).join(" "),
+        beats: finding.context.map((contextFigure, contextIndex) => ({
+          focus: meaningFocus[contextIndex] ?? "tertiary",
+          spoken: speakable(meaningLine(contextFigure)),
+        })),
+        covers: [
+          "meaning",
+          "comparison",
+          "compare",
+          "context",
+          "prior",
+          ...finding.context.map((contextFigure) => contextFigure.description.toLowerCase()),
+        ],
+        findingIndex: index,
+      });
+    }
+
+    for (const [evidenceIndex, evidence] of proven.entries()) {
+      const spoken = caveatLine(evidence);
+      slides.push({
+        id: `caveat-${index}-${evidenceIndex}`,
+        kind: "caveat",
+        title: "One thing changes the answer",
+        subtitle: `${evidence.supportingRows.toLocaleString()} rows prove it · ${evidence.contradictingRows.toLocaleString()} argue otherwise`,
+        spoken,
+        beats: [
+          {
+            focus: "claim",
+            spoken: "There is something in this file worth knowing about.",
+          },
+          {
+            focus: "consequence",
+            spoken:
+              "Taken at face value it would have sent the answer badly wrong, and nothing would have warned you. " +
+              (evidence.contradictingRows === 0
+                ? "I checked it against every row before I used it, and they all agree."
+                : "I checked it against every row before I used it."),
+          },
+        ],
+        covers: [
+          "trap",
+          "date",
+          "format",
+          "proof",
+          "evidence",
+          "how do you know",
+          "why",
+          evidence.claim.toLowerCase(),
+        ],
+        findingIndex: index,
+      });
+    }
+
+    slides.push({
+      id: `working-${index}`,
+      kind: "working",
+      title: "The working",
+      subtitle: `${finding.code.lineCount} lines · ${finding.grounding.rowCount.toLocaleString()} rows traced`,
+      spoken: "",
+      beats: [],
+      covers: [
+        "code",
+        "pandas",
+        "python",
+        "script",
+        "run",
+        "what did you run",
+        "cells",
+        "source",
+        "rows",
+        "columns",
+        "data",
+        "where from",
+        "trace",
+      ],
+      findingIndex: index,
+    });
+  });
+
+  // The summary ties the set together out loud by REPEATING figures that were
+  // each already executed and grounded — it computes nothing new, and it never
+  // mentions a finding that did not verify, because there are none in the list.
+  const summaryBeats: Beat[] = findings.map((finding, index) => ({
+    focus: `figure-${index}`,
+    spoken:
+      (index === 0 ? "So, to bring it together. " : "") +
+      `${fmt(finding.value, finding.unit)}. ${speakable(finding.claim)}`,
+  }));
+  summaryBeats.push({
+    focus: "proof",
+    spoken:
+      "Every one of them was computed and traced back to the cells it came from. " +
+      "Ask me anything else and I will show my working again.",
+  });
+  slides.push({
+    id: "summary",
+    kind: "summary",
+    title: "What it adds up to",
+    subtitle: null,
+    spoken: summaryBeats.map((beat) => beat.spoken).join(" "),
+    beats: summaryBeats,
+    covers: ["summary", "recap", "overall", "dashboard", "again"],
+    findingIndex: 0,
+  });
+
+  return { question, slides, findings: [...findings] };
 }
 
 /**
