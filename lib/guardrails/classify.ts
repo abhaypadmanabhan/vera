@@ -49,9 +49,22 @@ function words(value: string): string[] {
  * is the same shape as the prep-gate bug in `tasks/lessons.md` 2026-07-26.)
  */
 function spellings(alias: string): string[] {
-  if (alias.endsWith("s")) return [alias, alias.slice(0, -1)];
-  if (/(?:s|x|z|ch|sh)$/.test(alias)) return [alias, `${alias}es`];
-  return [alias, `${alias}s`];
+  const forms = new Set([alias]);
+
+  // consonant + y -> ies. Without this `category` pluralised to `categorys`
+  // and a file with a `Categories` column was still reported as lacking it —
+  // the exact class of bug this helper was added to close.
+  if (/[^aeiou]y$/.test(alias)) forms.add(`${alias.slice(0, -1)}ies`);
+  else if (/(?:s|x|z|ch|sh)$/.test(alias)) forms.add(`${alias}es`);
+  else forms.add(`${alias}s`);
+
+  // ...and the same walk backwards, so a plural alias still matches a
+  // singular column name.
+  if (alias.endsWith("ies")) forms.add(`${alias.slice(0, -3)}y`);
+  else if (/(?:s|x|z|ch|sh)es$/.test(alias)) forms.add(alias.slice(0, -2));
+  else if (alias.endsWith("s")) forms.add(alias.slice(0, -1));
+
+  return [...forms];
 }
 
 function availableInformation(profile: DatasetProfile): AvailableInformation {

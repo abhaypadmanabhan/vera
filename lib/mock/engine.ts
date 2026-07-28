@@ -139,8 +139,29 @@ function humanize(column: string): string {
 const MEASURE_NAME =
   /(sales|revenue|profit|margin|amount|total|price|cost|spend|value|quantity|units|count)/i;
 
-/** A stamp or a key: numeric in the file, never a quantity to add up. */
-const NOT_A_MEASURE = /(year|month|day|date|id|code|zip|postal|phone|lat|lon|rank)/i;
+/**
+ * A stamp or a key: numeric in the file, never a quantity to add up.
+ *
+ * Matched against the column's WORDS, not its raw text. As a substring this
+ * pattern rejected real measures — `id` fires inside `paid_amount`, `day`
+ * inside `daily_sales`, `month` inside `monthly_revenue` — so the mock fell
+ * through to a worse column while the name it skipped was exactly the measure
+ * being asked about.
+ */
+const NOT_A_MEASURE_WORD =
+  /^(years?|months?|days?|dates?|ids?|codes?|zips?|postal|phones?|lat|lon|longitude|latitude|ranks?)$/i;
+
+/** `OrderYear` -> ["Order", "Year"]; `paid_amount` -> ["paid", "amount"]. */
+function nameWords(name: string): string[] {
+  return name
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .split(/[^A-Za-z0-9]+/)
+    .filter(Boolean);
+}
+
+function isStampOrKey(name: string): boolean {
+  return nameWords(name).some((word) => NOT_A_MEASURE_WORD.test(word));
+}
 
 function measureColumn(dataset: ResolvedDataset) {
   const numeric = dataset.profile.columns.filter(
@@ -148,9 +169,9 @@ function measureColumn(dataset: ResolvedDataset) {
   );
   return (
     numeric.find(
-      (column) => MEASURE_NAME.test(column.name) && !NOT_A_MEASURE.test(column.name),
+      (column) => MEASURE_NAME.test(column.name) && !isStampOrKey(column.name),
     ) ??
-    numeric.find((column) => !NOT_A_MEASURE.test(column.name)) ??
+    numeric.find((column) => !isStampOrKey(column.name)) ??
     numeric[0] ??
     null
   );

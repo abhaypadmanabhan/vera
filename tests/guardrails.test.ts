@@ -164,6 +164,28 @@ describe("classifyQuestion", () => {
     });
   });
 
+  /*
+   * Macroscope on PR #43, reviewing the fix above: the first version appended a
+   * bare "s", so `category` pluralised to `categorys` and a `Categories` column
+   * was still reported as missing — the same bug the helper was added to close.
+   */
+  it("handles consonant-plus-y plurals in both directions", () => {
+    const plural = profileDataset(
+      "ies",
+      "ies.csv",
+      "OrderDate,Categories,Quantities\n15/04/2019,Tables,3\n",
+    );
+    expect(classifyQuestion("Which category sold the most?", plural).allowed).toBe(true);
+    expect(classifyQuestion("How many units were sold?", plural).allowed).toBe(true);
+
+    const singular = profileDataset(
+      "y",
+      "y.csv",
+      "OrderDate,Category,Quantity\n15/04/2019,Tables,3\n",
+    );
+    expect(classifyQuestion("Which category sold the most?", singular).allowed).toBe(true);
+  });
+
   it("still refuses when the file genuinely lacks the information", () => {
     expect(classifyQuestion("What was the average discount?", salesOnlyProfile).allowed).toBe(
       false,
