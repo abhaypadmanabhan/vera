@@ -106,6 +106,40 @@ describe("the audit program", () => {
     expect(program).toContain("VERA_AUDIT:");
   });
 
+  /*
+   * Macroscope on PR #41. `prepared.drop_duplicates()` de-duplicated the
+   * COERCED frame, so two genuinely different source records — `$1000` and
+   * `1000` — became identical during prep and one was destroyed, reported as an
+   * exact repeat. Prep must only ever remove rows that were already duplicates
+   * in the file the user handed over.
+   */
+  it("keeps rows that only became identical during prep", async () => {
+    // The two records differ ONLY in the column prep coerces, so after
+    // coercion they are byte-identical rows — the case drop_duplicates() ate.
+    const source = "id,amount\nA,$1000\nA,1000\n";
+    const clean = "id,amount\nA,1000\nA,1000\n";
+
+    const { counts, clean: written } = await executeAuditAndReadClean(
+      source,
+      clean,
+    );
+
+    expect(counts?.duplicatesDropped).toBe(0);
+    expect(counts?.rowsAfter).toBe(2);
+    // Both source records survive: two body rows plus the header.
+    expect(written.trim().split("\n")).toHaveLength(3);
+  });
+
+  it("still drops a row that was an exact repeat in the source", async () => {
+    const source = "id,amount\nA,1000\nA,1000\nB,2000\n";
+    const clean = "id,amount\nA,1000\nA,1000\nB,2000\n";
+
+    const { counts } = await executeAuditAndReadClean(source, clean);
+
+    expect(counts?.duplicatesDropped).toBe(1);
+    expect(counts?.rowsAfter).toBe(2);
+  });
+
   it("parses the counts from the last audit line", () => {
     const stdout = [
       'VERA_AUDIT:{"rowsBefore":1,"rowsAfter":1,"duplicatesDropped":0,"cellsCoerced":0}',

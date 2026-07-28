@@ -389,6 +389,53 @@ describe("prep generation", () => {
     ).toBe(true);
   });
 
+  /*
+   * Macroscope on PR #41. The mixed-unit transform invents `<name>_amount` and
+   * `<name>_unit`. It never checked whether the file already had a column by
+   * that name, so a real `Weight_amount` column would have been assigned
+   * straight over — data destroyed by the step whose whole job is to make the
+   * file more trustworthy.
+   */
+  const mixedUnitColumn = {
+    name: "Weight",
+    kind: "text" as const,
+    nullCount: 0,
+    distinctCount: 2,
+    sampleValues: ["5 kg", "3 lb"],
+    dateFormat: null,
+    evidence: null,
+  };
+
+  it("offers the mixed-unit split when the derived names are free", () => {
+    const free: DatasetProfile = { ...profile, columns: [mixedUnitColumn] };
+
+    const prompt = buildPrepPrompt({ ...request, profile: free });
+
+    expect(prompt).toContain("Weight_amount");
+  });
+
+  it("withdraws the split when a derived name already exists in the file", () => {
+    const collides: DatasetProfile = {
+      ...profile,
+      columns: [
+        mixedUnitColumn,
+        {
+          name: "Weight_amount",
+          kind: "number" as const,
+          nullCount: 0,
+          distinctCount: 2,
+          sampleValues: ["5", "3"],
+          dateFormat: null,
+          evidence: null,
+        },
+      ],
+    };
+
+    const prompt = buildPrepPrompt({ ...request, profile: collides });
+
+    expect(prompt).not.toContain("str.extract");
+  });
+
   it("builds a bounded prompt with the careful prep rules", () => {
     const prompt = buildPrepPrompt(request);
 

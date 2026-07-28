@@ -109,8 +109,9 @@ export function buildPrepPrompt(request: PrepRequest): string {
     profile: request.profile,
     sampleRows: request.sampleRows.slice(0, 5),
   };
+  const takenNames = new Set(request.profile.columns.map((column) => column.name));
   const allowedTransforms = request.profile.columns
-    .map(transformFor)
+    .map((column) => transformFor(column, takenNames))
     .filter((line): line is string => line !== null);
   const transformMenu =
     allowedTransforms.length > 0
@@ -393,10 +394,23 @@ function categoryNormalisationOffered(column: ProfileColumn): boolean {
   );
 }
 
+/**
+ * The prep line for one column, or null when no transform is justified.
+ *
+ * `taken` is every column name already in the file. The mixed-unit and
+ * multi-value transforms invent new columns (`x_amount`, `x_unit`, `x_list`),
+ * and without this they would assign straight over a real column that already
+ * held that name — destroying the user's data silently, in the one step whose
+ * entire job is to leave the file more trustworthy than it was. A collision
+ * withdraws the transform rather than renaming around it: a derived column the
+ * user cannot predict the name of is worse than no derived column.
+ */
 function transformFor(
   column: ProfileColumn,
+  taken: ReadonlySet<string>,
 ): string | null {
   const name = JSON.stringify(column.name);
+  const free = (...derived: string[]) => derived.every((key) => !taken.has(key));
   if (
     column.kind === "date" &&
     column.dateFormat &&
@@ -405,13 +419,20 @@ function transformFor(
   ) {
     return `df[${name}] = pd.to_datetime(df[${name}], format=${JSON.stringify(column.dateFormat)})`;
   }
-  if (mixedUnitColumn(column)) {
+  if (
+    mixedUnitColumn(column) &&
+    free(`${column.name}_amount`, `${column.name}_unit`)
+  ) {
     const amountName = JSON.stringify(`${column.name}_amount`);
     const unitName = JSON.stringify(`${column.name}_unit`);
     return `df[[${amountName},${unitName}]] = df[${name}].astype("string").str.extract(r"^\\s*(\\d+(?:\\.\\d+)?)\\s+(\\S+)\\s*$").rename(columns={0:${amountName},1:${unitName}}).assign(**{${amountName}:lambda split:pd.to_numeric(split[${amountName}], errors="coerce")})`;
   }
   const separator = multiValueSeparator(column);
-  if (multiValueSplitOffered(column) && separator) {
+  if (
+    multiValueSplitOffered(column) &&
+    separator &&
+    free(`${column.name}_list`)
+  ) {
     const listName = JSON.stringify(`${column.name}_list`);
     const separatorLiteral = JSON.stringify(separator);
     return `df[${listName}] = df[${name}].apply(lambda value:[part.strip() for part in value.split(${separatorLiteral})] if isinstance(value, str) and ${separatorLiteral} in value else pd.NA)`;
@@ -454,8 +475,9 @@ function canonicalizePrepCode(
     );
   }
 
+  const availableNames = new Set(request.profile.columns.map((column) => column.name));
   const available = request.profile.columns
-    .map(transformFor)
+    .map((column) => transformFor(column, availableNames))
     .filter((line): line is string => line !== null);
   const used = new Set<number>();
   const canonicalTransforms: string[] = [];
@@ -625,8 +647,9 @@ export function createMockPreparedArtifact(
     columnsAdded++;
   };
 
+  const existingNames = new Set(profile.columns.map((entry) => entry.name));
   for (const column of profile.columns) {
-    if (!transformFor(column)) continue;
+    if (!transformFor(column, existingNames)) continue;
     const index = rawHeader.indexOf(column.name);
     if (index < 0) continue;
     if (mixedUnitColumn(column)) {
@@ -774,8 +797,9 @@ function mockResponse(request: PrepRequest): string {
     `df = pd.read_csv(${pythonString(request.sourcePath)})`,
   ];
 
+  const mockNames = new Set(request.profile.columns.map((column) => column.name));
   for (const column of request.profile.columns) {
-    const transform = transformFor(column);
+    const transform = transformFor(column, mockNames);
     if (transform) lines.push(transform);
   }
 
