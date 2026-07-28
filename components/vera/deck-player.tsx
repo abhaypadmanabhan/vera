@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { Deck, Slide } from "@/lib/deck";
-import { evidenceHeadline, matchSlide } from "@/lib/deck";
+import { matchSlide } from "@/lib/deck";
 import { isProven } from "@/lib/types";
 import type { DatasetSummary, Finding, SchemaEvidence, SourceCell } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { ContextChart, CoverageMeter, EvidenceStats, contextSeries } from "./deck-chart";
 import { formatCount, formatFigure } from "./format";
 import { PresenterOrb } from "./presenter-orb";
 import { useNarrationAudio } from "./use-narration-audio";
@@ -79,7 +80,13 @@ export function DeckPlayer({
   const transitionTimer = useRef<number | null>(null);
 
   const slide = deck.slides[slideIndex];
-  const focus = slide?.beats[activeBeat]?.focus ?? null;
+  /*
+   * Focus exists to follow the voice. The moment narration stops it must clear:
+   * `activeBeat` resets to 0 on every slide change, so a stopped deck used to
+   * hold beat 0's focus forever and render the rest of the slide at 30% — the
+   * reader was left staring at a greyed-out page they were now free to read.
+   */
+  const focus = narrating ? (slide?.beats[activeBeat]?.focus ?? null) : null;
   // Every beat of the slide goes to /api/speak in ONE request; the audio hook
   // walks the beats along the returned clip and calls `advance` per beat.
   const spokenBeats =
@@ -305,57 +312,57 @@ export function DeckPlayer({
           />
         </nav>
 
-        <div className="deck-footer-left">
-          <div className="deck-status" aria-live="polite" aria-atomic="true">
-            <span className="font-mono tabular-nums">
-              {String(slideIndex + 1).padStart(2, "0")} / {String(deck.slides.length).padStart(2, "0")}
-            </span>
-            <span>{narrating ? slide.beats[activeBeat]?.spoken : "Use ← → or the rail to revisit"}</span>
-            {veraSpeaking ? <span className="sr-only">Vera is speaking</span> : null}
+        <div className="deck-controls">
+          <div className="deck-footer-left">
+            <div className="deck-status" aria-live="polite" aria-atomic="true">
+              <span>
+                {String(slideIndex + 1).padStart(2, "0")} /{" "}
+                {String(deck.slides.length).padStart(2, "0")}
+              </span>
+              <span>
+                {narrating ? slide.beats[activeBeat]?.spoken : "Use ← → or the rail to revisit"}
+              </span>
+              {veraSpeaking ? <span className="sr-only">Vera is speaking</span> : null}
+            </div>
+
+            {/*
+              Suggestions, not answers. Each one is already checked against the
+              guardrail, so clicking it always runs — a suggestion Vera then
+              refuses would be worse than none at all.
+            */}
+            {!narrating && suggestedFollowUps.length > 0 && (
+              <div className="deck-suggestions">
+                <span className="deck-suggestions-label">You might also ask</span>
+                {suggestedFollowUps.map((suggestion) => (
+                  <button key={suggestion} type="button" onClick={() => onNewQuestion(suggestion)}>
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
-          {/*
-            Suggestions, not answers. Each one is already checked against the
-            guardrail, so clicking it always runs — a suggestion Vera then
-            refuses would be worse than none at all.
-          */}
-          {!narrating && suggestedFollowUps.length > 0 && (
-            <div className="deck-suggestions">
-              <span className="deck-suggestions-label">You might also ask</span>
-              {suggestedFollowUps.map((suggestion) => (
-                <button
-                  key={suggestion}
-                  type="button"
-                  onClick={() => onNewQuestion(suggestion)}
-                >
-                  {suggestion}
-                </button>
-              ))}
-            </div>
+          {!narrating && (
+            <form
+              className="deck-follow-up"
+              onSubmit={(event) => {
+                event.preventDefault();
+                submitFollowUp();
+              }}
+            >
+              <label htmlFor="deck-follow-up" className="sr-only">
+                Ask a follow-up
+              </label>
+              <input
+                id="deck-follow-up"
+                value={followUp}
+                onChange={(event) => setFollowUp(event.target.value)}
+                placeholder="Ask a follow-up"
+              />
+              <button type="submit">Ask</button>
+            </form>
           )}
         </div>
-
-        {!narrating && (
-          <form
-            className="deck-follow-up"
-            onSubmit={(event) => {
-              event.preventDefault();
-              submitFollowUp();
-            }}
-          >
-            <label htmlFor="deck-follow-up" className="sr-only">
-              Ask a follow-up
-            </label>
-            <input
-              id="deck-follow-up"
-              value={followUp}
-              onChange={(event) => setFollowUp(event.target.value)}
-              placeholder="Ask a follow-up"
-            />
-            <button type="submit">Ask</button>
-          </form>
-        )}
-
       </footer>
     </main>
   );
@@ -435,6 +442,50 @@ export function DeckSlide({
   );
 }
 
+/**
+ * The marker above a slide title. Sentence-case, in the UI face — never an
+ * uppercase mono kicker. "Verified" carries its state in the mark's FORM as
+ * well as its colour, so it survives being read in greyscale.
+ */
+function Marker({ children, verified = false }: { children: string; verified?: boolean }) {
+  return (
+    <p className={cn("deck-marker", verified && "deck-marker-verified")}>
+      {verified && (
+        <svg viewBox="0 0 20 20" fill="none" aria-hidden>
+          <circle cx="10" cy="10" r="8.25" stroke="currentColor" strokeWidth="1.4" />
+          <path
+            d="M6.4 10.3 8.9 12.8 13.6 7.6"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      )}
+      {children}
+    </p>
+  );
+}
+
+/**
+ * The receipt under a NARRATED slide: what she is claiming, and how much of the
+ * file she read to claim it.
+ *
+ * Deliberately not the full technical receipt. A narrated slide carries no
+ * filename, no exit code and no timing — those are jargon, they belong on the
+ * working slide, and `tests/deck-ui.test.ts` holds this line for the whole deck.
+ */
+function RunNote({ finding, lead }: { finding: VerifiedFinding; lead: string }) {
+  return (
+    <p className="deck-note">
+      <span>{lead}</span>
+      <span className="deck-note-tech">
+        {formatCount(finding.grounding.rowCount)} rows read
+      </span>
+    </p>
+  );
+}
+
 function SlideContent({
   slide,
   finding,
@@ -459,98 +510,161 @@ function SlideContent({
 
   if (slide.kind === "opener") {
     return (
-      <section className="deck-question">
-        <h1 data-focus="question" className={focusClass("question")}>
-          {slide.title}
-        </h1>
-        <div data-focus="file" className={cn("deck-question-meta", focusClass("file"))}>
-          <p>{slide.spoken}</p>
-          <span>{slide.subtitle}</span>
+      <section className="deck-canvas">
+        <header className="deck-head">
+          <Marker>The question</Marker>
+        </header>
+        <div className="deck-body">
+          <h1 data-focus="question" className={cn("deck-question", focusClass("question"))}>
+            {slide.title}
+          </h1>
+          <p data-focus="file" className={cn("deck-question-lede", focusClass("file"))}>
+            {slide.spoken}
+          </p>
         </div>
+        <p className="deck-note">
+          <span className="deck-note-tech">{slide.subtitle}</span>
+        </p>
       </section>
     );
   }
 
   if (slide.kind === "finding") {
     return (
-      <section className="deck-headline">
-        <p className="deck-verified">Verified finding</p>
-        <h1 data-focus="figure" className={cn("deck-figure", focusClass("figure"))}>
-          {formatFigure(finding.value, finding.unit)}
-        </h1>
-        <div data-focus="claim" className={cn("deck-claim", focusClass("claim"))}>
-          <p>{finding.claim}</p>
-          <span>Computed by code · traced to source cells</span>
+      <section className="deck-canvas">
+        <header className="deck-head">
+          <Marker verified>Verified finding</Marker>
+        </header>
+        <div className="deck-body">
+          <h1 data-focus="figure" className={cn("deck-figure", focusClass("figure"))}>
+            {formatFigure(finding.value, finding.unit)}
+          </h1>
+          <p data-focus="claim" className={cn("deck-claim", focusClass("claim"))}>
+            {finding.claim}
+          </p>
         </div>
+        <RunNote finding={finding} lead="Computed by code, traced to source cells" />
       </section>
     );
   }
 
   if (slide.kind === "meaning") {
     const focusNames = ["primary", "secondary", "tertiary"] as const;
+    /*
+     * The chart appears only when the headline and its context can honestly
+     * share one axis. When they cannot, the same figures are stated as tiles —
+     * which is the right answer, not a degraded one. Either way the tiles carry
+     * the narration's focus targets, so the presenter walks them one at a time
+     * while the chart stays put.
+     */
+    const bars = contextSeries(finding.value, finding.context, "This answer");
     return (
-      <section className="deck-summary">
-        <div className="deck-summary-head">
-          <p className="deck-verified">Grounded comparison</p>
-          <h1>{slide.title}</h1>
+      <section className="deck-canvas">
+        <header className="deck-head">
+          <Marker>Grounded comparison</Marker>
+          <h1 className="deck-title">{slide.title}</h1>
+        </header>
+        <div className={cn("deck-body", bars && "deck-meaning")}>
+          {bars && (
+            <ContextChart
+              title="The answer, and what it was measured against"
+              bars={bars}
+              unit={finding.unit}
+            />
+          )}
+          {/*
+            Beside a chart these stop repeating the figures — the bars already
+            carry them, direct-labelled — and become the provenance line for
+            each one. They stay the narration's focus anchors either way.
+
+            The figures are always rendered and hidden in CSS rather than
+            dropped here, because on a narrow stage the chart is the thing that
+            gives way: a 390px plot cannot hold a category label and a value
+            label, so `deck.css` swaps to these tiles instead of clipping the
+            numbers. Same markup, no viewport branch in React, no hydration seam.
+          */}
+          <div className={cn("deck-figures", bars && "deck-figures-annotated")}>
+            {finding.context.map((figure, index) => {
+              const focus = focusNames[index] ?? "tertiary";
+              return (
+                <div key={figure.name} data-focus={focus} className={focusClass(focus)}>
+                  <strong>{formatFigure(figure.value, finding.unit)}</strong>
+                  <p>{figure.description}</p>
+                  <span>{figure.columnsUsed.join(" · ")}</span>
+                </div>
+              );
+            })}
+          </div>
         </div>
-        <div className="deck-proof-counts">
-          {finding.context.map((figure, index) => {
-            const focus = focusNames[index] ?? "tertiary";
-            return (
-              <div
-                key={figure.name}
-                data-focus={focus}
-                className={focusClass(focus)}
-              >
-                <strong>{formatFigure(figure.value, null)}</strong>
-                <p>{figure.description}</p>
-              </div>
-            );
-          })}
-        </div>
+        <RunNote finding={finding} lead="Every figure here came out of the same executed run" />
       </section>
     );
   }
 
   if (slide.kind === "caveat" && evidence) {
-    return <CaveatSlide evidence={evidence} focusClass={focusClass} />;
+    return (
+      <CaveatSlide evidence={evidence} finding={finding} focusClass={focusClass} />
+    );
   }
 
   if (slide.kind === "working") {
+    const cells = finding.grounding.sampleCells;
     return (
-      <section className="deck-code">
-        <div data-focus="explanation" className={focusClass("explanation")}>
-          <h1>The calculation is inspectable.</h1>
-          <p>{finding.code.explanation}</p>
-        </div>
-        <pre data-focus="code" className={cn("deck-code-block", focusClass("code"))}>
-          <code>
-            {finding.code.source.split("\n").map((line, index) => (
-              <span key={`${index}-${line}`}>
-                <i>{String(index + 1).padStart(2, "0")}</i>
-                {line}
-              </span>
-            ))}
-          </code>
-        </pre>
-        <p data-focus="exit" className={cn("deck-code-meta", focusClass("exit"))}>
-          {finding.code.lineCount} lines · Python · exit {finding.execution.exitCode} ·{" "}
-          {finding.execution.durationMs} ms
-        </p>
-        <div data-focus="columns" className={focusClass("columns")}>
-          <CellsGrid cells={finding.grounding.sampleCells} />
-        </div>
-        <p data-focus="rows" className={cn("deck-cells-meta", focusClass("rows"))}>
-          {formatCount(finding.grounding.sampleCells.length)} cells shown ·{" "}
-          {formatCount(finding.grounding.rowCount)} rows read from {dataset.filename}
-        </p>
-        {provenEvidence.map((item) => (
-          <div key={item.claim} className="deck-trap-method">
-            <p>{item.claim}</p>
-            <p>{item.method}</p>
+      <section className="deck-canvas">
+        <header className="deck-head">
+          <Marker>The working</Marker>
+          <h1 data-focus="explanation" className={cn("deck-title", focusClass("explanation"))}>
+            The calculation is inspectable.
+          </h1>
+          <p className="deck-work-lede">{finding.code.explanation}</p>
+        </header>
+        {/*
+          Two independently scrolling panels. A long program or a wide table
+          scrolls inside its own column; neither can grow the row and land on
+          top of the other, which is what the old three-row grid allowed.
+        */}
+        <div className="deck-body deck-work">
+          <div data-focus="code" className={cn("deck-work-panel", focusClass("code"))}>
+            <h2>The program she ran</h2>
+            <div className="deck-scroll">
+              <pre className="deck-code-block">
+                <code>
+                  {finding.code.source.split("\n").map((line, index) => (
+                    <span key={`${index}-${line}`}>
+                      <i>{String(index + 1).padStart(2, "0")}</i>
+                      {line}
+                    </span>
+                  ))}
+                </code>
+              </pre>
+            </div>
           </div>
-        ))}
+          <div
+            data-focus="columns"
+            className={cn("deck-work-panel deck-work-cells", focusClass("columns"))}
+          >
+            <h2>The cells it read</h2>
+            <div className="deck-scroll">
+              <CellsGrid cells={cells} />
+              {provenEvidence.slice(0, 2).map((item) => (
+                <div key={item.claim} className="deck-method">
+                  <p>{item.claim}</p>
+                  <p>{item.method}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        <p className="deck-note">
+          <span className="deck-note-tech">
+            {finding.code.lineCount} lines · Python · exit {finding.execution.exitCode} ·{" "}
+            {formatCount(finding.execution.durationMs)} ms
+          </span>
+          <span className="deck-note-tech">
+            {formatCount(cells.length)} cells shown ·{" "}
+            {formatCount(finding.grounding.rowCount)} rows read from {dataset.filename}
+          </span>
+        </p>
       </section>
     );
   }
@@ -563,76 +677,68 @@ function SlideContent({
    */
   if (slide.kind === "summary" && findings && findings.length > 1) {
     return (
-      <section className="deck-summary">
-        <div className="deck-summary-head">
-          <p className="deck-verified">Verified findings</p>
-          <h1>{slide.title}</h1>
+      <section className="deck-canvas">
+        <header className="deck-head">
+          <Marker verified>Verified findings</Marker>
+          <h1 className="deck-title">{slide.title}</h1>
+        </header>
+        <div className="deck-body">
+          <div className="deck-figures">
+            {findings.map((item, index) => {
+              const focus = `figure-${index}`;
+              return (
+                <div key={`${index}-${item.claim}`} data-focus={focus} className={focusClass(focus)}>
+                  <strong>{formatFigure(item.value, item.unit)}</strong>
+                  <p>{item.claim}</p>
+                  <span>{formatCount(item.grounding.rowCount)} rows read</span>
+                </div>
+              );
+            })}
+          </div>
         </div>
-        <div className="deck-proof-counts">
-          {findings.map((item, index) => {
-            const focus = `figure-${index}`;
-            return (
-              <div
-                key={`${index}-${item.claim}`}
-                data-focus={focus}
-                className={focusClass(focus)}
-              >
-                <strong>{formatFigure(item.value, item.unit)}</strong>
-                <p>{item.claim}</p>
-                <span>{formatCount(item.grounding.rowCount)} rows read</span>
-              </div>
-            );
-          })}
+        <div data-focus="proof" className={cn("deck-note", focusClass("proof"))}>
+          <span>Every figure computed by code and traced to source cells.</span>
+          {benchmark && <BenchmarkPanel benchmark={benchmark} />}
         </div>
-        <div data-focus="proof" className={focusClass("proof")}>
-          <p className="deck-cells-meta">
-            Every figure computed by code and traced to source cells.
-          </p>
-        </div>
-        {benchmark && <BenchmarkPanel benchmark={benchmark} />}
       </section>
     );
   }
 
   return (
-    <section className="deck-summary">
-      <div className="deck-summary-head">
-        <h1 data-focus="figure" className={cn("deck-summary-figure", focusClass("figure"))}>
-          {formatFigure(finding.value, finding.unit)}
-        </h1>
-        <p data-focus="claim" className={cn("deck-summary-claim", focusClass("claim"))}>
-          {finding.claim}
-        </p>
+    <section className="deck-canvas">
+      <header className="deck-head">
+        <Marker verified>Verified finding</Marker>
+      </header>
+      <div className="deck-body deck-body-split">
+        <div>
+          <h1 data-focus="figure" className={cn("deck-summary-figure", focusClass("figure"))}>
+            {formatFigure(finding.value, finding.unit)}
+          </h1>
+          <p data-focus="claim" className={cn("deck-summary-claim", focusClass("claim"))}>
+            {finding.claim}
+          </p>
+        </div>
+        {/*
+          Coverage is true of every run, so it is always the first proof shown.
+          Agreement counts exist only for a PROVEN deterministic claim about the
+          schema; most questions rest on none, and printing "0 rows that agree"
+          under a verified figure would read as the data disagreeing with the
+          answer. Grounded or absent, same rule as the context figures.
+        */}
+        <div data-focus="proof" className={cn("deck-summary-proof", focusClass("proof"))}>
+          <CoverageMeter
+            rowsRead={finding.grounding.rowCount}
+            rowsInFile={dataset.rowCount}
+            filename={dataset.filename}
+          />
+          {provenEvidence[0] && <EvidenceStats evidence={provenEvidence[0]} />}
+        </div>
       </div>
-      {/*
-        Agreement counts exist only for a proven deterministic claim about the
-        schema. Most questions rest on none, which is normal — and rendering that
-        as "0 rows that agree" beneath a verified figure reads as the data
-        disagreeing with the answer. Grounded or absent, same as context figures.
-      */}
-      <div data-focus="proof" className={cn("deck-summary-grid", focusClass("proof"))}>
-        {provenEvidence[0] ? (
-          <>
-            <ProofChart evidence={provenEvidence[0]} />
-            <div className="deck-proof-counts">
-              <ProofCount value={finding.grounding.rowCount} label="rows read" />
-              <ProofCount
-                value={provenEvidence[0].supportingRows}
-                label="rows that agree"
-              />
-            </div>
-          </>
-        ) : (
-          <div className="deck-proof-counts">
-            <ProofCount value={finding.grounding.rowCount} label="rows read" />
-            <ProofCount
-              value={finding.grounding.sampleCells.length}
-              label="cells quoted back"
-            />
-          </div>
-        )}
-      </div>
-      {benchmark && <BenchmarkPanel benchmark={benchmark} />}
+      {benchmark && (
+        <div className="deck-note">
+          <BenchmarkPanel benchmark={benchmark} />
+        </div>
+      )}
     </section>
   );
 }
@@ -665,28 +771,45 @@ function BenchmarkPanel({ benchmark }: { benchmark: DeckBenchmark }) {
   );
 }
 
+/**
+ * The trap slide. It states the CONSEQUENCE and shows how much of the file
+ * agreed — never the column name or the format, which are technical details and
+ * live on the working slide where they belong.
+ */
 function CaveatSlide({
   evidence,
+  finding,
   focusClass,
 }: {
   evidence: SchemaEvidence;
+  finding: VerifiedFinding;
   focusClass: (id: string) => string;
 }) {
   return (
-    <section className="deck-trap">
-      <h1 data-focus="claim" className={focusClass("claim")}>
-        One thing changes the answer.
-      </h1>
-      <div
-        data-focus="consequence"
-        className={cn("deck-trap-method", focusClass("consequence"))}
-      >
-        <p>Taken at face value, the result would have been badly wrong.</p>
-        <p>
-          The check held across every value used
-          {evidence.contradictingRows === 0 ? ", with nothing arguing otherwise." : "."}
-        </p>
+    <section className="deck-canvas">
+      <header className="deck-head">
+        <Marker>Worth knowing</Marker>
+        <h1 data-focus="claim" className={cn("deck-title-lg", focusClass("claim"))}>
+          One thing changes the answer.
+        </h1>
+      </header>
+      <div className="deck-body deck-body-split">
+        <div
+          data-focus="consequence"
+          className={cn("deck-trap-lede", focusClass("consequence"))}
+        >
+          <p>
+            Taken at face value, the result would have been badly wrong — and nothing on screen
+            would have warned you.
+          </p>
+          <p>
+            She checked it against every value the answer rests on before using it
+            {evidence.contradictingRows === 0 ? ", and they all agree." : "."}
+          </p>
+        </div>
+        <EvidenceStats evidence={evidence} />
       </div>
+      <RunNote finding={finding} lead="Checked before the figure was released" />
     </section>
   );
 }
@@ -704,7 +827,7 @@ function CellsGrid({ cells }: { cells: SourceCell[] }) {
   }
 
   return (
-    <table>
+    <table className="deck-cells-table">
       <thead>
         <tr>
           <th>Row</th>
@@ -726,41 +849,5 @@ function CellsGrid({ cells }: { cells: SourceCell[] }) {
         ))}
       </tbody>
     </table>
-  );
-}
-
-function ProofChart({ evidence }: { evidence: SchemaEvidence | null }) {
-  const support = evidence?.supportingRows ?? 0;
-  const contradict = evidence?.contradictingRows ?? 0;
-  const max = Math.max(support, contradict, 1);
-  return (
-    <div
-      className="deck-proof-chart"
-      role="img"
-      aria-label={`${support} rows agree with the check behind this answer and ${contradict} argue otherwise`}
-    >
-      <p>{evidenceHeadline(evidence)}</p>
-      <div className="deck-proof-bars">
-        {[
-          { label: "Support", value: support, accent: true },
-          { label: "Contradict", value: contradict, accent: false },
-        ].map((bar) => (
-          <div key={bar.label}>
-            <span className={cn(bar.accent && "is-accent")} style={{ transform: `scaleY(${Math.max(bar.value / max, 0.015)})` }} />
-            <strong>{formatCount(bar.value)}</strong>
-            <small>{bar.label}</small>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function ProofCount({ value, label }: { value: number; label: string }) {
-  return (
-    <div>
-      <strong>{formatCount(value)}</strong>
-      <span>{label}</span>
-    </div>
   );
 }

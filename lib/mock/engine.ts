@@ -127,17 +127,75 @@ function humanize(column: string): string {
   return column.replace(/[_-]+/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
 }
 
-function numericTotal(
-  dataset: ResolvedDataset,
-): { column: string; total: number; count: number } | null {
-  const numeric = dataset.profile.columns.find(
+/**
+ * Columns whose NAME says they hold a measure rather than a code or a stamp.
+ *
+ * Taking simply the first numeric column meant Superstore's demo answer was the
+ * sum of `OrderYear` — arithmetic that is real but means nothing, and a chart of
+ * its parts means nothing either. A named measure is picked first; the old
+ * first-numeric behaviour is still the fallback, so a file with no recognisable
+ * measure answers exactly as it did before.
+ */
+const MEASURE_NAME =
+  /(sales|revenue|profit|margin|amount|total|price|cost|spend|value|quantity|units|count)/i;
+
+/** A stamp or a key: numeric in the file, never a quantity to add up. */
+const NOT_A_MEASURE = /(year|month|day|date|id|code|zip|postal|phone|lat|lon|rank)/i;
+
+function measureColumn(dataset: ResolvedDataset) {
+  const numeric = dataset.profile.columns.filter(
     (column) => column.kind === "number" || column.kind === "integer",
   );
+  return (
+    numeric.find(
+      (column) => MEASURE_NAME.test(column.name) && !NOT_A_MEASURE.test(column.name),
+    ) ??
+    numeric.find((column) => !NOT_A_MEASURE.test(column.name)) ??
+    numeric[0] ??
+    null
+  );
+}
+
+/**
+ * The column a breakdown is grouped by: a real category with enough distinct
+ * values to be interesting and few enough to fit on a slide.
+ */
+function groupColumn(dataset: ResolvedDataset) {
+  return (
+    dataset.profile.columns.find(
+      (column) =>
+        column.kind === "category" && column.distinctCount >= 2 && column.distinctCount <= 12,
+    ) ?? null
+  );
+}
+
+interface Measured {
+  column: string;
+  total: number;
+  count: number;
+  /** Real subtotals of the same column, largest first. Empty when ungroupable. */
+  breakdown: { key: string; column: string; total: number }[];
+}
+
+/**
+ * One pass over the real cells: the total, the record count, and — when the file
+ * has a category column — the subtotals of that same total.
+ *
+ * The subtotals are parts of the whole the headline reports, so they share its
+ * unit and its axis. That is what makes the deck's comparison chart honest
+ * rather than decorative.
+ */
+function numericTotal(dataset: ResolvedDataset): Measured | null {
+  const numeric = measureColumn(dataset);
   if (!numeric) return null;
 
   const schema = csvSchema(dataset.content, Number.MAX_SAFE_INTEGER);
   const index = schema.columns.indexOf(numeric.name);
   if (index < 0) return null;
+
+  const group = groupColumn(dataset);
+  const groupIndex = group ? schema.columns.indexOf(group.name) : -1;
+  const groups = new Map<string, number>();
 
   let total = 0;
   let count = 0;
@@ -148,8 +206,24 @@ function numericTotal(
     if (!Number.isFinite(value)) continue;
     total += value;
     count += 1;
+
+    if (groupIndex >= 0) {
+      const key = row[groupIndex];
+      if (key) groups.set(key, (groups.get(key) ?? 0) + value);
+    }
   }
-  return count === 0 ? null : { column: numeric.name, total, count };
+  if (count === 0) return null;
+
+  const breakdown = [...groups.entries()]
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 3)
+    .map(([key, subtotal]) => ({
+      key,
+      column: group?.name ?? "",
+      total: Math.round(subtotal * 100) / 100,
+    }));
+
+  return { column: numeric.name, total, count, breakdown };
 }
 
 const VERIFIED_FINDING = (dataset: ResolvedDataset, attempts: number): Finding => {
@@ -210,19 +284,36 @@ const VERIFIED_FINDING = (dataset: ResolvedDataset, attempts: number): Finding =
       stdout: `${total}\n`,
       stderr: "",
       value: total,
-      contextValues: { per_record: average },
+      contextValues: {
+        per_record: average,
+        ...Object.fromEntries(measured.breakdown.map((part) => [part.key, part.total])),
+      },
       durationMs: 1_284,
     },
     grounding,
-    // One context figure, so the "what it means" beat has something true to say.
-    context: [
-      {
-        name: "per_record",
-        description: `the average across all ${measured.count.toLocaleString()} records`,
-        value: average,
-        columnsUsed: [measured.column],
-      },
-    ],
+    /*
+     * Context figures for the "what it means" beat. The subtotals come first
+     * because they are parts of the same total — same unit, same axis — so the
+     * deck can plot them beside the headline. The per-record average is a
+     * different quantity on a different scale; it stays available as a figure
+     * and the chart's own spread guard keeps it off the axis.
+     */
+    context:
+      measured.breakdown.length > 0
+        ? measured.breakdown.map((part) => ({
+            name: part.key,
+            description: `the ${part.key} total`,
+            value: part.total,
+            columnsUsed: [measured.column, part.column],
+          }))
+        : [
+            {
+              name: "per_record",
+              description: `the average across all ${measured.count.toLocaleString()} records`,
+              value: average,
+              columnsUsed: [measured.column],
+            },
+          ],
     valence: total < 0 ? "bad" : "good",
     attempts,
   };

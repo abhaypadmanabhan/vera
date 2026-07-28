@@ -95,18 +95,21 @@ function RowBars({ rows, domainMax }: { rows: Row[]; domainMax: number }) {
 }
 
 function TextAlternative({ caption, rows }: { caption: string; rows: Row[] }) {
+  // The clip goes on a wrapper `div`; a `<table>` ignores `sr-only`'s 1px width.
   return (
-    <table className="sr-only">
-      <caption>{caption}</caption>
-      <tbody>
-        {rows.map((row) => (
-          <tr key={row.label}>
-            <th scope="row">{row.label}</th>
-            <td>{formatCount(row.value)}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <div className="sr-only">
+      <table>
+        <caption>{caption}</caption>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.label}>
+              <th scope="row">{row.label}</th>
+              <td>{formatCount(row.value)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
