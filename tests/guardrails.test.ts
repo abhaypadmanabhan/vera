@@ -237,7 +237,38 @@ describe("classifyQuestion", () => {
       );
     });
 
+    /*
+     * Macroscope on PR #42. The meta-word exemption was tested against every
+     * word in the question, so "dataset" excused the whole sentence: the
+     * guardrail returned early and never asked whether the file records
+     * directors at all.
+     */
+    it("checks the counted subject even when a meta word appears elsewhere", () => {
+      expect(
+        classifyQuestion("How many directors are in this dataset?", netflix),
+      ).toMatchObject({
+        allowed: false,
+        category: "missing_information",
+      });
+    });
+
+    /*
+     * Macroscope on PR #42, the same bug in the other half of the check:
+     * recognition ran over every word in the question, so "country" — a
+     * qualifier, not the thing being counted — was enough to let an unrecorded
+     * subject through.
+     */
+    it("does not let a recognised qualifier rescue an unrecorded subject", () => {
+      expect(
+        classifyQuestion("How many directors are there by country?", netflix),
+      ).toMatchObject({
+        allowed: false,
+        category: "missing_information",
+      });
+    });
+
     it.each([
+      "How many titles are there by country?",
       "How many titles are in the catalogue?",
       "How many movies are there?",
       "How many records are in this file?",

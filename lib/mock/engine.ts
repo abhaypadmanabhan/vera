@@ -48,11 +48,30 @@ function buildMockCode(dataset: ResolvedDataset, numericColumn: string | null): 
     );
   }
 
+  if (!numericColumn) {
+    lines.push("", "print(len(df))");
+    return lines.join("\n");
+  }
+
+  /*
+   * Strip the symbols before summing, because `numericTotal` below strips exactly
+   * the same ones to get the number printed beside this code.
+   *
+   * A currency column is text to pandas: `df["Amount"].sum()` on "$1.00", "$2.00"
+   * concatenates to "$1.00$2.00" and `round()` then raises TypeError. The panel
+   * used to show that bare `.sum()` next to a total computed off the cleaned
+   * values — a figure the code on screen could not have produced, which is the
+   * one thing PRD §6 says we never do.
+   */
+  const column = JSON.stringify(numericColumn);
   lines.push(
     "",
-    numericColumn
-      ? `print(round(df[${JSON.stringify(numericColumn)}].sum(), 2))`
-      : "print(len(df))",
+    `df[${column}] = pd.to_numeric(`,
+    `    df[${column}].astype(str).str.replace(r"[$,%\\s]", "", regex=True),`,
+    '    errors="coerce",',
+    ")",
+    "",
+    `print(round(df[${column}].sum(), 2))`,
   );
   return lines.join("\n");
 }
@@ -94,7 +113,15 @@ function groundingFrom(dataset: ResolvedDataset, preferred: string[] = []): Grou
     });
   });
 
-  const rowCount = schema.rowCount > 0 ? schema.rowCount : 24;
+  /*
+   * However many rows the file has, including none.
+   *
+   * This used to fall back to 24 when the body was empty — a leftover from the
+   * era of the one hardcoded Superstore answer. A header-only upload then
+   * produced a "verified" finding claiming 24 records, with stdout `24`, that
+   * nothing had counted.
+   */
+  const rowCount = schema.rowCount;
   return {
     columns: usedColumns,
     rowCount,
@@ -143,10 +170,9 @@ const MEASURE_NAME =
  * A stamp or a key: numeric in the file, never a quantity to add up.
  *
  * Matched against the column's WORDS, not its raw text. As a substring this
- * pattern rejected real measures — `id` fires inside `paid_amount`, `day`
- * inside `daily_sales`, `month` inside `monthly_revenue` — so the mock fell
- * through to a worse column while the name it skipped was exactly the measure
- * being asked about.
+ * pattern rejected real measures — `id` fires inside `paid_amount`, `month`
+ * inside `monthly_revenue` — so the mock fell through to a worse column while
+ * the name it skipped was exactly the measure being asked about.
  */
 const NOT_A_MEASURE_WORD =
   /^(years?|months?|days?|dates?|ids?|codes?|zips?|postal|phones?|lat|lon|longitude|latitude|ranks?)$/i;
@@ -223,7 +249,14 @@ function numericTotal(dataset: ResolvedDataset): Measured | null {
   for (const row of schema.sampleRows) {
     const raw = row[index];
     if (raw === undefined) continue;
-    const value = Number(raw.replace(/[$,%\s]/g, ""));
+    const cleaned = raw.replace(/[$,%\s]/g, "");
+    // An empty cell is not a zero. `Number("")` is 0 and finite, so a blank used
+    // to land in `count` as well as `total`: a column of 10 and one blank
+    // reported an average of 5 across "2 records", and the group it sat in got a
+    // subtotal of 0 it had never reported. `to_numeric(errors="coerce")` in the
+    // code panel drops the same cells.
+    if (cleaned === "") continue;
+    const value = Number(cleaned);
     if (!Number.isFinite(value)) continue;
     total += value;
     count += 1;
@@ -252,9 +285,19 @@ const VERIFIED_FINDING = (dataset: ResolvedDataset, attempts: number): Finding =
   const dateColumn = dataset.profile.columns.find(
     (column) => column.kind === "date" && column.dateFormat !== null,
   );
+  /*
+   * The category column is part of the grounding whenever there is a breakdown.
+   * Every subtotal cites it in `columnsUsed`, so leaving it out meant the
+   * headline had source cells under it and the figures printed beside the
+   * headline had none — proof for the number the eye lands on, and nothing for
+   * the ones it lands on next.
+   */
+  const groupedBy = measured?.breakdown[0]?.column;
   const grounding = groundingFrom(
     dataset,
-    [measured?.column, dateColumn?.name].filter((name): name is string => Boolean(name)),
+    [measured?.column, dateColumn?.name, groupedBy].filter(
+      (name): name is string => Boolean(name),
+    ),
   );
 
   // No numeric column anywhere — fall back to counting records, which every

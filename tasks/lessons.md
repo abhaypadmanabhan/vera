@@ -211,3 +211,63 @@ having failed. Acting on that reading means re-splitting work that did not need 
 especially when a bot reuses one word for several conditions. And when a plan introduces a new base
 branch, check what the CI and review config say about base branches *before* opening the PRs; the
 config was in the repo the entire time and answers it in four lines.
+
+---
+
+## 2026-07-28 — A test that passes with the bug still in place is worth nothing
+
+**What happened:** across one session, four separate tests were written to prove a fix and all four
+passed *before* the fix was applied. A dedup fixture whose two rows differed in a second column, so
+neither was ever a duplicate. A measure-selection fixture with one numeric column, so the
+`numeric[0]` fallback picked it either way. A second attempt at the same test using `widget_count`
+as the control — which the old substring regex also rejected, because "wIDget" contains `id`. And a
+deck test that drove the real narration burst but never actually read the value the fix changed,
+confirmed by reverting and watching all 41 tests stay green.
+
+**Why it matters:** each of those tests looked like proof and was written *specifically* as proof.
+Green told us nothing, and in three of the four cases the fixture was wrong in a way that is
+invisible unless you run it against the old code.
+
+**How to apply:** proving a fix means running the new test against the OLD code and watching it
+fail. Revert exactly one hunk, run, confirm red, restore, confirm green — and if it stays green,
+the fixture does not discriminate and the test is not evidence yet. When it cannot be made to
+discriminate (no DOM, no browser), say so explicitly instead of letting a green suite imply a
+proof that was never obtained.
+
+---
+
+## 2026-07-28 — Partition parallel agents by file, and the boundary holds
+
+**What happened:** six agents worked one repo concurrently on 27 review findings. They were given
+disjoint file sets — down to which *test* files each owned — and forbidden from git, `pnpm build`
+and `pnpm dev`. All 19 modified source files mapped to exactly one owner; no agent wrote outside
+its slice; the full suite went 413 → 463 with no cross-slice breakage.
+
+**Why it matters:** the usual failure of parallel agents is two of them editing one file and
+producing garbage. The constraint that prevented it was mechanical, not a request for care: the
+partition was computed from the findings' own file paths before any agent started.
+
+**How to apply:** group the work by the files it must touch, not by topic, and give each agent an
+explicit list including tests. Forbid anything that writes shared state — `.next/`, the git index,
+`package.json` — and have the orchestrator run the build and own every commit. Two findings on one
+file belong to one agent even when they are unrelated; two unrelated files can share an agent
+freely. Tell each agent which fixes already landed, or it will "fix" them again.
+
+---
+
+## 2026-07-28 — A reviewer's example can be wrong while its finding is right
+
+**What happened:** a bot reported that a substring regex rejected `daily_sales`, `monthly_revenue`
+and `paid_amount` as measures. Two were real. `daily_sales` was not — "day" is not a substring of
+"daily" — and a test written around that example passed with the bug still in place. The same
+session saw a suggested diff that referenced local variables no longer in the file, and another
+whose fix would have deleted the feature it was meant to protect.
+
+**Why it matters:** the finding was correct and worth fixing; the example was the part that got
+copied into the test, and it was the part that was false. The repo's own comment had already
+absorbed the same bad example from an earlier pass.
+
+**How to apply:** verify the reviewer's *reproduction*, not just its conclusion — the finding and
+the example are separate claims. Fix the root cause, then write the test from a case you confirmed
+yourself. And when an example turns out to be wrong, correct it where it was copied to, or the next
+reader derives a rule from a failure that cannot happen.

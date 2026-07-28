@@ -5,6 +5,7 @@ import {
   generatePandasCode,
   parseCodegenResponse,
 } from "@/lib/codegen/generate";
+import { PolicyViolationError } from "@/lib/codegen/python-policy";
 import { profileDataset } from "@/lib/profile/profiler";
 import type { DatasetProfile } from "@/lib/types";
 
@@ -464,6 +465,87 @@ describe("structured pandas codegen", () => {
     expect(() =>
       parseCodegenResponse(raw, profile, "/workspace/data.csv"),
     ).toThrow();
+  });
+
+  /*
+   * CodeRabbit on PR #41. The top-level `columnsUsed` is pinned to the program;
+   * a context figure's list was only checked for existence in the file, so a
+   * figure could name a column the program never touched and still be presented
+   * as traced to it. Grounding that does not correspond to what the code did is
+   * the one thing the safeguard exists to stop (PRD §6).
+   */
+  it("rejects a context figure grounded in a column the program never read", () => {
+    const salesOnly = `import json
+import pandas as pd
+
+df = pd.read_csv("/workspace/data.csv")
+df["Sales"] = pd.to_numeric(df["Sales"], errors="coerce")
+result = {"value": round(float(df["Sales"].sum()), 2), "context": {"busiest_month": 3}}
+print("VERA_RESULT:" + json.dumps(result, separators=(",", ":")))`;
+
+    // The program does not mention OrderDate anywhere, yet the figure is
+    // declared as grounded in it.
+    const neverRead = JSON.stringify({
+      code: salesOnly,
+      explanation: "Sums Sales across the file.",
+      headline: "The file totals {value}.",
+      columnsUsed: ["Sales"],
+      context: [
+        {
+          name: "busiest_month",
+          description: "the busiest month in the file",
+          columnsUsed: ["OrderDate"],
+        },
+      ],
+    });
+    expect(() =>
+      parseCodegenResponse(neverRead, profile, "/workspace/data.csv"),
+    ).toThrow(/did not report reading: OrderDate/);
+
+    // The code DOES touch OrderDate here, but the program never reported
+    // reading it, so nothing ties the figure to a column the reader is shown.
+    const underDeclared = JSON.stringify({
+      code: validCode,
+      explanation: "Sums 2018 sales.",
+      headline: "The 2018 total is {value}.",
+      columnsUsed: ["Sales"],
+      context: [
+        {
+          name: "prior_period",
+          description: "the same period a year earlier",
+          columnsUsed: ["OrderDate", "Sales"],
+        },
+      ],
+    });
+    expect(() =>
+      parseCodegenResponse(underDeclared, profile, "/workspace/data.csv"),
+    ).toThrow(/did not report reading: OrderDate/);
+
+    // Correctable, not fatal: the retry loop only feeds a PolicyViolationError
+    // back to the model. An honest program that under-reported one column gets
+    // another attempt instead of losing the finding outright.
+    expect(() =>
+      parseCodegenResponse(underDeclared, profile, "/workspace/data.csv"),
+    ).toThrow(PolicyViolationError);
+  });
+
+  it("accepts a context figure whose columns the program reported reading", () => {
+    const raw = JSON.stringify({
+      code: validCode,
+      explanation: "Sums 2018 sales.",
+      headline: "The 2018 total is {value}.",
+      columnsUsed: ["OrderDate", "Sales"],
+      context: [
+        {
+          name: "prior_period",
+          description: "the same period a year earlier",
+          columnsUsed: ["Sales"],
+        },
+      ],
+    });
+    expect(
+      parseCodegenResponse(raw, profile, "/workspace/data.csv").context,
+    ).toHaveLength(1);
   });
 });
 

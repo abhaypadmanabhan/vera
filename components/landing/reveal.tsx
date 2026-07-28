@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 /**
  * Settles a block in as it ENTERS THE VIEWPORT.
@@ -20,9 +20,25 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
  *     blocks stayed invisible after a jump to the bottom. The scroll check is
  *     rAF-throttled and removes itself the moment the block is shown.
  *
- * Transform and opacity only. `prefers-reduced-motion` is handled in
- * globals.css, which leaves `.v-rise` at its end state — the content is visible
- * before this component has done anything at all.
+ * Transform and opacity only.
+ *
+ * The hidden start state is NOT in the served HTML. `.v-rise` is visible until
+ * this effect stamps `v-js` on `<html>`, which is what arms the `opacity: 0`
+ * rule in globals.css. So the hiding is done by the same code that undoes it: no
+ * JavaScript, a blocked bundle, or a chunk that 404s all leave the page readable
+ * rather than blank. `prefers-reduced-motion` never arms it at all.
+ *
+ * Two consequences worth stating, because both are load-bearing:
+ *
+ *  - The stamp and the first measurement happen in ONE synchronous pass, and
+ *    `data-shown` is written straight to the node rather than through state. A
+ *    render round-trip between the two would give the browser a frame in which
+ *    everything is armed and nothing is shown — visible content snapping to
+ *    blank and rising back in. There must be no paint between them.
+ *  - Consequently a block already in view at mount is never hidden, so it does
+ *    not animate on load. That is the intended reading of this component: the
+ *    reveal belongs to scrolling, not to arrival, and it is also why the hero
+ *    now paints with the HTML instead of waiting for the bundle.
  */
 export function Reveal({
   children,
@@ -35,11 +51,14 @@ export function Reveal({
   className?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [shown, setShown] = useState(false);
 
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+
+    // Arms the hidden start state. Idempotent, and deliberately never removed:
+    // `.v-rise` exists only on this page, so a leftover class matches nothing.
+    document.documentElement.classList.add("v-js");
 
     let frame = 0;
     let live = true;
@@ -54,7 +73,7 @@ export function Reveal({
 
     const reveal = () => {
       if (!live) return;
-      setShown(true);
+      el.setAttribute("data-shown", "");
       cleanup();
     };
 
@@ -83,8 +102,10 @@ export function Reveal({
 
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", onScroll, { passive: true });
-    // First measurement on the next frame: never a synchronous setState here.
-    frame = requestAnimationFrame(check);
+    // Synchronously, in the same task as the stamp above — see the note on
+    // paints in the block comment. Anything already in view is shown before the
+    // browser ever sees the armed state.
+    check();
 
     return cleanup;
   }, []);
@@ -92,7 +113,6 @@ export function Reveal({
   return (
     <div
       ref={ref}
-      data-shown={shown || undefined}
       className={`v-rise ${className}`}
       style={{ "--step": step } as React.CSSProperties}
     >

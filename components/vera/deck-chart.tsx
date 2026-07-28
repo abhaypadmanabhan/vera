@@ -56,7 +56,8 @@ export interface Bar_ {
 /**
  * Decide whether the headline figure and its context can share one axis, and
  * return the bars if they can. Returns null whenever a chart would mislead:
- * a non-numeric figure, fewer than two bars, mixed signs, or too wide a spread.
+ * a non-numeric figure, a negative one, fewer than two bars, mixed signs, or
+ * too wide a spread.
  */
 export function contextSeries(
   value: number | string,
@@ -64,6 +65,17 @@ export function contextSeries(
   claimLabel: string,
 ): Bar_[] | null {
   if (typeof value !== "number" || !Number.isFinite(value)) return null;
+
+  /*
+   * A loss gets tiles, not bars. `ContextChart` plots on an X domain anchored
+   * at 0, so an all-negative series — which passed the same-sign check happily —
+   * put EVERY bar outside its own axis and drew a blank plot. The demo file has
+   * real losses, so this was reachable, and a chart that renders nothing is
+   * worse than the tiles, which state the same grounded figures in full.
+   *
+   * This subsumes the zero case: a bar of 0 draws nothing either.
+   */
+  if (value <= 0) return null;
 
   const comparable = context.filter(
     (figure): figure is ContextFigure & { value: number } =>
@@ -81,7 +93,7 @@ export function contextSeries(
    * chart, even though the answer and the prior period are the same quantity a
    * year apart — the single most useful comparison on the slide.
    */
-  const sameSign = (figure: number) => (value >= 0 ? figure >= 0 : figure <= 0);
+  const sameSign = (figure: number) => figure >= 0;
   const inScale = (figure: number) => {
     const a = Math.abs(value);
     const b = Math.abs(figure);
@@ -99,7 +111,6 @@ export function contextSeries(
 
   // One bar is not a comparison. Below that the slide states the figures instead.
   if (bars.length < 2) return null;
-  if (Math.abs(value) === 0) return null;
 
   return bars;
 }
@@ -161,6 +172,8 @@ export function ContextChart({
             margin={{ top: 2, right: 8, bottom: 2, left: 0 }}
             barCategoryGap="26%"
           >
+            {/* Anchored at 0, so every bar must be non-negative — `contextSeries`
+                rejects a negative answer rather than plotting off-axis. */}
             <XAxis type="number" domain={[0, domainMax]} hide />
             <YAxis
               type="category"

@@ -1,12 +1,16 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { contextSeries } from "@/components/vera/deck-chart";
 import {
   DeckPlayer,
   DeckSlide,
   needsFallbackPacing,
+  nextNarrationMove,
   presenterPosition,
 } from "@/components/vera/deck-player";
+import type { NarrationMove } from "@/components/vera/deck-player";
+import { createNarrationPlayer } from "@/components/vera/narration-player";
 import { buildDeck } from "@/lib/deck";
 import type { DatasetProfile, DatasetSummary, Finding } from "@/lib/types";
 
@@ -358,6 +362,35 @@ describe("deck slide presentation", () => {
     expect(text).toMatch(/rows read/i);
   });
 
+  /*
+   * The caveat slide is where the false unanimity claim was rendered. Same rule
+   * as `tests/deck.test.ts` applies to the narration, applied to what a person
+   * sees: zero contradicting rows proves nothing disagreed, never that every
+   * row agreed — the evidence permits rows that are neither (PRD §6).
+   */
+  it("renders no claim of unanimity on the caveat slide", () => {
+    const caveat = buildDeck("What were sales in Q3 2018?", finding, profile).slides.find(
+      (slide) => slide.kind === "caveat",
+    );
+    expect(caveat).toBeDefined();
+    expect(finding.grounding.schemaEvidence[0]?.contradictingRows).toBe(0);
+    expect(finding.grounding.schemaEvidence[0]?.supportingRows).toBeLessThan(profile.rowCount);
+
+    const text = renderedText(
+      renderToStaticMarkup(
+        createElement(DeckSlide, {
+          slide: caveat!,
+          finding,
+          dataset,
+          activeFocus: "consequence",
+        }),
+      ),
+    );
+
+    expect(text).not.toMatch(/every row agrees|all\s+(?:of\s+them\s+)?agree/i);
+    expect(text).toMatch(/disagree/i);
+  });
+
   it("still shows agreement counts when a proven schema claim backs the answer", () => {
     const summary = buildDeck(
       "What were sales in Q3 2018?",
@@ -378,5 +411,162 @@ describe("deck slide presentation", () => {
 
     expect(text).toMatch(/rows that agree/i);
     expect(text).toMatch(/5,952/);
+  });
+});
+
+describe("the grounded comparison", () => {
+  const PRIOR = {
+    name: "prior_period",
+    description: "the same quarter a year earlier",
+    value: 121_004.2,
+    columnsUsed: ["OrderDate", "Sales"],
+  };
+
+  /*
+   * `ContextChart` plots on an X domain anchored at 0. An all-negative series
+   * passed the same-sign check happily and then put EVERY bar outside its own
+   * axis — a blank plot where the slide should have stated a loss. The demo file
+   * has real losses, so this was reachable, not theoretical.
+   */
+  it("refuses a chart when the answer is a loss, so the tiles state it instead", () => {
+    const loss = contextSeries(
+      -42_318.5,
+      [{ ...PRIOR, value: -18_204.1, columnsUsed: ["OrderDate", "Profit"] }],
+      "This answer",
+    );
+    expect(loss).toBeNull();
+
+    // A gain of the same shape is untouched: two bars, answer first.
+    const gain = contextSeries(143_787.36, [PRIOR], "This answer");
+    expect(gain?.map((bar) => bar.isAnswer)).toEqual([true, false]);
+  });
+
+  /*
+   * The annotated treatment hides a tile's figure BECAUSE the bar beside it
+   * already carries the number direct-labelled. Applied to the whole list it
+   * also hid the figures `contextSeries` had refused to plot, so an out-of-scale
+   * context figure was left as a description and a provenance line with its
+   * value nowhere on the slide — neither charted nor stated.
+   */
+  it("keeps the value of a figure the chart refused to plot", () => {
+    const mixed: Extract<Finding, { verdict: "verified" }> = {
+      ...finding,
+      context: [
+        PRIOR,
+        {
+          name: "share_of_year",
+          description: "the share of everything sold that year",
+          value: 6.3,
+          columnsUsed: ["Sales"],
+        },
+      ],
+    };
+    // The premise: one figure shares the axis, the other is 22,823× out of scale.
+    const bars = contextSeries(mixed.value, mixed.context, "This answer");
+    expect(bars?.map((bar) => bar.label)).toEqual(["This answer", PRIOR.description]);
+
+    const meaning = buildDeck("What were sales in Q3 2018?", mixed, profile).slides.find(
+      (slide) => slide.kind === "meaning",
+    );
+    expect(meaning).toBeDefined();
+    const markup = renderToStaticMarkup(
+      createElement(DeckSlide, {
+        slide: meaning!,
+        finding: mixed,
+        dataset,
+        activeFocus: null,
+      }),
+    );
+
+    // The list must not blanket-annotate; the class belongs to charted tiles.
+    expect(markup).toContain('class="deck-figures"');
+    const tiles = [
+      ...markup.matchAll(/<div data-focus="\w+" class="([^"]*)">([\s\S]*?)<\/div>/g),
+    ];
+    expect(tiles).toHaveLength(2);
+    const charted = tiles.find((tile) => tile[2]!.includes(PRIOR.description));
+    const uncharted = tiles.find((tile) => tile[2]!.includes("share of everything sold"));
+    expect(charted?.[1]).toContain("deck-figures-annotated");
+    expect(uncharted?.[1]).not.toContain("deck-figures-annotated");
+    expect(uncharted?.[2]).toContain("<strong>$6.3</strong>");
+  });
+});
+
+describe("narration pacing", () => {
+  /** A clip whose `ended` we fire by hand, with no `timeupdate` before it. */
+  function fakeClip() {
+    const listeners = new Map<string, () => void>();
+    return {
+      listeners,
+      audio: {
+        currentTime: 0,
+        duration: 6,
+        src: "",
+        play: async () => undefined,
+        pause: () => undefined,
+        addEventListener: (type: string, listener: () => void) => {
+          listeners.set(type, listener);
+        },
+        removeEventListener: (type: string) => {
+          listeners.delete(type);
+        },
+      },
+    };
+  }
+
+  /*
+   * The stall this guards against, reported on a three-beat slide: the deck
+   * stopped mid-slide and no callback ever came again.
+   *
+   * The burst below is REAL — `narration-player.ts` fires every beat that
+   * `timeupdate` missed (it ticks ~4Hz) in one synchronous while loop, so
+   * `advance` runs three times before React re-renders once. Reading the beat
+   * from component state there returned the same stale value on every call, so
+   * all three took the "next beat" branch and left the cursor past the end of
+   * the list — the deck never reached the next slide.
+   */
+  it("walks a whole slide when the clip drains every beat in one burst", async () => {
+    const clip = fakeClip();
+    let calls = 0;
+    const player = createNarrationPlayer({
+      speak: async () => ({ audio: "", contentType: "audio/mpeg", beatEndsSeconds: null }),
+      createAudio: () => clip.audio,
+      bytesToUrl: () => "blob:test",
+      revokeUrl: () => undefined,
+      onBeat: () => {
+        calls += 1;
+      },
+      onSpeakingChange: () => undefined,
+      onAvailableChange: () => undefined,
+    });
+
+    player.play(["one", "two", "three"]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    clip.listeners.get("ended")?.();
+    expect(calls).toBe(3);
+
+    // A cursor that is current at the moment of each call walks the beats and
+    // hands over to the next slide exactly once.
+    let beat = 0;
+    const moves: NarrationMove[] = [];
+    for (let call = 0; call < calls; call += 1) {
+      const move = nextNarrationMove(beat, 3, false);
+      moves.push(move);
+      if (move.kind === "beat") beat = move.beat;
+    }
+    expect(moves.map((move) => move.kind)).toEqual(["beat", "beat", "slide"]);
+    expect(beat).toBeLessThan(3);
+
+    // A cursor that only changes on re-render never leaves the beat branch —
+    // that is the stall, stated so a future edit cannot quietly restore it.
+    const stale = Array.from({ length: calls }, () => nextNarrationMove(0, 3, false));
+    expect(stale.every((move) => move.kind === "beat")).toBe(true);
+  });
+
+  it("ends the deck rather than the slide on the last beat of the last slide", () => {
+    expect(nextNarrationMove(1, 2, true)).toEqual({ kind: "end" });
+    expect(nextNarrationMove(1, 2, false)).toEqual({ kind: "slide" });
+    // A silent slide has no beats at all and must still move on.
+    expect(nextNarrationMove(0, 0, false)).toEqual({ kind: "slide" });
   });
 });

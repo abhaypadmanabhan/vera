@@ -1,7 +1,30 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { mockAnalyst } from "@/lib/mock/engine";
 import { resolveUpload } from "@/lib/datasets";
-import type { AnalysisRequest, StageEvent } from "@/lib/types";
+import type { AnalysisRequest, Finding, StageEvent } from "@/lib/types";
+
+type VerifiedFinding = Extract<Finding, { verdict: "verified" }>;
+
+/** Run the mock over a CSV written inline and hand back the finding it produced. */
+async function verifiedFinding(content: string): Promise<VerifiedFinding> {
+  vi.useFakeTimers();
+  const events: StageEvent[] = [];
+  const pending = (async () => {
+    for await (const event of mockAnalyst.run({
+      question: "What is the total?",
+      dataset: resolveUpload({ filename: "measures.csv", content }),
+    })) {
+      events.push(event);
+    }
+  })();
+  await vi.runAllTimersAsync();
+  await pending;
+  const event = events.find((candidate) => candidate.type === "finding");
+  if (event?.type !== "finding" || event.finding.verdict !== "verified") {
+    throw new Error("expected a verified finding");
+  }
+  return event.finding;
+}
 
 const request = (question: string): AnalysisRequest => ({
   question,
@@ -72,26 +95,8 @@ describe("mockAnalyst", () => {
  */
 describe("choosing which column to total", () => {
   const measuredColumn = async (header: string, rows: string[]): Promise<string> => {
-    const events: StageEvent[] = [];
-    vi.useFakeTimers();
-    const pending = (async () => {
-      for await (const event of mockAnalyst.run({
-        question: "What is the total?",
-        dataset: resolveUpload({
-          filename: "measures.csv",
-          content: `${header}\n${rows.join("\n")}\n`,
-        }),
-      })) {
-        events.push(event);
-      }
-    })();
-    await vi.runAllTimersAsync();
-    await pending;
-    const finding = events.find((event) => event.type === "finding");
-    if (finding?.type !== "finding" || finding.finding.verdict !== "verified") {
-      throw new Error("expected a verified finding");
-    }
-    return finding.finding.grounding.columns.join(",");
+    const finding = await verifiedFinding(`${header}\n${rows.join("\n")}\n`);
+    return finding.grounding.columns.join(",");
   };
 
   // The control column must be one the OLD substring regex ACCEPTED, or both
@@ -122,5 +127,54 @@ describe("choosing which column to total", () => {
     ]);
     expect(columns).toContain("Sales");
     expect(columns).not.toContain("OrderYear");
+  });
+});
+
+/*
+ * Macroscope on PR #41/#42 (Medium ×4). Mock mode is a surface the builder
+ * demos, so a figure the code panel beside it could not have produced is the
+ * dishonesty PRD §6 exists to prevent — even though nothing executes.
+ */
+describe("the mock only claims what its own code and cells support", () => {
+  it("cleans a currency column in the code it displays, not just in TypeScript", async () => {
+    const finding = await verifiedFinding('Region,Amount\nWest,"$1,000.50"\nEast,$2.00\n');
+    expect(finding.value).toBe(1002.5);
+
+    const lines = finding.code.source.split("\n");
+    const cleaned = lines.findIndex((line) => line.includes("pd.to_numeric("));
+    const summed = lines.findIndex((line) => line.includes(".sum()"));
+
+    // `.sum()` on "$1,000.50" concatenates strings in pandas; round() then raises.
+    expect(cleaned).toBeGreaterThanOrEqual(0);
+    expect(finding.code.source).toContain('df["Amount"] = pd.to_numeric(');
+    expect(finding.code.source).toContain('str.replace(r"[$,%\\s]", "", regex=True)');
+    expect(cleaned).toBeLessThan(summed);
+  });
+
+  it("skips a blank cell instead of averaging it in as a zero", async () => {
+    const finding = await verifiedFinding("Region,Sales\nWest,10\nEast,\n");
+    expect(finding.value).toBe(10);
+    // One row has a value. The average is 10, not 10/2.
+    expect(finding.execution.contextValues.per_record).toBe(10);
+    // And East never reported anything, so it is not a subtotal of 0.
+    expect(finding.context.map((figure) => figure.name)).toEqual(["West"]);
+  });
+
+  it("reports zero records for a header-only file rather than a leftover 24", async () => {
+    const finding = await verifiedFinding("Region,Sales\n");
+    expect(finding.value).toBe(0);
+    expect(finding.claim).toContain("0 records");
+    expect(finding.execution.stdout.trim()).toBe("0");
+    expect(finding.grounding.rowCount).toBe(0);
+  });
+
+  it("grounds every column its context figures cite", async () => {
+    const finding = await verifiedFinding("Region,Sales\nWest,100\nEast,50\n");
+    const cited = [...new Set(finding.context.flatMap((figure) => figure.columnsUsed))].sort();
+
+    // The fixture only discriminates if the breakdown really cites the category.
+    expect(cited).toEqual(["Region", "Sales"]);
+    for (const column of cited) expect(finding.grounding.columns).toContain(column);
+    expect(finding.grounding.sampleCells.some((cell) => cell.column === "Region")).toBe(true);
   });
 });

@@ -226,6 +226,72 @@ const MODIFIERS = new Set([
   "an",
   "more",
   "other",
+  // Determiners and possessives: "how many of these are duplicates?" counts
+  // duplicates, not "these". Before the subject phrase was isolated these were
+  // harmless — now they would be mistaken for the subject itself.
+  "this",
+  "that",
+  "these",
+  "those",
+  "each",
+  "every",
+  "any",
+  "all",
+  "our",
+  "my",
+  "your",
+  "their",
+  "its",
+]);
+
+/**
+ * Where the counted noun phrase stops.
+ *
+ * Everything from the first verb or preposition onward says where to look, not
+ * what is being counted: "how many directors are in this dataset" counts
+ * directors, and "in this dataset" is scenery. Reading the whole sentence as
+ * the subject is what let one meta word ("dataset") and one recognised
+ * qualifier ("by country") each excuse a subject the file never records.
+ */
+const SUBJECT_END = new Set([
+  "is",
+  "are",
+  "was",
+  "were",
+  "do",
+  "does",
+  "did",
+  "has",
+  "have",
+  "had",
+  "there",
+  "in",
+  "on",
+  "at",
+  "by",
+  "for",
+  "from",
+  "with",
+  "per",
+  "to",
+  "into",
+  "over",
+  "under",
+  "about",
+  "than",
+  "across",
+  "between",
+  "during",
+  "within",
+  "among",
+  "we",
+  "i",
+  "you",
+  "they",
+  "it",
+  "which",
+  "and",
+  "or",
 ]);
 
 /**
@@ -241,23 +307,34 @@ function unrecordedSubject(
   const match = /\bhow\s+(?:many|much)\s+([a-z][a-z\s-]*)/i.exec(question);
   if (!match?.[1]) return null;
 
-  const asked = words(question);
-  if (asked.some((word) => META_WORDS.has(word))) return null;
+  /*
+   * Both halves below judge the COUNTED SUBJECT, never the whole sentence.
+   * Judging the sentence meant any meta word anywhere returned early ("how many
+   * directors are in this dataset?" was excused by "dataset") and any
+   * recognised word anywhere counted as recognition ("how many directors are
+   * there by country?" was excused by "country") — the guardrail answered a
+   * question it had never actually asked.
+   */
+  const phrase: string[] = [];
+  for (const word of words(match[1])) {
+    if (SUBJECT_END.has(word)) break;
+    if (MODIFIERS.has(word)) continue;
+    phrase.push(word);
+  }
+  if (phrase.length === 0) return null;
 
-  const subject = words(match[1]).find(
-    (word) => !MODIFIERS.has(word) && !META_WORDS.has(word),
-  );
-  if (!subject) return null;
+  // A question about the data as data is always fair game.
+  if (phrase.some((word) => META_WORDS.has(word))) return null;
 
   const vocabulary = fileVocabulary(profile);
-  const recognised = asked.some((word) =>
+  const recognised = phrase.some((word) =>
     variants(word).some((form) => vocabulary.has(form)),
   );
   if (recognised) return null;
 
   return refusal(
     "missing_information",
-    `This file does not record ${subject}.`,
+    `This file does not record ${phrase[0]}.`,
   );
 }
 

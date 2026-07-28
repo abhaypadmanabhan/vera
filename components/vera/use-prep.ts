@@ -83,6 +83,14 @@ export function usePrepare() {
   const abortRef = useRef<AbortController | null>(null);
 
   const prepare = useCallback(async (file: File) => {
+    // The newest selection always wins, and a rejected file is still a
+    // selection. Aborting after the validation check meant a prep already in
+    // flight kept streaming: its `prep-report` landed on top of the rejection
+    // message and installed the file the reader had just replaced as the
+    // active dataset — an answer about the wrong file, with an error on screen.
+    abortRef.current?.abort();
+    abortRef.current = null;
+
     // The money rule: guard in the browser, before a byte reaches a paid route.
     const verdict = acceptFile(file);
     if (!verdict.ok) {
@@ -90,7 +98,6 @@ export function usePrepare() {
       return;
     }
 
-    abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
     setState({ ...IDLE, filename: file.name, isPreparing: true });
@@ -111,6 +118,11 @@ export function usePrepare() {
       }
 
       for await (const raw of readEventStream(response.body)) {
+        // Aborting is not enough on its own: `readEventStream` yields every
+        // event it already parsed out of a delivered chunk without touching the
+        // reader again, so a superseded run can still hand back two or three
+        // events after its signal fires. Only the current run may write state.
+        if (abortRef.current !== controller) return;
         const event = raw as unknown as PrepWireEvent;
         if (event.type === "prep-stage") {
           const message: PrepStageMessage = {
@@ -137,7 +149,12 @@ export function usePrepare() {
         error: error instanceof Error ? error.message : "Vera could not prepare that file.",
       }));
     } finally {
-      setState((s) => (s.isPreparing ? { ...s, isPreparing: false } : s));
+      // Only the run that is still the current one may declare prep finished.
+      // Unguarded, an aborted run cleared the flag while its replacement was
+      // still preparing, and the screen went idle mid-run.
+      if (abortRef.current === controller) {
+        setState((s) => (s.isPreparing ? { ...s, isPreparing: false } : s));
+      }
     }
   }, []);
 

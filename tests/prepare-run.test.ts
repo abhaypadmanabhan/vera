@@ -2,8 +2,10 @@ import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { usePrepare, type PrepState } from "@/components/vera/use-prep";
 import type { CodeExecutor } from "@/lib/codegen/retry";
+import { LIMITS } from "@/lib/config";
 import { contentHash } from "@/lib/datasets";
 import {
   buildAuditProgram,
@@ -563,6 +565,31 @@ describe("prepareDataset", () => {
     );
   });
 
+  /*
+   * Macroscope on PR #41, and a money finding. `timeoutMs` is a PER-CALL cap
+   * and a prep run makes two calls, so passing the whole-run budget let one
+   * stuck cleaning plus one stuck audit bill ~180s of paid sandbox time against
+   * a documented 90s budget.
+   */
+  it("caps each sandbox call at the per-execution timeout", async () => {
+    const requests: Parameters<CodeExecutor["execute"]>[0][] = [];
+
+    await prepareDataset(DATASET, {
+      mockMode: true,
+      executor: successfulExecutor(requests),
+    });
+
+    expect(requests).toHaveLength(2);
+    expect(requests.map((request) => request.timeoutMs)).toEqual([
+      LIMITS.executionTimeoutMs,
+      LIMITS.executionTimeoutMs,
+    ]);
+    // Every call a prep run makes, added up, still fits the budget it claims.
+    expect(
+      requests.reduce((total, request) => total + request.timeoutMs, 0),
+    ).toBeLessThanOrEqual(LIMITS.runBudgetMs);
+  });
+
   it("re-profiles the cleaned file after prep adds mixed-unit columns", async () => {
     const mixedUnits: ResolvedDataset = {
       ...DATASET,
@@ -1022,6 +1049,193 @@ describe("the prep report store", () => {
     expect(getPrep("eviction-0")).toBeUndefined();
     expect(getPrep("eviction-1")).toBe(report);
     expect(getPrep("eviction-8")).toBe(report);
+  });
+});
+
+/**
+ * The client half of prep. This suite has no DOM, so the hook runs against a
+ * stand-in for React's dispatcher: one state cell, one ref cell, and
+ * `useCallback` as identity. That is the entire React surface `usePrepare`
+ * touches, and the defects below are entirely about which of its own setState
+ * calls are allowed to land once a second file has been chosen.
+ */
+const reactStub = vi.hoisted(() => {
+  let cell: unknown;
+  let seeded = false;
+  const refs: { current: unknown }[] = [];
+  let cursor = 0;
+
+  return {
+    reset(): void {
+      cell = undefined;
+      seeded = false;
+      refs.length = 0;
+      cursor = 0;
+    },
+    useState(initial: unknown): [unknown, (next: unknown) => void] {
+      if (!seeded) {
+        cell = initial;
+        seeded = true;
+      }
+      return [
+        cell,
+        (next: unknown) => {
+          cell =
+            typeof next === "function"
+              ? (next as (previous: unknown) => unknown)(cell)
+              : next;
+        },
+      ];
+    },
+    useRef(initial: unknown): { current: unknown } {
+      const index = cursor;
+      cursor++;
+      const existing = refs[index];
+      if (existing) return existing;
+      const created = { current: initial };
+      refs[index] = created;
+      return created;
+    },
+    state(): unknown {
+      return cell;
+    },
+  };
+});
+
+vi.mock("react", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react")>();
+  return {
+    ...actual,
+    useState: reactStub.useState,
+    useRef: reactStub.useRef,
+    useCallback: (callback: unknown) => callback,
+  };
+});
+
+class StubFileReader {
+  result: string | null = null;
+  onload: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+
+  readAsText(file: unknown): void {
+    this.result = (file as { content: string }).content;
+    queueMicrotask(() => this.onload?.());
+  }
+}
+
+function stubFile(name: string, content: string): File {
+  return { name, size: content.length, content } as unknown as File;
+}
+
+function sendEvent(
+  controller: ReadableStreamDefaultController<Uint8Array>,
+  event: Record<string, unknown>,
+): void {
+  controller.enqueue(
+    new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`),
+  );
+}
+
+/** Lets every queued microtask and the stream reader settle. */
+async function settle(): Promise<void> {
+  for (let turn = 0; turn < 4; turn++) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+}
+
+function stubPrepRoute(): {
+  signals: AbortSignal[];
+  streams: ReadableStreamDefaultController<Uint8Array>[];
+} {
+  const signals: AbortSignal[] = [];
+  const streams: ReadableStreamDefaultController<Uint8Array>[] = [];
+
+  reactStub.reset();
+  vi.stubGlobal("FileReader", StubFileReader);
+  vi.stubGlobal(
+    "fetch",
+    async (_input: unknown, init?: { signal?: AbortSignal }) => {
+      if (init?.signal) signals.push(init.signal);
+      return {
+        ok: true,
+        body: new ReadableStream<Uint8Array>({
+          start(controller) {
+            streams.push(controller);
+          },
+        }),
+      };
+    },
+  );
+
+  return { signals, streams };
+}
+
+describe("usePrepare", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  /*
+   * Macroscope on PR #41. The validation failure returned before aborting, so
+   * the prep already in flight kept streaming: its `prep-report` landed on top
+   * of the rejection and installed the file the reader had just replaced as the
+   * active dataset — an answer about the wrong file, with an error on screen.
+   */
+  it("abandons the prep in flight when the next file is rejected", async () => {
+    const { signals, streams } = stubPrepRoute();
+    const { prepare } = usePrepare();
+
+    void prepare(stubFile("sales.csv", "Region,Sales\nWest,10\n"));
+    await settle();
+    sendEvent(streams[0] as ReadableStreamDefaultController<Uint8Array>, {
+      type: "prep-stage",
+      stage: "cleaning",
+      status: "active",
+      detail: "Tidying only the issues the data can prove.",
+    });
+    await settle();
+    expect((reactStub.state() as PrepState).isPreparing).toBe(true);
+
+    await prepare(stubFile("notes.txt", "not a csv"));
+
+    expect(signals[0]?.aborted).toBe(true);
+    expect((reactStub.state() as PrepState).error).toMatch(/csv/i);
+
+    // The events already parsed out of a delivered chunk still arrive.
+    sendEvent(streams[0] as ReadableStreamDefaultController<Uint8Array>, {
+      type: "prep-report",
+      summary: { filename: "sales.csv" },
+      report: { ok: true },
+    });
+    await settle();
+
+    const state = reactStub.state() as PrepState;
+    expect(state.summary).toBeNull();
+    expect(state.upload).toBeNull();
+    expect(state.filename).toBe("notes.txt");
+    expect(state.error).toMatch(/csv/i);
+  });
+
+  /*
+   * The same report, second defect: the superseded run's `finally` cleared
+   * `isPreparing` unconditionally, so the screen went idle while its
+   * replacement was still preparing.
+   */
+  it("does not report idle while a newer file is still preparing", async () => {
+    const { streams } = stubPrepRoute();
+    const { prepare } = usePrepare();
+
+    void prepare(stubFile("first.csv", "Region,Sales\nWest,10\n"));
+    await settle();
+    void prepare(stubFile("second.csv", "Region,Sales\nEast,20\n"));
+    await settle();
+    expect((reactStub.state() as PrepState).filename).toBe("second.csv");
+
+    // The abandoned run's stream ends after the newer one has taken over.
+    (streams[0] as ReadableStreamDefaultController<Uint8Array>).close();
+    await settle();
+
+    expect((reactStub.state() as PrepState).isPreparing).toBe(true);
   });
 });
 

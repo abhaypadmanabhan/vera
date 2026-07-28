@@ -141,15 +141,29 @@ export interface VerifyContextInput {
   }>;
   executed: Record<string, number | string>;
   profile: DatasetProfile;
+  /**
+   * The columns the FINDING was verified against — `grounding.columns` from
+   * `verifyGrounding`. Callers on the real path must pass it.
+   *
+   * "Exists in the file" was never the claim being made. A figure could name
+   * any real column, be traced to none of it, and still be presented beside the
+   * headline as though the code had read it. Existing is not evidence; being
+   * part of what actually ran is.
+   */
+  groundedColumns?: readonly string[];
 }
 
 /**
  * A context figure survives only if it was declared, executed, and every
- * column it claims exists in this file. Anything else is dropped without
- * comment: a figure Vera cannot trace is one she does not mention (PRD §6).
+ * column it claims was part of the run that produced the finding. Anything
+ * else is dropped without comment: a figure Vera cannot trace is one she does
+ * not mention (PRD §6).
  */
 export function verifyContextFigures(input: VerifyContextInput): ContextFigure[] {
   const known = new Set(input.profile.columns.map((column) => column.name));
+  const grounded = input.groundedColumns
+    ? new Set(input.groundedColumns)
+    : null;
   const kept: ContextFigure[] = [];
 
   for (const figure of input.declared) {
@@ -158,6 +172,7 @@ export function verifyContextFigures(input: VerifyContextInput): ContextFigure[]
     const columns = figure.columnsUsed.filter((column) => column.trim() !== "");
     if (columns.length === 0) continue;
     if (columns.some((column) => !known.has(column))) continue;
+    if (grounded && columns.some((column) => !grounded.has(column))) continue;
     kept.push({
       name: figure.name,
       description: figure.description,

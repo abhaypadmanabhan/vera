@@ -323,11 +323,27 @@ function sameTokens(left: PythonToken[], rightCode: string): boolean {
 
 type ProfileColumn = DatasetProfile["columns"][number];
 
+/**
+ * The number half of a mixed-unit value — the `-5` in `-5 kg`.
+ *
+ * The sign is part of the pattern, not an edge case. Macroscope on PR #41: with
+ * `\d+` alone, samples of `5 kg` and `3 lb` established the column and a real
+ * row of `-5 kg` then failed `str.extract`, so that row's amount and unit came
+ * out NaN and empty — a valid quantity destroyed in silence. Detection and
+ * extraction both read this one constant so they cannot drift: every value the
+ * column was recognised by is a value the transform can actually split.
+ */
+const AMOUNT_PATTERN = "[+-]?\\d+(?:\\.\\d+)?";
+/** A cell that is exactly one amount and one unit. */
+const AMOUNT_UNIT = new RegExp(`^\\s*(${AMOUNT_PATTERN})\\s+(\\S+)\\s*$`);
+/** The same shape, reading only the leading pair, for recognising the column. */
+const AMOUNT_UNIT_LEAD = new RegExp(`^\\s*${AMOUNT_PATTERN}\\s+(\\S+)`);
+
 function mixedUnitColumn(column: ProfileColumn): boolean {
   if (column.kind !== "text") return false;
   const units = new Set<string>();
   for (const value of column.sampleValues) {
-    const match = /^\s*\d+(?:\.\d+)?\s+(\S+)/.exec(value);
+    const match = AMOUNT_UNIT_LEAD.exec(value);
     if (match?.[1]) units.add(match[1]);
   }
   return units.size > 1;
@@ -395,6 +411,36 @@ function categoryNormalisationOffered(column: ProfileColumn): boolean {
 }
 
 /**
+ * Whether the two split transforms are actually available for this column.
+ *
+ * `taken` is every column name already in the file. Both transforms invent a
+ * column, and a file that already owns that name would have been assigned
+ * straight over. Every gate over these transforms — the prompt menu, the mock
+ * artifact, and the English fix sentences — asks these two functions, because
+ * the 2026-07-26 lesson is that two gates derived from different evidence
+ * disagree and the honest path is the one that trips the disagreement: the
+ * withdrawn transform was still being described to the reader and still being
+ * performed by the mock, which wrote a duplicate header.
+ */
+function mixedUnitSplitApplies(
+  column: ProfileColumn,
+  taken: ReadonlySet<string>,
+): boolean {
+  return (
+    mixedUnitColumn(column) &&
+    !taken.has(`${column.name}_amount`) &&
+    !taken.has(`${column.name}_unit`)
+  );
+}
+
+function multiValueSplitApplies(
+  column: ProfileColumn,
+  taken: ReadonlySet<string>,
+): boolean {
+  return multiValueSplitOffered(column) && !taken.has(`${column.name}_list`);
+}
+
+/**
  * The prep line for one column, or null when no transform is justified.
  *
  * `taken` is every column name already in the file. The mixed-unit and
@@ -410,7 +456,6 @@ function transformFor(
   taken: ReadonlySet<string>,
 ): string | null {
   const name = JSON.stringify(column.name);
-  const free = (...derived: string[]) => derived.every((key) => !taken.has(key));
   if (
     column.kind === "date" &&
     column.dateFormat &&
@@ -419,20 +464,13 @@ function transformFor(
   ) {
     return `df[${name}] = pd.to_datetime(df[${name}], format=${JSON.stringify(column.dateFormat)})`;
   }
-  if (
-    mixedUnitColumn(column) &&
-    free(`${column.name}_amount`, `${column.name}_unit`)
-  ) {
+  if (mixedUnitSplitApplies(column, taken)) {
     const amountName = JSON.stringify(`${column.name}_amount`);
     const unitName = JSON.stringify(`${column.name}_unit`);
-    return `df[[${amountName},${unitName}]] = df[${name}].astype("string").str.extract(r"^\\s*(\\d+(?:\\.\\d+)?)\\s+(\\S+)\\s*$").rename(columns={0:${amountName},1:${unitName}}).assign(**{${amountName}:lambda split:pd.to_numeric(split[${amountName}], errors="coerce")})`;
+    return `df[[${amountName},${unitName}]] = df[${name}].astype("string").str.extract(r"^\\s*(${AMOUNT_PATTERN})\\s+(\\S+)\\s*$").rename(columns={0:${amountName},1:${unitName}}).assign(**{${amountName}:lambda split:pd.to_numeric(split[${amountName}], errors="coerce")})`;
   }
   const separator = multiValueSeparator(column);
-  if (
-    multiValueSplitOffered(column) &&
-    separator &&
-    free(`${column.name}_list`)
-  ) {
+  if (multiValueSplitApplies(column, taken) && separator) {
     const listName = JSON.stringify(`${column.name}_list`);
     const separatorLiteral = JSON.stringify(separator);
     return `df[${listName}] = df[${name}].apply(lambda value:[part.strip() for part in value.split(${separatorLiteral})] if isinstance(value, str) and ${separatorLiteral} in value else pd.NA)`;
@@ -528,10 +566,14 @@ function allowedFixes(profile: DatasetProfile): Set<PrepFix> {
   ) {
     allowed.add(PREP_FIXES[2]);
   }
-  if (profile.columns.some(mixedUnitColumn)) {
+  // Same gate as the transform menu, not a second one derived from the samples
+  // alone: a sentence promising a split that `prepCode` cannot carry out is a
+  // claim about work that never happened.
+  const taken = new Set(profile.columns.map((column) => column.name));
+  if (profile.columns.some((column) => mixedUnitSplitApplies(column, taken))) {
     allowed.add(PREP_FIXES[3]);
   }
-  if (profile.columns.some(multiValueSplitOffered)) {
+  if (profile.columns.some((column) => multiValueSplitApplies(column, taken))) {
     allowed.add(PREP_FIXES[4]);
   }
   if (profile.columns.some(categoryNormalisationOffered)) {
@@ -652,23 +694,17 @@ export function createMockPreparedArtifact(
     if (!transformFor(column, existingNames)) continue;
     const index = rawHeader.indexOf(column.name);
     if (index < 0) continue;
-    if (mixedUnitColumn(column)) {
+    if (mixedUnitSplitApplies(column, existingNames)) {
       addColumn(`${column.name}_amount`, (row) => {
-        const match = /^\s*(\d+(?:\.\d+)?)\s+(\S+)\s*$/.exec(
-          row[index] ?? "",
-        );
-        return match?.[1] ?? "";
+        return AMOUNT_UNIT.exec(row[index] ?? "")?.[1] ?? "";
       });
       addColumn(`${column.name}_unit`, (row) => {
-        const match = /^\s*(\d+(?:\.\d+)?)\s+(\S+)\s*$/.exec(
-          row[index] ?? "",
-        );
-        return match?.[2] ?? "";
+        return AMOUNT_UNIT.exec(row[index] ?? "")?.[2] ?? "";
       });
       continue;
     }
     const separator = multiValueSeparator(column);
-    if (multiValueSplitOffered(column) && separator) {
+    if (multiValueSplitApplies(column, existingNames) && separator) {
       addColumn(`${column.name}_list`, (row) => {
         const value = row[index] ?? "";
         return value.includes(separator)

@@ -6,7 +6,7 @@ import {
   type FireworksClient,
 } from "../fireworks/client";
 import type { DatasetProfile, Valence } from "../types";
-import { validatePythonPolicy } from "./python-policy";
+import { PolicyViolationError, validatePythonPolicy } from "./python-policy";
 
 export interface CodegenRequest {
   question: string;
@@ -159,6 +159,10 @@ Rules:
   be exactly one of those three words.
 - Do not print debugging text, tables, labels, markdown, or any other line.
 - columnsUsed must list every CSV column read by the computation.
+- Every column a context figure names must ALSO appear in the top-level columnsUsed. That list is
+  the one checked against your program and shown to the reader as the source of the answer, so a
+  column named only inside a context figure would be presented as read with nothing proving it
+  was. Naming one there and not at the top level gets the whole response rejected.
 - max_tokens is bounded, so keep the program compact.
 
 Dataset context (profile plus at most five rows, never the full CSV):
@@ -201,11 +205,42 @@ function assertSafeCode(
   });
 
   const known = new Set(profile.columns.map((column) => column.name));
+  /*
+   * `validatePythonPolicy` above pins the top-level `columnsUsed` to the
+   * program: a name the code never references is rejected. A context figure's
+   * `columnsUsed` was pinned to nothing but existence, so a response could
+   * compute a comparison from one column, declare the figure as grounded in
+   * another, and have the deck present that column as the source. Grounding
+   * that does not correspond to what the code did is the exact failure the
+   * safeguard exists to prevent (PRD §6) — so every column a figure names must
+   * be one the program itself reported reading.
+   */
+  const reported = new Set(output.columnsUsed);
   for (const figure of output.context) {
     const unknown = figure.columnsUsed.filter((column) => !known.has(column));
     if (unknown.length > 0) {
       throw new Error(
         `Context figure "${figure.name}" claims columns this file does not have: ${unknown.join(", ")}.`,
+      );
+    }
+    const unreported = figure.columnsUsed.filter(
+      (column) => !reported.has(column),
+    );
+    if (unreported.length > 0) {
+      /*
+       * Correctable, so it is a policy violation rather than a fatal error: the
+       * retry loop hands this message and the program back to the model instead
+       * of losing the finding. `tasks/lessons.md` 2026-07-26 — a model that read
+       * the column and merely under-reported it at the top level is behaving
+       * honestly, and a gate that kills its whole answer for that is the failure
+       * mode that took out live prep. python-policy.ts already throws this class
+       * for the identical rule on the top-level list.
+       */
+      throw new PolicyViolationError(
+        `Context figure "${figure.name}" claims columns the program did not report reading: ${unreported.join(
+          ", ",
+        )}. Every column a context figure names must also appear in the top-level columnsUsed.`,
+        output.code,
       );
     }
   }
