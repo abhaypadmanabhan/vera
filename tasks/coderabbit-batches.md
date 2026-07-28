@@ -3,6 +3,9 @@
 PR #35 was skipped: 120 files, over CodeRabbit's 100-file limit. The cause is that `dev`
 was never kept current, so one PR carries all of phases 2-11.
 
+Batch 6 is `feat/p2-fireworks` itself, not a frozen SHA — anything committed to the branch after
+this plan was written belongs in the last batch, and pointing at the branch keeps that true.
+
 Splitting the SAME commits into stacked batches gets every slice under the limit. Nothing is
 rewritten, rebased or cherry-picked — each branch is a plain pointer at an existing commit that is
 already on `feat/p2-fireworks`. The history that lands on `dev` is byte-identical to PR #35's.
@@ -19,7 +22,7 @@ one slice is 104 — still over. Batches of 20 give 9 PRs and no benefit over 30
 | 3 | `review/03-braintrust-voice-landing` | `review/02-safeguard-cold-open` | `50e452a` | 59 (58) |
 | 4 | `review/04-prepare-upload-routes` | `review/03-braintrust-voice-landing` | `6c685b9` | 70 (69) |
 | 5 | `review/05-phase11-narration` | `review/04-prepare-upload-routes` | `2f57cd5` | 43 (42) |
-| 6 | `review/06-v4-redesign` | `review/05-phase11-narration` | `9c7f9ea` | 68 (67) |
+| 6 | `feat/p2-fireworks` | `review/05-phase11-narration` | branch tip | 68 (67) |
 
 Tip commit subjects:
 
@@ -28,7 +31,7 @@ Tip commit subjects:
 - **3** `50e452a` — feat(landing): add official sponsor logos
 - **4** `6c685b9` — feat(api): rate-limited prepare route, streaming real prep stages
 - **5** `2f57cd5` — docs: CP-9, phase 11 P0 step A results, and the lesson it earned
-- **6** `9c7f9ea` — docs: handover for the next session
+- **6** the current tip of `feat/p2-fireworks` — the v4 redesign, the handover and this plan
 
 ## Create and push the branches
 
@@ -40,8 +43,7 @@ git branch -f review/02-safeguard-cold-open 92b45d2
 git branch -f review/03-braintrust-voice-landing 50e452a
 git branch -f review/04-prepare-upload-routes 6c685b9
 git branch -f review/05-phase11-narration 2f57cd5
-git branch -f review/06-v4-redesign 9c7f9ea
-git push -u origin review/01-scaffold-fireworks-daytona review/02-safeguard-cold-open review/03-braintrust-voice-landing review/04-prepare-upload-routes review/05-phase11-narration review/06-v4-redesign
+git push -u origin review/01-scaffold-fireworks-daytona review/02-safeguard-cold-open review/03-braintrust-voice-landing review/04-prepare-upload-routes review/05-phase11-narration
 ```
 
 ## Open the six PRs, stacked
@@ -65,7 +67,7 @@ gh pr create --base review/03-braintrust-voice-landing --head review/04-prepare-
 gh pr create --base review/04-prepare-upload-routes --head review/05-phase11-narration \
   --title "review 5/6: docs: CP-9, phase 11 P0 step A results, and the lesson it ea" \
   --body "Batch 5 of 6, split out of #35 so CodeRabbit can review it (42 files after path filters, under the 100 limit). Same commits, same order, nothing rewritten. Merge bottom-up: this one lands only after PR 4 does." 
-gh pr create --base review/05-phase11-narration --head review/06-v4-redesign \
+gh pr create --base review/05-phase11-narration --head \
   --title "review 6/6: docs: handover for the next session" \
   --body "Batch 6 of 6, split out of #35 so CodeRabbit can review it (67 files after path filters, under the 100 limit). Same commits, same order, nothing rewritten. Merge bottom-up: this one lands only after PR 5 does." 
 ```
