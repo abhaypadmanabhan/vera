@@ -171,3 +171,43 @@ paths people actually use in a hurry. Testing by scrolling smoothly hides it com
 rAF-throttled scroll/resize check that reveals anything whose top has risen above the fold line, and
 have both paths remove themselves once shown. Test it by JUMPING — `window.scrollTo(0,
 document.body.scrollHeight)` — and asserting the count of revealed elements, not by watching it.
+
+---
+
+## 2026-07-27 — A plan measured against a stale local ref is a plan for a repo that does not exist
+
+**What happened:** the CodeRabbit split was worked out carefully — six batches, worst slice 75
+files, "measured, not estimated" — and it was unexecutable. It had been measured against the local
+`dev`, which was **95 commits behind `origin/dev`**. Against the real remote, three of the six batch
+tips were *already merged* (GitHub refuses a PR with no commits between base and head), and the true
+diff was 81 commits / 125 files rather than 172 / 120. Recomputing against `origin/dev` gave four
+slices, worst case 50 — better than the plan it replaced.
+
+**Why it matters:** every number in the plan was real. `git rev-list` had not lied. The measurement
+was simply taken against a ref that no longer described the branch anyone would merge into, and
+nothing about the output says which ref it used. Following the plan literally would have created
+three empty PRs and three with wrong bases, and the failure would have looked like a GitHub problem.
+
+**How to apply:** compare against `origin/<base>`, never the local tracking branch, and `git fetch`
+first. Before acting on any inherited plan that carries measurements, re-derive one of its numbers —
+one command would have caught this. And check the cheap disqualifier before the expensive work: `git
+merge-base --is-ancestor <tip> origin/dev` decides whether a batch has anything left in it at all.
+
+---
+
+## 2026-07-27 — "Skipped" from a bot is a status, not a reason
+
+**What happened:** the four split PRs were opened and three came back `Review skipped`. The obvious
+reading — after a whole plan built around a 100-file limit — was that the slices were still too big.
+They were not: 50, 38 and 32 files. The actual reason was in the message body:
+`.coderabbit.yaml` lists only `dev` and `main` under `reviews.auto_review.base_branches`, and a
+stacked PR's base is a `review/*` branch. Same word, unrelated cause, and the fix
+(`@coderabbitai review`) was printed in the skip notice itself.
+
+**Why it matters:** the split was the fix for the previous skip, so a second skip read as the fix
+having failed. Acting on that reading means re-splitting work that did not need re-splitting.
+
+**How to apply:** read the whole message before matching it to the failure you were expecting —
+especially when a bot reuses one word for several conditions. And when a plan introduces a new base
+branch, check what the CI and review config say about base branches *before* opening the PRs; the
+config was in the repo the entire time and answers it in four lines.
