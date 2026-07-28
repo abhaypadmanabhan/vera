@@ -1,11 +1,24 @@
 import type { Metadata } from "next";
-import { Geist_Mono, Inter } from "next/font/google";
+import { Geist_Mono, Inter, Newsreader } from "next/font/google";
 import "./globals.css";
 
 /*
- * Two families, no more (DESIGN.md v3 "Typography"). Inter carries every word;
- * Geist Mono carries every figure, column name, code line and timing.
+ * Three families, one job each (DESIGN.md v4 "Typography").
+ *
+ * Newsreader is the voice: headlines, slide titles, and the headline figure. An
+ * analyst who cites her sources should read like a paper, not like a dashboard.
+ * Inter carries every other word. Geist Mono is confined to code, cell values,
+ * column names, filenames and timings — the technical surfaces, and nowhere
+ * else. Mono as a general UI font is the loudest AI tell in the vault, and it
+ * used to be Vera's default label idiom.
  */
+const newsreader = Newsreader({
+  variable: "--font-newsreader",
+  subsets: ["latin"],
+  display: "swap",
+  weight: ["400", "500", "600"],
+});
+
 const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],
@@ -41,11 +54,26 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} ${geistMono.variable} h-full`} suppressHydrationWarning>
+    <html
+      lang="en"
+      className={`${newsreader.variable} ${inter.variable} ${geistMono.variable} h-full`}
+      suppressHydrationWarning
+    >
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP }} />
       </head>
-      <body className="min-h-full bg-bg font-sans text-ink antialiased">{children}</body>
+      {/*
+        No background on `body`. `html` already paints the canvas, and a body
+        background would sit ON TOP of the `z-index: -1` field below and hide it
+        completely — the grain was invisible until this came off.
+      */}
+      <body className="min-h-full font-sans text-ink antialiased">
+        {/* The page has a background. Decorative, behind everything, inert. */}
+        <div aria-hidden className="v-field">
+          <div className="v-field-two" />
+        </div>
+        {children}
+      </body>
     </html>
   );
 }
