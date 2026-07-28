@@ -1,85 +1,36 @@
 /*
- * Powered by — a quiet auto-scrolling marquee.
+ * Powered by — four real relationships, one line each.
  *
- * Official vendor wordmarks are rendered as masks so they share the landing
- * page's muted ink in both themes without altering the source artwork.
- *
- * Motion is a single transform-only keyframe, duplicated track for a seamless
- * loop, paused on hover and killed entirely by prefers-reduced-motion.
+ * The marks themselves were spent once, in the proof strip under the hero,
+ * where recognition is worth something. Repeating them here would be a fourth
+ * variation of the same object; this section is the explanation instead, set
+ * full measure as a name-against-its-job list. The infinite marquee it replaces
+ * was motion standing in for an argument.
  */
-import styles from "./landing.module.css";
 import { Reveal, Section } from "./primitives";
-
-const SPONSORS = [
-  {
-    name: "Daytona",
-    logoClass: styles.daytonaLogo,
-    // Their official mark is a glyph alone, so the name is set beside it.
-    setsOwnName: false,
-    role: "The isolated sandbox that runs model-written code safely",
-  },
-  {
-    name: "Fireworks AI",
-    logoClass: styles.fireworksLogo,
-    role: "Writes the pandas from a profiled schema",
-  },
-  {
-    name: "Braintrust",
-    logoClass: styles.braintrustLogo,
-    role: "The offline benchmark behind the accuracy figure",
-  },
-  {
-    name: "ElevenLabs",
-    logoClass: styles.elevenLabsLogo,
-    role: "Vera presents the finding out loud",
-  },
-] as const;
-
-function Track({ ariaHidden }: { ariaHidden: boolean }) {
-  return (
-    <ul
-      aria-hidden={ariaHidden || undefined}
-      className={`flex shrink-0 items-stretch ${styles.track}`}
-    >
-      {SPONSORS.map((sponsor) => (
-        <li
-          key={sponsor.name}
-          className="flex w-[22rem] shrink-0 flex-col justify-between gap-6 border-r border-line px-10 py-2 sm:w-[26rem]"
-        >
-          <div className="flex items-center gap-3 text-ink-muted">
-            <span
-              aria-label={"setsOwnName" in sponsor ? undefined : sponsor.name}
-              aria-hidden={"setsOwnName" in sponsor || undefined}
-              className={`${styles.logo} ${sponsor.logoClass}`}
-              role={"setsOwnName" in sponsor ? undefined : "img"}
-            />
-            {"setsOwnName" in sponsor && (
-              <span className="font-mono text-[1.375rem] font-medium tracking-[-0.02em]">
-                {sponsor.name}
-              </span>
-            )}
-          </div>
-          <p className="max-w-[30ch] text-small text-ink-muted">{sponsor.role}</p>
-        </li>
-      ))}
-    </ul>
-  );
-}
+import { SPONSORS } from "./sponsors";
 
 export function PoweredBy() {
   return (
-    <Section eyebrow="Powered by">
+    <Section className="border-t border-line py-12 sm:py-16">
       <Reveal>
-        <h2 className="max-w-[26ch] text-[clamp(2rem,5vw,3.75rem)] font-medium leading-[1.05] tracking-[-0.02em]">
+        <h2 className="v-display max-w-[26ch] text-[clamp(1.75rem,3.4vw,2.5rem)]">
           Four pieces, each doing exactly one job.
         </h2>
       </Reveal>
 
       <Reveal step={1}>
-        <div className={`${styles.marquee} mt-16 flex gap-0 overflow-hidden border-y border-line py-10`}>
-          <Track ariaHidden={false} />
-          <Track ariaHidden />
-        </div>
+        <dl className="mt-12 border-t border-line">
+          {SPONSORS.map((sponsor) => (
+            <div
+              key={sponsor.name}
+              className="grid gap-x-12 gap-y-2 border-b border-line py-6 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)] sm:items-baseline"
+            >
+              <dt className="text-body font-medium text-ink">{sponsor.name}</dt>
+              <dd className="max-w-[56ch] text-small text-ink-muted">{sponsor.role}</dd>
+            </div>
+          ))}
+        </dl>
       </Reveal>
     </Section>
   );

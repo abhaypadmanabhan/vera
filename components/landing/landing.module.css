@@ -1,23 +1,17 @@
 /*
- * Scoped to the landing page only — the shared globals.css is being edited by
- * other agents right now, so nothing here leaks out of components/landing/**.
+ * Scoped to the landing page only — globals.css is shared, so nothing here
+ * leaks out of components/landing/**.
+ *
+ * The page background used to be duplicated here as a pair of drifting washes.
+ * It now lives in globals.css as `.v-field`, mounted once in app/layout.tsx for
+ * every page; the copy has been deleted rather than left to fight with it.
  */
 
-.marquee {
-  /* Both edges fade out so the loop seam is never visible. */
-  mask-image: linear-gradient(
-    to right,
-    transparent,
-    black 8%,
-    black 92%,
-    transparent
-  );
-}
-
-.track {
-  animation: landing-marquee 48s linear infinite;
-}
-
+/*
+ * Official vendor wordmarks, rendered as masks so they take the page's own
+ * muted ink in both themes without altering the artwork. Sizes below preserve
+ * each mark's real aspect ratio at a shared ~14px cap height.
+ */
 .logo {
   display: block;
   flex: none;
@@ -29,138 +23,60 @@
 
 /*
  * Daytona ships a glyph, not a wordmark — the other three are lockups that
- * already carry their name. The glyph is set square and slightly shorter than
- * the wordmarks' cap height so it does not out-weigh them, and the name is set
+ * already carry their name. The glyph is set square and slightly taller than
+ * the wordmarks' cap height so it does not read as smaller, and the name is set
  * beside it in our own type.
  */
 .daytonaLogo {
-  width: 1.4375rem;
-  height: 1.4375rem;
+  width: 1.0625rem;
+  height: 1.0625rem;
   mask-image: url("/logos/daytona.svg");
 }
 
 .fireworksLogo {
-  width: 10.25rem;
-  height: 1.3125rem;
+  width: 6.8125rem;
+  height: 0.875rem;
   mask-image: url("/logos/fireworks.svg");
 }
 
 .braintrustLogo {
-  width: 9.1875rem;
-  height: 1.4375rem;
+  width: 5.5625rem;
+  height: 0.875rem;
   mask-image: url("/logos/braintrust.svg");
 }
 
 .elevenLabsLogo {
-  width: 10.125rem;
-  height: 1.3125rem;
+  width: 6.75rem;
+  height: 0.875rem;
   mask-image: url("/logos/elevenlabs.svg");
 }
 
-.marquee:hover .track,
-.marquee:focus-within .track {
-  animation-play-state: paused;
-}
-
-@keyframes landing-marquee {
-  from {
-    transform: translate3d(0, 0, 0);
-  }
-  to {
-    transform: translate3d(-100%, 0, 0);
-  }
-}
-
 /*
- * The benchmark bars grow to their real width once. Width is the only property
- * that moves, on the page's own settle curve, delayed to land just behind the
- * block's fade so the eye reads the label before the bar arrives.
+ * The benchmark measure. Each track fills to its real proportion once, on the
+ * page's settle curve, delayed to land just behind its own label so the eye
+ * reads the score before the bar arrives.
+ *
+ * Transform only — this used to animate `width`, which is neither on the
+ * compositor nor allowed by the motion rules.
  */
-.bar {
-  width: var(--percent);
-  animation: landing-bar-grow 900ms var(--ease-settle) both;
+.fill {
+  transform: scaleX(var(--fill));
+  animation: landing-fill 760ms var(--ease-settle) both;
   animation-delay: calc(var(--step, 0) * 90ms + 120ms);
 }
 
-@keyframes landing-bar-grow {
+@keyframes landing-fill {
   from {
-    width: 0%;
+    transform: scaleX(0);
   }
   to {
-    width: var(--percent);
-  }
-}
-
-/*
- * The page background. Two very large, very faint accent washes drifting on a
- * long cycle — enough to keep a white page from reading as dead, far too slow
- * and too pale to compete with the type. Nothing throbs, nothing spins.
- */
-.backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  overflow: hidden;
-}
-
-.wash {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(80px);
-  will-change: transform;
-}
-
-.washOne {
-  top: -22vmax;
-  left: -14vmax;
-  width: 62vmax;
-  height: 62vmax;
-  background: radial-gradient(circle, var(--color-accent) 0%, transparent 68%);
-  opacity: 0.055;
-  animation: landing-drift-one 46s var(--ease-settle) infinite alternate;
-}
-
-.washTwo {
-  right: -20vmax;
-  bottom: -26vmax;
-  width: 54vmax;
-  height: 54vmax;
-  background: radial-gradient(circle, var(--color-accent) 0%, transparent 70%);
-  opacity: 0.045;
-  animation: landing-drift-two 58s var(--ease-settle) infinite alternate;
-}
-
-@keyframes landing-drift-one {
-  from {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  to {
-    transform: translate3d(7vmax, 5vmax, 0) scale(1.12);
-  }
-}
-
-@keyframes landing-drift-two {
-  from {
-    transform: translate3d(0, 0, 0) scale(1.08);
-  }
-  to {
-    transform: translate3d(-6vmax, -4vmax, 0) scale(1);
+    transform: scaleX(var(--fill));
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .track {
-    animation: none;
-  }
-  .marquee {
-    overflow-x: auto;
-  }
-  /* The bar keeps its real width; it simply never travels to get there. */
-  .bar {
-    animation: none;
-  }
-  .wash {
+  /* The track keeps its real proportion; it simply never travels to get there. */
+  .fill {
     animation: none;
   }
 }

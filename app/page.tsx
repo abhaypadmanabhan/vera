@@ -1,22 +1,27 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import Link from "next/link";
 
-import landing from "@/components/landing/landing.module.css";
 import { HowSheWorks } from "@/components/landing/how-she-works";
 import { Hero } from "@/components/landing/hero";
 import { PoweredBy } from "@/components/landing/powered-by";
-import { Reveal, Section, SpeakToVera } from "@/components/landing/primitives";
+import { Cta, Reveal, Section } from "@/components/landing/primitives";
+import { ProofStrip } from "@/components/landing/proof-strip";
 import { TheProof, type BenchmarkFacts } from "@/components/landing/the-proof";
 import { ThreeAnswers } from "@/components/landing/three-answers";
+import { ThemeToggle } from "@/components/vera/theme-toggle";
 
 /*
  * The narration surface, and the site root: the builder walks judges down this
  * page, then clicks "Speak to Vera" into the live demo at `/ask`.
  *
- * Every figure is either recorded and verified (the three answers) or read from
- * eval/results.json at build time (the benchmark). Nothing is invented, and no
- * external call happens at request time — the page renders with .env.local
- * absent.
+ * Every figure is either recorded and verified (the hero panel, the three
+ * answers — see components/landing/recorded.ts) or read from eval/results.json
+ * at build time (the benchmark). Nothing is invented, and no external call
+ * happens at request time — the page renders with .env.local absent.
+ *
+ * The page background is `.v-field`, mounted globally in app/layout.tsx. This
+ * file no longer paints one of its own.
  */
 
 type ResultsFile = {
@@ -45,38 +50,61 @@ export default async function WelcomePage() {
 
   return (
     <main className="mx-auto w-full">
-      {/* Decorative only — behind everything, ignored by assistive tech. */}
-      <div aria-hidden className={landing.backdrop}>
-        <div className={`${landing.wash} ${landing.washOne}`} />
-        <div className={`${landing.wash} ${landing.washTwo}`} />
-      </div>
+      <Section as="header" wide className="pt-6">
+        <div className="flex items-center justify-between gap-4">
+          <span className="text-body font-medium tracking-[-0.01em] text-ink">Vera</span>
+          <nav aria-label="Site" className="flex items-center gap-1">
+            <Link
+              href="/open"
+              className="rounded-full px-3 py-2 text-small text-ink-muted transition-colors duration-150 hover:bg-sunk hover:text-ink"
+            >
+              Cold open
+            </Link>
+            <Link
+              href="/ask"
+              className="rounded-full px-3 py-2 text-small text-ink-muted transition-colors duration-150 hover:bg-sunk hover:text-ink"
+            >
+              Ask
+            </Link>
+            <ThemeToggle />
+          </nav>
+        </div>
+      </Section>
 
-      <Hero questionCount={facts.questionCount} />
+      <Hero />
+      <ProofStrip facts={facts} />
       <ThreeAnswers />
       <HowSheWorks />
       <TheProof facts={facts} />
       <PoweredBy />
 
-      <Section className="text-center">
+      <Section className="border-t border-line pt-16 pb-16 sm:pt-24 sm:pb-24">
         <Reveal>
-          <h2 className="mx-auto max-w-[18ch] text-[clamp(2.25rem,6.5vw,5rem)] font-medium leading-[1.02] tracking-[-0.03em]">
+          <h2 className="v-display max-w-[18ch] text-[clamp(2rem,4.6vw,3.5rem)]">
             Ask her something you can check.
           </h2>
-          <p className="mx-auto mt-8 max-w-[46ch] text-lead text-ink-muted">
-            She will show you the code she ran and the cells she read. That is the point.
-          </p>
-          <div className="mt-14">
-            <SpeakToVera />
+          <div className="mt-12 flex flex-wrap items-end justify-between gap-x-16 gap-y-8">
+            <p className="max-w-[38ch] text-body text-ink-muted">
+              She will show you the code she ran and the cells she read. That is the point.
+            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <Cta href="/ask">Speak to Vera</Cta>
+              <Cta href="/open" tone="secondary">
+                Watch the cold open
+              </Cta>
+            </div>
           </div>
         </Reveal>
       </Section>
 
-      <footer className="border-t border-line px-6 py-10 sm:px-10">
-        <div className="mx-auto flex w-full max-w-[68rem] flex-wrap items-center justify-between gap-4">
-          <p className="v-label">Vera</p>
-          <p className="v-label">Every number on this page is recorded, not estimated</p>
+      <Section as="footer" className="border-t border-line py-8">
+        <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
+          <p className="text-small text-ink-muted">Vera &mdash; the analyst who shows her work</p>
+          <p className="text-small text-ink-muted">
+            Every number on this page is recorded, not estimated
+          </p>
         </div>
-      </footer>
+      </Section>
     </main>
   );
 }
