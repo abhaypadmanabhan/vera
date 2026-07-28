@@ -271,3 +271,27 @@ absorbed the same bad example from an earlier pass.
 the example are separate claims. Fix the root cause, then write the test from a case you confirmed
 yourself. And when an example turns out to be wrong, correct it where it was copied to, or the next
 reader derives a rule from a failure that cannot happen.
+
+---
+
+## 2026-07-28 — Deleting a branch that is still a base closes the PR, it does not retarget it
+
+**What happened:** merging a four-PR stack, `gh pr merge 40 --merge --delete-branch` removed
+`review/01-…`, which was #41's base. GitHub did **not** retarget #41 to `dev` — it **closed** it.
+`gh pr edit 41 --base dev` then failed with "Cannot change the base branch of a closed pull
+request", so the branch had to be pushed back, the PR reopened, and only then retargeted.
+
+The instruction that caused it was itself a correction. A reviewer had pointed out that a plain
+`gh pr merge` leaves the next PR based on a now-merged branch, and `--delete-branch` was added on
+the reasoning that deleting a base triggers GitHub's auto-retarget. That reasoning was wrong, and
+it was written into a handover as a paste-ready command block before it had ever been run.
+
+**Why it matters:** nothing was lost, because every commit was still reachable from a surviving
+branch — but the recovery was only obvious because the damage was inspected immediately. A block
+like that, pasted by someone else a day later, closes a reviewed PR and looks like GitHub misbehaving.
+
+**How to apply:** for a stacked merge, **retarget first, merge second, delete last** — `gh pr edit
+<next> --base dev` while the current PR is still open, then merge, then remove branches once
+nothing bases on them. More generally: a command block handed to someone else as ready-to-paste is
+a claim that it works. Either run it, or mark it explicitly as untested — correcting one bug in it
+does not make the rest verified.

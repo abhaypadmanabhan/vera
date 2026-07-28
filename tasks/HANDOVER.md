@@ -43,21 +43,26 @@ mid-review: it means a commit on a review branch, which breaks the byte-identica
 
 ## Merge order — bottom-up, one at a time
 
-**`--delete-branch` is load-bearing, not tidy-up.** GitHub only retargets a stacked PR when its
-base branch is *deleted*. A plain `gh pr merge 40 --merge` leaves `review/01-…` alive, #41's base
-stays pointed at it, and merging #41 then merges into that branch instead of `dev` — the work never
-reaches `dev` and the stack silently does the wrong thing. The `--base dev` line makes the retarget
-explicit rather than relying on it.
+### The stack is merged — this is what actually happened
+
+All four merged into `dev` on 2026-07-28; `dev` is byte-identical to
+`feat/p2-fireworks`. PR #44 takes `dev` → `main`.
+
+**`--delete-branch` closes the next PR in the stack. It does not retarget it.**
+Deleting a branch that is still another PR's base closes that PR outright — #41 was
+closed this way and had to be recovered by pushing the branch back, reopening, and
+retargeting. GitHub's auto-retarget did not fire. The order that works:
 
 ```bash
-gh pr merge 40 --merge --delete-branch && sleep 5 && \
-gh pr edit 41 --base dev && gh pr merge 41 --merge --delete-branch && sleep 5 && \
-gh pr edit 42 --base dev && gh pr merge 42 --merge --delete-branch && sleep 5 && \
+gh pr merge 40 --merge                      # no --delete-branch
+gh pr edit 41 --base dev && gh pr merge 41 --merge
+gh pr edit 42 --base dev && gh pr merge 42 --merge
 gh pr edit 43 --base dev && gh pr merge 43 --merge
+# only once nothing bases on them:
+git push origin --delete review/01-... review/02-... review/03-...
 ```
 
-Do not delete the head branch on #43 — it is `feat/p2-fireworks`. Do not merge out of order.
-Afterwards: close #36, open the final `dev` → `main` PR, stop for the builder.
+Retarget first, merge second, delete last.
 
 ## What landed on 2026-07-28
 
