@@ -1,11 +1,12 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Check, X } from "lucide-react";
 import type { PrepReport } from "@/lib/prepare/run";
 import type { StageStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { Disclosure } from "./disclosure";
 import { formatCount } from "./format";
+import { StageMarker } from "./home-stage-marker";
 
 /**
  * What Vera does to an uploaded file before she will answer a question about
@@ -137,31 +138,34 @@ export function PrepScreen({
 const FALLBACK_ERROR = "Vera could not read that file.";
 const STILL_ASKABLE = "You can still ask about the file on record.";
 
+/**
+ * Prep sits above the file on record, in the same column, because it is about a
+ * file — not a modal and not a blocker. It ends in a hairline so the file
+ * already on record reads as the thing still being answered about.
+ */
 function Panel({
   label,
   filename,
+  className,
   children,
 }: {
   label: string;
-  /** Named only while it is not yet the file on record — the line below names that one. */
+  /** Named only while it is not yet the file on record — the block below names that one. */
   filename?: string;
+  /** Only for the bottom padding: a panel ending in a disclosure supplies its own. */
+  className?: string;
   children: ReactNode;
 }) {
   return (
     <section
       aria-label="File preparation"
-      className="v-reveal mt-8 border-t border-line pt-5"
+      className={cn("v-reveal mb-8 border-b border-line pb-7", className)}
       style={{ ["--step" as string]: 0 }}
     >
-      <p className="v-label">
-        {label}
-        {filename && (
-          <>
-            {" · "}
-            <span className="normal-case">{filename}</span>
-          </>
-        )}
-      </p>
+      <p className="v-label">{label}</p>
+      {filename && (
+        <p className="mt-1 font-mono text-small break-words text-ink">{filename}</p>
+      )}
       {children}
     </section>
   );
@@ -191,114 +195,133 @@ function StagesPanel({
   );
 }
 
+/**
+ * Same reserved geometry as the run timeline: the detail slot is one line tall
+ * whether or not the stage has said anything yet, so the four stages hold their
+ * positions as the stream fills them in.
+ */
 function StageRow({ stage, isLast }: { stage: PrepStageView; isLast: boolean }) {
   const pending = stage.status === "pending";
 
   return (
-    <li className="grid grid-cols-[18px_1fr] gap-x-3">
-      <div className="relative flex justify-center pt-[5px]">
-        <Marker status={stage.status} />
+    <li className="grid grid-cols-[1rem_minmax(0,1fr)] gap-x-3">
+      <div className="relative flex justify-center pt-0.5">
+        <StageMarker status={stage.status} compact />
         {!isLast && (
           <span
             aria-hidden
-            className="absolute top-[17px] bottom-[-5px] w-px bg-line"
+            className={cn(
+              "absolute top-[18px] -bottom-1 w-px",
+              stage.status === "complete" ? "bg-line-strong" : "bg-line",
+            )}
             style={{ left: "calc(50% - 0.5px)" }}
           />
         )}
       </div>
-      <div className={cn("pb-4 transition-opacity duration-300", pending && "opacity-40")}>
+      <div className="pb-4">
+        {/*
+         * Recedes by weight and colour, never by opacity — see working-screen.tsx,
+         * which also explains why these two are template literals and not `cn()`.
+         */}
         <p
-          className={cn(
-            "text-small text-ink transition-[font-weight] duration-150",
-            stage.status === "active" ? "font-medium" : "font-normal",
-          )}
+          className={`text-small ${stage.status === "active" ? "font-medium " : ""}${
+            pending ? "text-ink-muted" : "text-ink"
+          }`}
         >
           {stage.label}
         </p>
-        {stage.detail && (
-          <p
-            className={cn(
-              "mt-0.5 text-micro",
-              stage.status === "failed" ? "text-warn" : "text-ink-muted",
-            )}
-          >
-            {stage.detail}
-          </p>
-        )}
+        <p
+          className={`mt-0.5 min-h-[1.375rem] text-small ${
+            stage.status === "failed" ? "text-danger" : "text-ink-muted"
+          }`}
+        >
+          {stage.detail}
+        </p>
       </div>
     </li>
   );
 }
 
-function Marker({ status }: { status: StageStatus }) {
-  if (status === "complete") {
-    return (
-      <span className="grid size-4 place-items-center rounded-full bg-accent text-white">
-        <Check className="size-2.5" strokeWidth={3} aria-hidden />
-      </span>
-    );
-  }
-  if (status === "failed") {
-    return (
-      <span className="grid size-4 place-items-center rounded-full bg-warn text-white">
-        <X className="size-2.5" strokeWidth={3} aria-hidden />
-      </span>
-    );
-  }
-  if (status === "active") {
-    return (
-      <span className="grid size-4 place-items-center">
-        <span className="v-breathe size-2 rounded-full bg-accent" />
-      </span>
-    );
-  }
-  return (
-    <span className="grid size-4 place-items-center">
-      <span className="size-2 rounded-full border border-line-strong" />
-    </span>
-  );
-}
-
 function ReadyPanel({ filename, report }: { filename: string; report: PrepReport }) {
+  /**
+   * A prep that failed open is a decision, not a breakage: she read the file as
+   * it came and will answer from it. So it reads like every other state here —
+   * same panel, same rules, plain ink — and it says what she will do next.
+   */
   if (!report.ok) {
     return (
       <Panel label="Prepared as it came" filename={filename}>
-        <p className="mt-2 text-small text-ink-muted">{plainDetail(report.detail ?? "") || FALLBACK_ERROR}</p>
-        <p className="mt-1 text-small text-ink-muted">Ask anyway — she will work from the file as you sent it.</p>
+        <p className="mt-3 text-small text-ink-muted">
+          {plainDetail(report.detail ?? "") || FALLBACK_ERROR}
+        </p>
+        <p className="mt-2 text-small text-ink">
+          Ask anyway — she will work from the file as you sent it.
+        </p>
       </Panel>
     );
   }
 
   const counts = report.counts;
+  const measured: { label: string; value: string }[] = counts
+    ? [
+        { label: "Rows in", value: formatCount(counts.rowsBefore) },
+        { label: "Rows out", value: formatCount(counts.rowsAfter) },
+        { label: "Exact duplicates removed", value: formatCount(counts.duplicatesDropped) },
+        { label: "Values cleaned", value: formatCount(counts.cellsCoerced) },
+      ]
+    : [];
 
+  /*
+   * One line, then a disclosure — the same idiom the file on record uses below.
+   * A finished prep used to unroll every fix and a four-row before/after table
+   * on top of a panel that was already too loud; what she changed is worth
+   * reading, not worth reading first.
+   *
+   * The file on record below already names the file — saying it twice reads as
+   * a bug.
+   */
   return (
-    <Panel label="Ready">
-      <p className="mt-2 text-lead font-medium text-ink">Ready — ask me anything.</p>
+    <Panel label="Prepared" className="pb-0">
+      <p className="mt-3 text-body font-medium text-ink">Ready — ask me anything.</p>
 
-      {report.fixes.length > 0 && (
-        <ul className="mt-3 grid gap-1">
-          {report.fixes.map((fix) => (
-            <li key={fix} className="grid grid-cols-[18px_1fr] text-small text-ink-muted">
-              <span aria-hidden className="text-line-strong">
-                —
-              </span>
-              <span>{fix}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <p className="v-nums mt-4 font-mono text-micro text-ink-muted">
-        {counts ? (
-          <>
-            {formatCount(counts.rowsBefore)} rows in · {formatCount(counts.rowsAfter)} out ·{" "}
-            {formatCount(counts.duplicatesDropped)} exact duplicates removed ·{" "}
-            {formatCount(counts.cellsCoerced)} values cleaned
-          </>
-        ) : (
-          "She could not measure the before and after on this file."
+      <Disclosure
+        // Only a rule above: the panel's own closing rule already sits below,
+        // and two parallel hairlines read as an empty row.
+        className="mt-4"
+        label="What she changed"
+        meta={report.fixes.length > 0 ? formatCount(report.fixes.length) : undefined}
+      >
+        {report.fixes.length > 0 && (
+          <ul className="grid gap-1.5">
+            {report.fixes.map((fix) => (
+              <li key={fix} className="flex gap-2 text-small text-ink-muted">
+                <span aria-hidden className="shrink-0 text-line-strong">
+                  —
+                </span>
+                <span>{fix}</span>
+              </li>
+            ))}
+          </ul>
         )}
-      </p>
+
+        {measured.length > 0 ? (
+          <dl className={report.fixes.length > 0 ? "mt-4" : undefined}>
+            {measured.map((row) => (
+              <div
+                key={row.label}
+                className="flex items-baseline justify-between gap-4 border-b border-line py-1.5 last:border-b-0"
+              >
+                <dt className="text-small text-ink-muted">{row.label}</dt>
+                <dd className="v-nums font-mono text-micro text-ink">{row.value}</dd>
+              </div>
+            ))}
+          </dl>
+        ) : (
+          <p className="mt-4 text-small text-ink-muted">
+            She could not measure the before and after on this file.
+          </p>
+        )}
+      </Disclosure>
 
       <p aria-live="polite" className="sr-only">
         Ready — ask me anything.

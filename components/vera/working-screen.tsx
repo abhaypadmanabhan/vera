@@ -1,10 +1,10 @@
 "use client";
 
-import { Check, X } from "lucide-react";
 import type { StageView } from "@/hooks/use-analysis";
 import { STAGE_LABELS } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { formatDuration } from "./format";
+import { StageMarker } from "./home-stage-marker";
 import { useRunClock } from "./use-run-clock";
 
 const STAGE_VENDOR: Partial<Record<StageView["id"], string>> = {
@@ -13,10 +13,29 @@ const STAGE_VENDOR: Partial<Record<StageView["id"], string>> = {
 };
 
 /**
+ * What a stage is *for*, shown only until the stream sends that stage's own
+ * detail line. It describes the pipeline, never the file: no count, no column,
+ * no result. So a stage that has not run yet still reads as part of a sequence
+ * rather than as an empty row, and nothing on screen can be mistaken for a
+ * finding (PRD §6 — a number appears only once a run is verified).
+ */
+const STAGE_PREVIEW: Record<StageView["id"], string> = {
+  writing_code: "Turning your question into analysis code.",
+  running_sandbox: "Running that code against the real file.",
+  verifying: "Tracing the result back to the cells it came from.",
+  done: "Only a traced number is shown.",
+};
+
+/**
  * Screen 2 — Working. The four stages as a quiet, intentional sequence
- * (DESIGN.md v3). One active at a time, each carrying a live detail line and the
- * elapsed time so the screen is never silent. Stages settle in place; nothing
- * pops, nothing spins. A failed attempt stays on screen and the retry is legible.
+ * (DESIGN.md "Screen 2"). One active at a time, each carrying a live detail line
+ * and its elapsed time so the screen is never silent. No spinner, ever.
+ *
+ * The geometry is fixed from the first frame: every stage reserves the same
+ * two-line detail slot whether or not it has anything to say yet, and the
+ * elapsed column has a fixed width. So a stage settling in place, or a detail
+ * line growing from four words to twelve, changes text and never layout —
+ * nothing below it jumps while this is on stage.
  *
  * Stage state comes only from the stream. Nothing here advances a stage on a
  * timer — the only clock is the readout of how long the run has been going.
@@ -34,31 +53,35 @@ export function WorkingScreen({
 }) {
   const elapsed = useRunClock(isRunning, startedAt);
   const active = stages.find((stage) => stage.status === "active");
+  const failed = stages.find((stage) => stage.status === "failed");
   const attempt = Math.max(...stages.map((stage) => stage.attempt));
 
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center px-6 pb-24">
+    <div className="mx-auto my-auto w-full max-w-2xl px-6 py-10 pb-24">
       <p className="v-label v-reveal" style={{ ["--step" as string]: 0 }}>
-        Working
+        Your question
       </p>
       <h1
-        className="v-reveal mt-3 text-lead font-medium text-balance text-ink"
+        className="v-reveal mt-2 text-lead text-balance text-ink"
         style={{ ["--step" as string]: 1 }}
       >
         {question}
       </h1>
 
-      <ol className="v-reveal mt-10" style={{ ["--step" as string]: 2 }}>
-        {stages.map((stage, index) => (
-          <StageRow key={stage.id} stage={stage} isLast={index === stages.length - 1} />
+      <ol className="v-reveal mt-8 border-b border-line" style={{ ["--step" as string]: 2 }}>
+        {stages.map((stage) => (
+          <StageRow key={stage.id} stage={stage} />
         ))}
       </ol>
 
-      <div className="mt-8 flex items-center gap-3 text-micro text-ink-muted">
-        <span className="v-nums font-mono">{formatDuration(elapsed)}</span>
-        <span className="h-px flex-1 bg-line" />
-        <span>
-          {attempt > 1 ? `Attempt ${attempt} · ` : ""}
+      <div className="mt-4 flex items-baseline gap-4">
+        <span className="v-nums shrink-0 font-mono text-micro text-ink">
+          {formatDuration(elapsed)}
+        </span>
+        <span className="ml-auto text-right text-small text-ink-muted">
+          {attempt > 1 && (
+            <span className={cn(failed ? "text-danger" : "text-ink")}>Attempt {attempt} · </span>
+          )}
           {isRunning ? "Vera is working" : "Run finished"}
         </span>
       </div>
@@ -71,87 +94,65 @@ export function WorkingScreen({
   );
 }
 
-function StageRow({ stage, isLast }: { stage: StageView; isLast: boolean }) {
+function StageRow({ stage }: { stage: StageView }) {
   const pending = stage.status === "pending";
   const vendor = STAGE_VENDOR[stage.id];
 
   return (
-    <li className="grid grid-cols-[20px_1fr_auto] gap-x-4">
-      <div className="relative flex justify-center pt-[7px]">
-        <Marker status={stage.status} />
-        {!isLast && (
-          <span
-            aria-hidden
-            className="absolute top-[19px] bottom-[-7px] w-px bg-line"
-            style={{ left: "calc(50% - 0.5px)" }}
-          />
-        )}
-      </div>
+    <li className="grid grid-cols-[1.25rem_minmax(0,1fr)_3.25rem] items-start gap-x-4 border-t border-line py-4">
+      <span className="flex justify-center pt-1">
+        <StageMarker status={stage.status} />
+      </span>
 
-      <div className={cn("pb-7 transition-opacity duration-300", pending && "opacity-40")}>
-        <p
-          className={cn(
-            "text-body text-ink transition-[font-weight] duration-150",
-            stage.status === "active" ? "font-medium" : "font-normal",
-          )}
-        >
-          {STAGE_LABELS[stage.id]}
-          {vendor && (
-            <span className="ml-2 inline-flex items-center gap-1.5 align-middle font-mono text-micro font-semibold tracking-[-0.02em] text-ink-muted">
-              <span aria-hidden className="size-1 rounded-full bg-line-strong" />
-              {vendor}
-            </span>
-          )}
+      <div>
+        {/*
+         * A stage that has not been reached recedes by weight and colour, never
+         * by opacity — a faded row is a contrast failure, not a hierarchy.
+         */}
+        <p className="flex flex-wrap items-baseline gap-x-2.5 text-body">
+          <span
+            className={cn(
+              stage.status === "active" && "font-medium text-ink",
+              stage.status === "complete" && "text-ink",
+              stage.status === "failed" && "text-ink",
+              pending && "text-ink-muted",
+            )}
+          >
+            {STAGE_LABELS[stage.id]}
+          </span>
+          {vendor && <span className="text-small text-ink-muted">{vendor}</span>}
           {stage.attempt > 1 && (
-            <span className="v-label ml-2 rounded-full border border-line px-2 py-0.5 align-middle">
+            <span
+              className={`text-small ${
+                stage.status === "failed" ? "text-danger" : "text-ink-muted"
+              }`}
+            >
+              {vendor ? "· " : ""}
               Attempt {stage.attempt}
             </span>
           )}
         </p>
-        {stage.detail && (
-          <p
-            className={cn(
-              "mt-1 text-small",
-              stage.status === "failed" ? "text-danger" : "text-ink-muted",
-            )}
-          >
-            {stage.detail}
-          </p>
-        )}
+        {/*
+         * Reserved whether or not the stream has said anything yet: two lines of
+         * 15px text, on every stage. This is what keeps the sequence from
+         * jumping as details arrive and change length.
+         *
+         * NOT `cn()`: tailwind-merge does not know this design system's tokens,
+         * so it reads `text-small` and `text-danger` as the same group and drops
+         * the size. Never put a size token and a colour token through `cn`.
+         */}
+        <p
+          className={`mt-1 min-h-[2.8125rem] text-small ${
+            stage.status === "failed" ? "text-danger" : "text-ink-muted"
+          }`}
+        >
+          {stage.detail || STAGE_PREVIEW[stage.id]}
+        </p>
       </div>
 
-      <span className={cn("v-nums pt-1 font-mono text-micro text-ink-muted", pending && "opacity-0")}>
-        {formatDuration(stage.elapsedMs)}
+      <span className="v-nums pt-1.5 text-right font-mono text-micro text-ink-muted">
+        {pending ? "" : formatDuration(stage.elapsedMs)}
       </span>
     </li>
-  );
-}
-
-function Marker({ status }: { status: StageView["status"] }) {
-  if (status === "complete") {
-    return (
-      <span className="grid size-[18px] place-items-center rounded-full bg-accent text-white">
-        <Check className="size-3" strokeWidth={3} aria-hidden />
-      </span>
-    );
-  }
-  if (status === "failed") {
-    return (
-      <span className="grid size-[18px] place-items-center rounded-full bg-danger text-white">
-        <X className="size-3" strokeWidth={3} aria-hidden />
-      </span>
-    );
-  }
-  if (status === "active") {
-    return (
-      <span className="grid size-[18px] place-items-center">
-        <span className="v-breathe size-2.5 rounded-full bg-accent" />
-      </span>
-    );
-  }
-  return (
-    <span className="grid size-[18px] place-items-center">
-      <span className="size-2.5 rounded-full border border-line-strong" />
-    </span>
   );
 }
