@@ -115,8 +115,15 @@ export function HomeDatasetPanel({
                 <li key={`${index}-${column.name}`}>
                   <p className="text-small text-ink">{column.evidence.claim}</p>
                   <p className="v-nums text-small text-ink-muted">
-                    {formatCount(column.evidence.supportingRows)} rows prove it,{" "}
-                    {formatCount(column.evidence.contradictingRows)} argue otherwise
+                    {/*
+                      * `proven` is filtered by `isProven`, which requires
+                      * contradictingRows === 0 — so the old ", 0 argue
+                      * otherwise" was dead copy on every single row, and
+                      * "1 rows prove it" was ungrammatical. State only what
+                      * varies, through the plural helper this file already has.
+                      */}
+                    {plural(column.evidence.supportingRows, "row")} prove it, none argue
+                    otherwise
                   </p>
                   {column.evidence.examples.length > 0 && (
                     // Real cells, quoted back — the one place mono belongs here.

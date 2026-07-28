@@ -144,6 +144,11 @@ async function runBaseline(
   for (let attempt = 1; attempt <= MAX_ATTEMPTS_PER_ARM; attempt += 1) {
     try {
       const response = await countingClient.createChatCompletion({
+        // The benchmark runs against `data/superstore.csv`, which is committed
+        // to this repo. It is our data, so it is the one caller allowed to ask
+        // for raw payload tracing — and it still only happens if the operator
+        // has also set VERA_TRACE_PAYLOADS=1.
+        tracePayloads: true,
         messages: [
           {
             role: "system",

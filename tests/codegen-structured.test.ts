@@ -563,12 +563,19 @@ describe("the mock headline obeys the same rule as the model", () => {
       "order_date,net_sales_usd\n15/04/2019,100\n03/02/2018,50\n",
     );
 
-    const output = await generatePandasCode({
-      question: "What were total sales?",
-      profile: snakeProfile,
-      sampleRows: [["15/04/2019", "100"]],
-      sandboxPath: "/workspace/data.csv",
-    });
+    // `mockMode` explicitly, not inherited from the environment: this test
+    // exercises the mock path by name, and a `VERA_MOCK=0` left over from a
+    // live session would otherwise turn it into a real, billable Fireworks
+    // call. The vitest config defaults the variable too; this is the belt.
+    const output = await generatePandasCode(
+      {
+        question: "What were total sales?",
+        profile: snakeProfile,
+        sampleRows: [["15/04/2019", "100"]],
+        sandboxPath: "/workspace/data.csv",
+      },
+      { mockMode: true },
+    );
 
     expect(output.headline).not.toContain("net_sales_usd");
     expect(output.headline).toContain("net sales usd");

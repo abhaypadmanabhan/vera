@@ -20,9 +20,12 @@ export const MOCK_MODE = process.env.VERA_MOCK !== "0";
  * tracing being on. Traces stay useful without it: model, token counts,
  * latency, finish reason and payload sizes are all still recorded.
  *
- * Set `VERA_TRACE_PAYLOADS=1` to opt in — appropriate for the benchmark, where
- * the data is our own committed CSV, and for debugging a specific bad
- * generation. Not appropriate for anything a user uploaded.
+ * This flag is necessary but NOT sufficient. It is process-wide, so on its own
+ * it would mean that switching tracing on to debug the benchmark also exported
+ * whatever a user uploaded next. A request is traced only when this is set AND
+ * the caller passes `tracePayloads: true` on that specific request, which only
+ * the benchmark does — its data is our own committed CSV. The product's own
+ * paths never ask, so no value of this variable can leak a user's file.
  */
 export const TRACE_PAYLOADS = process.env.VERA_TRACE_PAYLOADS === "1";
 

@@ -52,6 +52,16 @@ export interface FireworksChatRequest {
   };
   maxTokens: number;
   signal?: AbortSignal;
+  /**
+   * Opt this ONE request into raw prompt/completion tracing.
+   *
+   * `VERA_TRACE_PAYLOADS` alone is not enough, and deliberately so: it is
+   * process-wide, so switching it on to debug the benchmark would also export
+   * whatever a user uploaded next to Braintrust. The env flag is the operator's
+   * kill-switch; this field is the caller stating the data is its own. Both are
+   * required, so neither can leak on its own.
+   */
+  tracePayloads?: boolean;
 }
 
 export interface FireworksChatResult {
@@ -136,6 +146,13 @@ export function createFireworksClient(
        * route establishes the parent analysis context; this manual span records
        * the raw fetch as its child.
        */
+      /*
+       * Both are required, so neither can leak on its own: the env flag is the
+       * operator's switch, `request.tracePayloads` is the caller asserting the
+       * data is ours (the benchmark's own committed CSV), not a user's upload.
+       */
+      const logPayloads = TRACE_PAYLOADS && request.tracePayloads === true;
+
       let telemetrySpan: Span | null = null;
       try {
         telemetrySpan = currentSpan().startSpan({
@@ -152,7 +169,7 @@ export function createFireworksClient(
          * default the span records the shape of the call, not its contents.
          */
         telemetrySpan?.log({
-          input: TRACE_PAYLOADS ? request.messages : undefined,
+          input: logPayloads ? request.messages : undefined,
           metadata: {
             model: FIREWORKS_MODEL_ID,
             maxTokens: request.maxTokens,
@@ -161,7 +178,7 @@ export function createFireworksClient(
               (total, message) => total + message.content.length,
               0,
             ),
-            payloadsRedacted: !TRACE_PAYLOADS,
+            payloadsRedacted: !logPayloads,
           },
         });
       } catch {
@@ -211,7 +228,7 @@ export function createFireworksClient(
           telemetrySpan?.log({
             // The completion is the generated program plus the headline; it can
             // quote the sample rows back. Same opt-in as the prompt.
-            output: TRACE_PAYLOADS ? choice.message.content : undefined,
+            output: logPayloads ? choice.message.content : undefined,
             metadata: {
               finishReason: choice.finish_reason,
               completionChars: choice.message.content.length,

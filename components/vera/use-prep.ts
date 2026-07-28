@@ -113,6 +113,11 @@ export function usePrepare() {
 
       if (!response.ok || !response.body) {
         const message = await errorFrom(response);
+        // Same guard as the stream loop and the `finally`. A superseded run
+        // whose fetch resolves non-ok would otherwise write its error over the
+        // state of the run that replaced it — reporting a failure for a file
+        // the user is no longer waiting on.
+        if (abortRef.current !== controller) return;
         setState((s) => ({ ...s, isPreparing: false, error: message }));
         return;
       }

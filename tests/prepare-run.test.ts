@@ -1237,6 +1237,43 @@ describe("usePrepare", () => {
 
     expect((reactStub.state() as PrepState).isPreparing).toBe(true);
   });
+
+  /*
+   * CodeRabbit on PR #43, reviewing the guard above: the stream loop and the
+   * `finally` were guarded, but the `!response.ok` branch still wrote state
+   * unconditionally. A superseded run whose fetch resolves non-ok reported its
+   * failure over the run that had replaced it.
+   */
+  it("does not report a superseded run's HTTP failure", async () => {
+    const responses: Array<() => void> = [];
+    reactStub.reset();
+    vi.stubGlobal("FileReader", StubFileReader);
+    vi.stubGlobal("fetch", async () => {
+      // First call hangs until released; second behaves normally.
+      if (responses.length === 0) {
+        await new Promise<void>((resolve) => responses.push(resolve));
+        return { ok: false, status: 500, body: null, text: async () => "boom" };
+      }
+      return {
+        ok: true,
+        body: new ReadableStream<Uint8Array>({ start() {} }),
+      };
+    });
+
+    const { prepare } = usePrepare();
+    void prepare(stubFile("first.csv", "Region,Sales\nWest,10\n"));
+    await settle();
+    void prepare(stubFile("second.csv", "Region,Sales\nEast,20\n"));
+    await settle();
+
+    // Now let the abandoned first request fail.
+    responses[0]?.();
+    await settle();
+
+    const state = reactStub.state() as PrepState;
+    expect(state.error).toBeNull();
+    expect(state.filename).toBe("second.csv");
+  });
 });
 
 describe("contentHash", () => {

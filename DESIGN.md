@@ -46,7 +46,7 @@ Light is the primary mode. Dark must work too, because charts have to read consi
 ```css
 /* light */
 --bg:          oklch(0.99 0.002 250);
---surface:     oklch(1 0 0);
+--surface:     oklch(0.995 0.002 250);  /* never pure white — see "Surface" below */
 --surface-sunk:oklch(0.975 0.003 250);
 --border:      oklch(0.92 0.004 250);
 --text:        oklch(0.22 0.01 250);

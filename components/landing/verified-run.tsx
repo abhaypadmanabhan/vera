@@ -16,6 +16,16 @@
  */
 import { CODE, CELLS, DAY_FIRST, VERIFIED } from "./recorded";
 
+/*
+ * The sentence below counts the rows in the table, so it has to be derived from
+ * the same array the table maps. It read "Three" against a `CELLS.map(...)`:
+ * change the fixture and the page states a number that is not what it shows,
+ * on the one page whose entire claim is that its figures are recorded.
+ */
+const CELL_COUNT_WORDS = ["No", "One", "Two", "Three", "Four", "Five", "Six"] as const;
+const CELL_COUNT_WORD =
+  CELL_COUNT_WORDS[CELLS.length] ?? CELLS.length.toLocaleString("en-US");
+
 export function VerifiedRun() {
   return (
     <div className="grid gap-x-16 gap-y-10 px-6 py-8 sm:px-8 lg:grid-cols-2">
@@ -83,8 +93,8 @@ export function VerifiedRun() {
         dates in the file start with a number above 12, which no month can be, and{" "}
         <span className="v-nums font-mono text-ink">{DAY_FIRST.contradicting}</span> argue
         otherwise. Read the other way round, most of the quarter disappears and nothing warns you.
-        Three of the {VERIFIED.matchedRows.toLocaleString("en-US")} rows she counted are above, by
-        line number in the file.
+        {CELL_COUNT_WORD} of the {VERIFIED.matchedRows.toLocaleString("en-US")} rows she counted
+        are above, by line number in the file.
       </p>
     </div>
   );
