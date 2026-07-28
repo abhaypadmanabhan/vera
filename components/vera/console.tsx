@@ -7,7 +7,10 @@ import type { DatasetSummary } from "@/lib/types";
 import { AskScreen } from "./ask-screen";
 import { TopBar } from "./chrome";
 import { DeckPlayer, type DeckBenchmark } from "./deck-player";
+import { suggestFollowUps } from "@/lib/follow-ups";
 import { FindingScreen } from "./finding-screen";
+import { chipsFor } from "./prep-screen";
+import { usePrepare } from "./use-prep";
 import { WorkingScreen } from "./working-screen";
 
 /**
@@ -30,10 +33,27 @@ export function Console({
   isMock: boolean;
 }) {
   const { stages, finding, error, isRunning, start, reset } = useAnalysis();
+  const prep = usePrepare();
   const [question, setQuestion] = useState("");
   const [asked, setAsked] = useState("");
   const [startedAt, setStartedAt] = useState(0);
   const [submitted, setSubmitted] = useState(false);
+
+  /**
+   * The file every question is answered about. It becomes the uploaded file the
+   * moment prep reports — including a prep that failed open, because she then
+   * works from that file as it came. Until then the demo file stays askable, so
+   * the screen is never locked behind a prep.
+   */
+  const activeDataset = prep.summary ?? dataset;
+  const upload = prep.summary ? (prep.upload ?? undefined) : undefined;
+
+  /**
+   * Chips are the uploaded file's own questions once it is prepared — the route
+   * already filtered them through the guardrail. A failed prep offers none
+   * rather than offering a question about a file she is no longer reading.
+   */
+  const chips = prep.report ? chipsFor(prep.report) : suggestions;
 
   /**
    * Ask an explicit question. Chips call this with their own text so a click runs
@@ -48,9 +68,9 @@ export function Console({
       setAsked(trimmed);
       setStartedAt(Date.now());
       setSubmitted(true);
-      void start(trimmed, dataset.id);
+      void start(trimmed, activeDataset.id, upload);
     },
-    [dataset.id, start],
+    [activeDataset.id, start, upload],
   );
 
   const submit = useCallback(() => ask(question), [ask, question]);
@@ -65,20 +85,30 @@ export function Console({
 
   const settled = finding !== null || error !== null;
   const phase = !submitted ? "ask" : settled ? "finding" : "working";
+  const profile = useMemo(
+    () => ({
+      datasetId: activeDataset.id,
+      filename: activeDataset.filename,
+      rowCount: activeDataset.rowCount,
+      columns: activeDataset.columns,
+      duplicateRowCount: activeDataset.duplicateRowCount,
+      crossChecks: [],
+      notes: activeDataset.notes,
+    }),
+    [activeDataset],
+  );
+
   const deck = useMemo(
     () =>
-      finding?.verdict === "verified"
-        ? buildDeck(asked, finding, {
-            datasetId: dataset.id,
-            filename: dataset.filename,
-            rowCount: dataset.rowCount,
-            columns: dataset.columns,
-            duplicateRowCount: dataset.duplicateRowCount,
-            crossChecks: [],
-            notes: dataset.notes,
-          })
-        : null,
-    [asked, dataset, finding],
+      finding?.verdict === "verified" ? buildDeck(asked, finding, profile) : null,
+    [asked, finding, profile],
+  );
+
+  // "You might also ask..." — derived from the columns the code actually read,
+  // and filtered through the guardrail so every suggestion is answerable.
+  const suggestedFollowUps = useMemo(
+    () => (finding ? suggestFollowUps(finding, profile) : []),
+    [finding, profile],
   );
 
   const askFollowUp = useCallback(
@@ -87,9 +117,9 @@ export function Console({
       setAsked(nextQuestion);
       setStartedAt(Date.now());
       setSubmitted(true);
-      void start(nextQuestion, dataset.id);
+      void start(nextQuestion, activeDataset.id, upload);
     },
-    [dataset.id, start],
+    [activeDataset.id, start, upload],
   );
 
   return (
@@ -104,8 +134,10 @@ export function Console({
           onQuestionChange={setQuestion}
           onSubmit={submit}
           onAsk={ask}
-          suggestions={suggestions}
-          dataset={dataset}
+          suggestions={chips}
+          dataset={activeDataset}
+          prep={prep}
+          onFile={(file) => void prep.prepare(file)}
         />
       )}
 
@@ -122,9 +154,10 @@ export function Console({
         <DeckPlayer
           deck={deck}
           finding={finding}
-          dataset={dataset}
+          dataset={activeDataset}
           benchmark={benchmark}
           isMock={isMock}
+          suggestedFollowUps={suggestedFollowUps}
           onNewQuestion={askFollowUp}
         />
       )}
@@ -133,7 +166,7 @@ export function Console({
         <FindingScreen
           question={asked}
           finding={finding}
-          dataset={dataset}
+          dataset={activeDataset}
           onReset={askAgain}
         />
       )}

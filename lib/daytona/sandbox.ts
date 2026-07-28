@@ -21,6 +21,7 @@ import type { ExecutionResult } from "../types";
 
 const SANDBOX_LABEL = { app: "vera" } as const;
 export const SANDBOX_CSV_PATH = "/home/daytona/data.csv";
+export const CLEAN_CSV_PATH = "/home/daytona/clean.csv";
 
 /** The result contract with the generated code. Anything else is treated as no value. */
 const RESULT_PREFIX = "VERA_RESULT:";
@@ -31,6 +32,8 @@ interface WarmState {
   /** Which dataset's bytes are currently sitting in the sandbox. */
   loadedDatasetId: string | null;
   createdAtMs: number | null;
+  /** Changes whenever sandbox-local files can no longer be assumed to exist. */
+  generation: number;
 }
 
 /** Survive Next dev hot-reload, which re-evaluates modules but keeps globalThis. */
@@ -43,8 +46,15 @@ function state(): WarmState {
     sandbox: null,
     loadedDatasetId: null,
     createdAtMs: null,
+    generation: 0,
   };
-  return globalState[STATE_KEY];
+  const current = globalState[STATE_KEY];
+  current.generation ??= 0;
+  return current;
+}
+
+export function getSandboxIdentity(): number {
+  return state().generation;
 }
 
 function assertLive(): void {
@@ -89,6 +99,7 @@ export async function getWarmSandbox(): Promise<WarmSandboxInfo> {
       // Dead or expired — fall through and recreate.
       s.sandbox = null;
       s.loadedDatasetId = null;
+      s.generation++;
     }
   }
 
@@ -100,6 +111,7 @@ export async function getWarmSandbox(): Promise<WarmSandboxInfo> {
   s.sandbox = sandbox;
   s.createdAtMs = Date.now();
   s.loadedDatasetId = null;
+  s.generation++;
   return { sandboxId: sandbox.id, reused: false, readyMs: Date.now() - startedAt };
 }
 
@@ -117,6 +129,15 @@ export async function ensureDatasetLoaded(
   await s.sandbox.fs.uploadFile(Buffer.from(content, "utf8"), SANDBOX_CSV_PATH);
   s.loadedDatasetId = datasetId;
   return { uploaded: true, bytes };
+}
+
+/** Read a sandbox artifact back without executing code or invoking a model. */
+export async function readSandboxFile(remotePath: string): Promise<string> {
+  assertLive();
+  const s = state();
+  if (!s.sandbox) throw new Error("Sandbox unavailable.");
+  const content = await s.sandbox.fs.downloadFile(remotePath);
+  return content.toString("utf8");
 }
 
 /**
@@ -138,6 +159,76 @@ function coerceValue(parsed: unknown): number | string | null {
   return null;
 }
 
+const MAX_CONTEXT_FIGURES = 3;
+
+export interface ResultPayload {
+  value: number | string | null;
+  /** Raw executed context values, keyed by name. Empty when none. */
+  contextValues: Record<string, number | string>;
+}
+
+function isEnvelope(parsed: unknown): parsed is { value: unknown; context?: unknown } {
+  return (
+    parsed !== null &&
+    typeof parsed === "object" &&
+    !Array.isArray(parsed) &&
+    "value" in parsed
+  );
+}
+
+/** A context figure is held to the same bar as the primary value: usable, or gone. */
+function coerceContext(raw: unknown): Record<string, number | string> {
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: Record<string, number | string> = {};
+  for (const [name, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (Object.keys(out).length >= MAX_CONTEXT_FIGURES) break;
+    if (typeof value === "number") {
+      if (Number.isFinite(value)) out[name] = value;
+      continue;
+    }
+    if (typeof value !== "string") continue;
+    const trimmed = value.trim();
+    if (trimmed === "") continue;
+    if (/^(nan|-?inf(inity)?|none|null|na|n\/a)$/i.test(trimmed)) continue;
+    out[name] = trimmed;
+  }
+  return out;
+}
+
+export function parseResultPayload(output: string): ResultPayload {
+  const line = output
+    .split("\n")
+    .reverse()
+    .find((candidate) => candidate.trim().startsWith(RESULT_PREFIX));
+  if (!line) return { value: null, contextValues: {} };
+  const raw = line.trim().slice(RESULT_PREFIX.length).trim();
+  if (raw === "") return { value: null, contextValues: {} };
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { value: parseResultValue(output), contextValues: {} };
+  }
+
+  if (
+    parsed !== null &&
+    typeof parsed === "object" &&
+    !Array.isArray(parsed) &&
+    "context" in parsed &&
+    !("value" in parsed)
+  ) {
+    return { value: null, contextValues: {} };
+  }
+  if (isEnvelope(parsed)) {
+    return {
+      value: coerceValue(parsed.value),
+      contextValues: coerceContext(parsed.context),
+    };
+  }
+  return { value: parseResultValue(output), contextValues: {} };
+}
+
 /** Pull the single machine-readable value the generated code is required to print. */
 export function parseResultValue(output: string): number | string | null {
   const line = output
@@ -153,6 +244,7 @@ export function parseResultValue(output: string): number | string | null {
 
   try {
     const parsed: unknown = JSON.parse(raw);
+    if (isEnvelope(parsed)) return coerceValue(parsed.value);
     return coerceValue(parsed);
   } catch {
     const asNumber = Number(raw);
@@ -175,12 +267,17 @@ export const daytonaExecutor: CodeExecutor = {
       const response = await s.sandbox.process.codeRun(code, undefined, timeoutSeconds);
       const output = response.result ?? "";
       const exitCode = response.exitCode ?? 0;
+      const payload =
+        exitCode === 0
+          ? parseResultPayload(output)
+          : { value: null, contextValues: {} };
       return {
         exitCode,
         // There is no stderr field. On failure `result` IS the error text.
         stdout: exitCode === 0 ? output : "",
         stderr: exitCode === 0 ? "" : output,
-        value: exitCode === 0 ? parseResultValue(output) : null,
+        value: payload.value,
+        contextValues: payload.contextValues,
         durationMs: Date.now() - startedAt,
       };
     } catch (error) {
@@ -193,6 +290,7 @@ export const daytonaExecutor: CodeExecutor = {
         stdout: "",
         stderr: message,
         value: null,
+        contextValues: {},
         durationMs: Date.now() - startedAt,
       };
     }
@@ -202,12 +300,16 @@ export const daytonaExecutor: CodeExecutor = {
 /** Explicit teardown so no sandbox is left burning credits after the demo. */
 export async function teardownSandbox(): Promise<string | null> {
   const s = state();
-  if (!s.sandbox) return null;
+  if (!s.sandbox) {
+    s.generation++;
+    return null;
+  }
   const id = s.sandbox.id;
   await s.sandbox.delete(60);
   s.sandbox = null;
   s.loadedDatasetId = null;
   s.createdAtMs = null;
+  s.generation++;
   return id;
 }
 

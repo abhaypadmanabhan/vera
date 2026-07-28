@@ -40,16 +40,22 @@ This is the product. If any box here is unticked, nothing else matters.
 - [x] `/api/transcribe` has a rate limit and a size cap. Proven over HTTP: 413 size, 413
       duration, 400 no audio, 415 format, 422 too short, 429 on the 11th request.
 
-## 3. Voice
+## 3. Voice and follow-through
 
 - [x] Vera narrates the deck through ElevenLabs, one beat at a time.
 - [x] Narration can be **interrupted** — the STOP button kills it immediately.
 - [x] Narration is written in an analyst's voice, not the slide text read aloud.
-- [ ] The speaking indicator is the real ElevenLabs orb, retinted to our tokens.
-      *(in flight — `p9/orb`)*
+- [x] The speaking indicator is the real ElevenLabs orb, retinted to our tokens. The registry
+      was behind bot protection (429), so the component was verified byte-identical by sha256
+      against the published `elevenlabs/ui` copy and installed from that — nothing hand-written
+      standing in for it.
 - [x] The user can **speak** a question instead of typing it. One live Scribe call returned
       the spoken words verbatim.
 - [x] Transcribed speech lands in the box for confirmation and is **never auto-submitted**.
+- [x] Vera **proposes the next question** after a finding, derived from the columns the code
+      actually read and filtered through the guardrail so every suggestion is answerable.
+- [x] A follow-up only routes back to an existing slide when it is genuinely deictic — one
+      stray keyword no longer hijacks a new question.
 
 ## 4. Observability
 
@@ -68,8 +74,10 @@ This is the product. If any box here is unticked, nothing else matters.
 - [x] Mock runs emit no telemetry.
 - [x] `.env.local`, `.env.braintrust` and `.braintrust.json` are gitignored and untracked.
 - [x] No real key appears in any tracked file.
-- [ ] **The Daytona sandbox is reaped after every live session.** Standing operational rule,
-      not a one-off — it bills while it sits.
+- [x] **The Daytona sandbox is reaped after every live session.** Standing operational rule,
+      not a one-off — it bills while it sits. Honoured after the 2026-07-26 live run: the sandbox
+      was deleted and **confirmed gone from the list**, because `delete()` returned cleanly while
+      the sandbox still showed `started` (see `tasks/lessons.md`).
 
 ## 6. Craft
 
@@ -80,7 +88,8 @@ This is the product. If any box here is unticked, nothing else matters.
 - [x] The hero carries a plain-English headline, not the technical line.
 - [x] `prefers-reduced-motion` is honoured by every animation: reveals, marquee, benchmark
       bars, count-ups, background drift.
-- [ ] The voice orb honours `prefers-reduced-motion`. *(in flight — `p9/orb`)*
+- [x] The voice orb honours `prefers-reduced-motion` — no canvas in any state, static ring
+      still legible and still distinct between idle, speaking and stopped.
 - [x] Landing at `/`, live demo at `/ask`, cold open at `/open`.
 - [x] Official vendor marks in the powered-by strip, all four genuine.
 
@@ -95,21 +104,88 @@ This is the product. If any box here is unticked, nothing else matters.
       `set this to true or false` placeholders, so pnpm's dependency check failed every lint,
       test and build. Three agents each burned time proving it was pre-existing.
 - [x] Every branch merged into `dev` via PR so CodeRabbit reviews it.
-- [ ] All four `p9/*` branches merged, verified in a browser, and their worktrees torn down.
+- [x] All four `p9/*` branches merged, verified in a browser, and their worktrees torn down.
 - [ ] `dev` merged to `main` — **requires the builder's explicit approval.**
 
 ## 8. Known gaps, deliberately not done
 
 Named here so nobody mistakes them for oversights.
 
-- **Vera does not propose her own follow-up questions.** The user types them. Building her a
-  "you might also ask…" off the columns she just read needs no extra model call.
-- **`matchSlide` keyword collision.** The matcher scores single keywords, and the headline
-  slide owns "total" while the code slide owns "run". So *"what were total sales by region?"*
-  jumps back to an old slide instead of running fresh. Avoid those two words in a follow-up
-  you want answered live, or fix the matcher.
-- **Interrupt and follow-up by voice** — out of scope by decision, not by accident.
+- **Interrupt and follow-up by voice** — out of scope by decision, not by accident. You can
+  now *ask* by voice, but you cannot interrupt her by voice.
+- ~~**The orb's speaking state has never been driven by real audio.**~~ **CLOSED 2026-07-26.**
+  A live session made 26 successful `/api/speak` calls across 3 analyses; the orb entered its
+  speaking state on real audio.
+- ~~**Suggested follow-ups are schema-shaped, not insight-shaped.**~~ **CLOSED 2026-07-25.**
+  An uploaded file's chips now come from the prep call, which already holds the full profile, so
+  they cost nothing extra and every one is guardrail-filtered. **Seen against two real Fireworks
+  responses on 2026-07-26**: all five proposed questions were domain-specific to the file and all
+  five passed the guardrail on a Netflix profile.
 - **Not deployed.** The static surfaces (`/`, `/open`, and the deck) could ship to Vercel for
   a shareable link at zero cost. The live `/ask` route must not be public without auth: a
   stranger clicking a chip spends real Fireworks, Daytona and ElevenLabs credit. PRD §5's
   stated reason (serverless timeouts) is stale — the real reason is money.
+
+---
+
+## 9. Upload any dataset (added 2026-07-25/26)
+
+The any-file path. **Everything here is proven in mock only unless it says otherwise** — see
+`tasks/phase-11-scope.md` P0, which exists to close exactly that gap.
+
+- [x] A user can upload their own CSV from the browser. Dropzone plus file picker, guarded on
+      extension and size **before** any request reaches a route that spends money.
+- [x] Prep runs once per file, memoised by content hash, and is rate limited.
+- [x] The model cannot author cleaning code. `canonicalizePrepCode` rebuilds the program from
+      canonical transforms derived from the profile; anything else is rejected, so imputation and
+      row deletion are structurally impossible rather than merely forbidden.
+- [x] What changed is **measured**, never claimed — a fixed audit program we wrote compares the two
+      files. Ambiguous row identity yields `null`, not a plausible guess.
+- [x] Prep fails open. A failed prep leaves the raw file askable and says so in plain English.
+- [x] Answers are computed from the prepared file, falling back to raw when prep is missing,
+      evicted or stale. A question is never failed because prep was unavailable.
+- [x] The columns prep creates are visible to codegen — the prepared profile travels with the
+      prepared path.
+- [x] Chips for an uploaded file come from that file, and every one passes the guardrail.
+- [x] The mock analyst answers from the file on screen, not from a hardcoded Superstore figure.
+- [x] **A real model's prep code survives the canonical whitelist.** Two live Fireworks prep calls
+      on the Netflix file (2026-07-26): the model copied all nine profile-derived transforms
+      **verbatim**, including the mixed-unit extract and the multi-value split. The feared
+      token-for-token brittleness is not real. Reproduce with `tests/live-prep.test.ts`.
+- [x] **An unsupported fix sentence can no longer discard a valid prep.** The first live call was
+      rejected wholesale because `transformFor` offers the strip and numeric transforms
+      unconditionally while `allowedFixes` gated the matching sentences on evidence — so the model
+      honestly described the code it was handed and lost the entire prep, silently, on every
+      upload. The schema's fix enum is now narrowed per profile and unsupported sentences are
+      filtered, never fatal. Proven live: second call ACCEPTED.
+- [x] **Prep runs against real Daytona.** First-ever `POST /api/prepare 200`, 22.4s, on the Netflix
+      file in a browser (2026-07-26). Ready state rendered six plain-English fix sentences and the
+      measured line `40 rows in · 40 out · 0 exact duplicates removed · 40 values cleaned`.
+- [x] **The widened transforms execute in pandas.** `duration` → `duration_amount` /
+      `duration_unit` and `listed_in` → `listed_in_list` ran in the sandbox. The audit still
+      reported usable counts after two columns were added — it did not go dark.
+- [x] **Codegen uses the derived columns on a real question.** *"What is the average duration in
+      minutes for movies?"* → **108.86**, exit 0, 765 ms. The rendered code reads
+      `clean-45c436….csv` — the prepared file, not the raw one — and selects `duration_amount`.
+      The source-cell table shows the derived column's real values.
+- [ ] **"Ask anything" is only true for retail-shaped data.** `lib/guardrails/classify.ts` maps a
+      hardcoded business vocabulary; an arbitrary file degrades quietly to "allowed".
+
+## 10. Found in the live session, not yet fixed
+
+- [ ] **The rate limiter fired on a single local user** during ordinary demo clicking
+      (`POST /api/analyze 429`). The limit must stay; the window needs to fit a human presenting.
+- [ ] **26 ElevenLabs calls served 3 questions** — one round trip per narration beat. Cost scales
+      with how talkative the deck is, not with questions asked.
+- [ ] **The rate limiter fired again on 2026-07-26**, this time `POST /api/speak 429` mid-deck on
+      the second question of a single local session. It now interrupts narration, not just a click.
+- [ ] **The closing slide reads `0 Support · 0 Contradict · 40 rows read · 0 rows that agree`** on
+      an uploaded file, under a number that verified and rendered. On a presentation surface that
+      reads as "nothing in the data agrees with this", which is the opposite of the claim. Seen on
+      both Netflix answers — the mean (108.86) and the string (`Jeans`). Not yet known whether
+      Superstore shows the same, or whether this is specific to the prepared-file path.
+- [ ] **Follow-up suggestions degrade to nonsense on an arbitrary file.** After a Netflix answer
+      the deck offered "Which country had the highest release year?", "How did release year change
+      year over year?" and "What share of release year came from the top rating?" — schema-shaped,
+      not insight-shaped, and on a presentation surface. This is `phase-11-scope.md` P1 showing up
+      in the demo, not a separate defect.

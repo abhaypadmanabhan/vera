@@ -33,6 +33,18 @@ export type StageStatus = "pending" | "active" | "complete" | "failed";
  */
 export type Verdict = "verified" | "unverified";
 
+export type Valence = "good" | "bad" | "neutral";
+
+export interface ContextFigure {
+  /** Machine key matching the executed payload, for example "prior_period". */
+  name: string;
+  /** Plain-English description suitable for narration. */
+  description: string;
+  value: number | string;
+  /** Columns this figure was computed from. */
+  columnsUsed: string[];
+}
+
 /** A single cell of the real CSV, quoted back as evidence. */
 export interface SourceCell {
   /** 0-based row index in the parsed CSV, excluding the header. */
@@ -138,6 +150,8 @@ export interface ExecutionResult {
   stderr: string;
   /** Parsed single result value, or null when the code produced nothing usable. */
   value: number | string | null;
+  /** Extra executed figures from the same result line. Empty when none. */
+  contextValues: Record<string, number | string>;
   durationMs: number;
 }
 
@@ -180,6 +194,10 @@ export type Finding =
       code: GeneratedCode;
       execution: ExecutionResult;
       grounding: Grounding;
+      /** Extra grounded figures for the "what it means" beat. Empty is normal. */
+      context: ContextFigure[];
+      /** Tone only: it selects how Vera opens and carries no figure. */
+      valence: Valence;
       attempts: number;
     }
   | {
@@ -237,6 +255,10 @@ export interface ResolvedDataset {
 export interface AnalysisRequest {
   question: string;
   dataset: ResolvedDataset;
+  /** Prepared sandbox artifact; absent when prep did not run or failed open. */
+  analysisPath?: string;
+  /** Profile of the exact prepared artifact; ignored unless analysisPath is set. */
+  analysisProfile?: DatasetProfile;
 }
 
 /** The safe subset of a dataset the client may receive: schema + preview, no bulk rows. */

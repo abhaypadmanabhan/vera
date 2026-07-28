@@ -354,3 +354,251 @@ triage CodeRabbit on PRs #21 (merged) and #22 (open).
 **PR #22 is open against `dev` and unmerged.** Branch `feat/p2-fireworks` holds everything.
 
 _(next entry appended here)_
+
+## CP-7 — PRODUCT PHASE · 2026-07-24 ~18:20 PDT · handover to a new orchestrator
+
+The hackathon is over. This checkpoint closes the demo phase and opens the product phase.
+
+### Landed since CP-6
+
+Four agents (`p9/bt`, `p9/guard`, `p9/orb`, `p9/mic`), all merged into `feat/p2-fireworks`,
+all verified in a real browser by the orchestrator, all worktrees torn down.
+
+- **Guardrails** — `lib/guardrails/classify.ts`, a deterministic schema-aware classifier that
+  runs BEFORE any spend. Refuses general knowledge, missing columns, opinion/prediction/causal
+  questions, and requests to guess. Deliberately conservative: ambiguous wording passes, and
+  the execution gate stays the final arbiter. Refusal renders as a choice, in plain English.
+- **Braintrust Logs** — `lib/braintrust/logger.ts` + `instrumentation.ts`. One trace per live
+  analysis: `analysis` (task) root with a nested `fireworks.chat` (llm) child carrying tokens,
+  latency and cost. Fireworks is called over raw fetch, so auto-instrumentation has nothing to
+  patch — the span is manual and deliberate.
+- **Voice input** — `/api/transcribe` (ElevenLabs Scribe, server-side, rate limited, size and
+  duration capped) plus a mic button. Transcript lands in the box; it is NEVER auto-submitted.
+- **The orb** — the real ElevenLabs component. Registry was behind bot protection (429), so it
+  was verified byte-identical by sha256 against the published `elevenlabs/ui` copy and installed
+  from there. Retinted, glow stripped, three distinct states, no canvas under reduced motion.
+
+### The honesty defect that mattered more than any of it
+
+Tracing caught it live: the sandbox returned **143787.36** while the model's headline read
+**"281,420 dollars"**. The hero and the voice both read the headline, so Vera would have
+stated a number no code produced — the exact failure PRD §6 exists to prevent.
+
+Cause: the model writes the code AND the plain-English sentence in one response, before the
+code has run, and was authoring the figure into the sentence.
+
+Fix: `lib/claim.ts`. The model emits a `{value}` slot; the executed value is substituted. If
+the model ignores the instruction, the sentence survives only when every figure in it is either
+the computed value or a number the user themselves wrote. Otherwise it is discarded for a
+plainer true one. It always fails toward the executed value.
+
+### Also fixed by the orchestrator
+
+- `matchSlide` no longer lets one stray keyword hijack a new question. "total" and "run" are
+  common English; a question now routes back only when it is deictic.
+- `lib/follow-ups.ts` — Vera proposes the next question, derived from the columns the executed
+  code read, every candidate filtered through the guardrail first. No model call.
+- `pnpm-workspace.yaml` carried literal `set this to true or false` placeholders, so every
+  lint/test/build exited non-zero. Three agents each burned time proving it was pre-existing.
+
+### State
+
+- **176 tests pass**, 5 skipped. Lint, `tsc --noEmit`, and build all clean, exit zero.
+- Branch `feat/p2-fireworks`, pushed. PR #22 merged into `dev`. **`main` untouched.**
+- `tasks/definition-of-done.md` — 48 proven, 2 open, both needing the builder.
+
+### Braintrust dashboard — LIKELY A NON-ISSUE, CHECK THIS FIRST
+
+The builder reports he cannot see traces. The traces exist and were verified through the REST
+API (6 events, correct parent/child nesting). They are in:
+
+- org **Padzy** · project **Vera Accuracy Benchmark**
+- `https://www.braintrust.dev/app/Padzy/p/Vera%20Accuracy%20Benchmark/logs`
+
+His screenshot showed **My Project** — a different, empty project created by the setup wizard.
+Before diagnosing anything, open the URL above. If traces are visible there, the only real
+decision is which project the app should log to, and `PROJECT_NAME` in
+`lib/braintrust/logger.ts` plus `instrumentation.ts` must agree.
+
+### What the builder asked for next — the product phase
+
+1. **Vera must sound like an analyst, not a parser.** Narration and slides still surface
+   "the dates were day-first", row counts and parsing detail. That was scaffolding to prove
+   grounding; it is not analysis. She should lead with the finding and what it means — the
+   number, the comparison, the "so what" — and keep provenance available but secondary.
+2. **Upload any dataset.** Today the demo CSV is the centre of gravity. Vera should take an
+   arbitrary file (a Netflix report was the example) and produce a data-backed presentation
+   with real insights, not one figure per question.
+3. **Insight decks, not single answers.** Multiple findings composed into a narrative.
+
+These are product-shaped, not task-shaped. The next orchestrator should brainstorm and write a
+plan before cutting any agents.
+
+---
+
+## CP-8 — PRODUCT PHASE ROUND 1-3 · 2026-07-26 · handover to the next orchestrator
+
+Three rounds of agent work, all merged into `feat/p2-fireworks`, all verified in a real browser by
+the orchestrator, all seven worktrees torn down. **344 tests**, lint / `tsc --noEmit` / build clean.
+`main` still untouched.
+
+### What landed
+
+**Round 1 — the contract and prep** (`p10/contract`, `p10/prep`)
+- The printed result line may now carry the answer **and** grounded context figures, inside the
+  existing single `VERA_RESULT` marker. `python-policy.ts`'s one-print rule — a security invariant —
+  was deliberately kept intact; a bare scalar still parses exactly as before.
+- `verifyContextFigures` grounds every context figure independently and **drops** the ones that
+  fail. Never hedged, never rendered as pending.
+- `valence` is an enum (`good | bad | neutral`), so a tone can never carry a number.
+- `POST /api/prepare`: profiler detects deterministically, one Fireworks call writes the cleaning
+  script and proposes questions, one Daytona run executes it, and a **fixed audit program we wrote**
+  measures what changed. The model never claims what it changed.
+
+**Round 2 — voice, upload, wider transforms** (`p10/voice`, `p10/upload`, `p10/transforms`)
+- Deck reordered: opener → finding → meaning → caveat → working. Row counts left the opening,
+  `analystEvidenceLine`'s hardcoded "day first, not month first" was deleted, code and cells merged
+  into one silent working slide. `/open` untouched.
+- Upload front door: dropzone, prep stages, ready state, per-file chips.
+- The prep whitelist was widened — mixed-unit split, multi-value split, category normalisation,
+  boolean-ish — **without loosening the gate**. The model still may only select, never author.
+
+**Round 3 — six defects found by looking** (`p10/polish`, `p10/pipeline`)
+- The summary slide was printing `date_added is DD/MM/YYYY` verbatim. **328 passing tests said
+  nothing**, because the jargon test only ever asserted against spoken lines. Fixed, and a
+  rendered-text test now guards it.
+- `/api/analyze` never set `analysisPath`, so prep was decorative — every answer still came from the
+  raw file. Wired, with fallback.
+- Derived columns were invisible to codegen; the prepared profile now travels with the prepared path.
+- The audit no longer goes dark when prep adds a column, with every ambiguity guard intact.
+- Mock chips read as English; the counts panel renders.
+- `lib/mock/engine.ts` — unowned by every slice, flagged by two agents, fixed by the orchestrator.
+  It answered every question with one hardcoded Superstore figure, so a Netflix upload showed
+  `Sub-Category` in the code panel and the meaning slide had never once rendered.
+
+### The live run (2026-07-26, builder supervised, explicit go)
+
+3 × `POST /api/analyze 200` (~6s each) · 26 × `POST /api/speak 200` · 1 × `429` · **0 × /api/prepare**.
+
+- **Closed a known gap:** the orb's speaking state had never been driven by real audio. It has now.
+- **Sandbox reaped and confirmed gone.** `delete()` returned cleanly while the list still showed
+  `started` — the proof was polling until it disappeared, not the absence of an exception.
+- Five `stopped` sandboxes from 07-24 remain, deliberately untouched. Still the builder's call.
+
+### What the next orchestrator must know
+
+**Read `tasks/phase-11-scope.md` first.** P0 is non-negotiable and comes before everything else:
+**prep has never run against real Fireworks or real Daytona.** The specific risk is that
+`canonicalizePrepCode` demands token-for-token matches, and mock generates the canonical form by
+construction — so if a real model formats its pandas differently at all, every prep fails open and
+the entire upload story quietly does nothing. Mock cannot detect this.
+
+`tasks/lessons.md` holds three lessons from this stretch, all earned:
+1. Dispatching an agent is not the end of a turn — the builder caught two agents idle-and-finished
+   because no poller was set.
+2. A green test suite is not a look.
+3. A call that returns without error has not necessarily done anything.
+
+---
+
+## CP-9 — PHASE 11 P0 STEP A · 2026-07-26 · prep proven against real Fireworks
+
+Two supervised Fireworks calls, no sandbox, no narration. Merged to `feat/p2-fireworks` at
+`85ad475`. **346 tests**, lint / `tsc --noEmit` / build clean. `main` still untouched.
+
+### What the live call actually found
+
+The predicted danger was wrong. `canonicalizePrepCode` is not brittle: `tokenizePython` normalizes
+quoting, whitespace, comments and statement order before comparing, and the real model copied all
+nine profile-derived transforms **token for token** — including the mixed-unit `duration` extract
+and the `listed_in` multi-value split.
+
+The prep was rejected anyway, one gate lower. `transformFor` offers a strip transform for every
+text column and a numeric coercion for every numeric column unconditionally; `allowedFixes` gates
+the matching plain-English sentences on evidence of visible dirt. The model honestly described the
+code it had been handed, chose two sentences the profile did not "support", and the entire prep was
+discarded. This fires on any file with a clean text or numeric column — i.e. most files. Live prep
+had never worked and never would have, and `prepareDataset`'s catch logged nothing, so the UI just
+said she was working from the file as it came.
+
+### The fix (`3a1dda5`, verified live)
+
+- The response schema's fix enum is narrowed per profile, so an unsupported choice is structurally
+  unreachable rather than punished after the fact.
+- Unsupported sentences are filtered, never fatal. A fix sentence describes the cleaning program in
+  plain English; the audit measures what actually changed. An unsupported sentence still never
+  reaches the UI, so the honesty property is unchanged.
+- The fail-open path logs its reason to the server console. Never a presentation surface.
+- `tests/live-prep.test.ts` (`VERA_LIVE=1`, one Fireworks call, no sandbox) captures the raw model
+  program and reports copied-vs-authored per statement. Netflix fixture committed for repeatability.
+
+Second live call after the fix: **ACCEPTED**, six supported fix sentences, five good questions.
+
+### Also answered, at no extra cost
+
+- Proposed questions are domain-specific and all five pass the guardrail on a Netflix profile.
+  *"What is the average duration in minutes for movies?"* is the derived-column probe Step B needs.
+- Token budget is a non-issue: 458 of 2048 on a nine-column file.
+
+### Still open — Step B
+
+Daytona has never executed a prep program. Unknowns 3, 4 and 5 of `phase-11-scope.md` P0 — do the
+widened transforms actually run in pandas, does the audit report usable counts after them, and does
+codegen use the derived columns — all need the supervised browser run. Awaiting the builder's go.
+
+---
+
+## CP-10 — PHASE 11 P0 STEP B · 2026-07-26 · the upload path proven end to end, live
+
+Supervised browser run on `feat/p2-fireworks`, real Fireworks + real Daytona + real ElevenLabs.
+**P0 is closed.** Sandbox reaped and confirmed gone from the list.
+
+### The run
+
+`POST /api/prepare 200` in 22.4s — the first one that has ever existed. Then two analyses:
+
+| Question | Answer | Evidence |
+|---|---|---|
+| What is the average duration in minutes for movies? | **108.86** | exit 0, context figures 166 longest / 88 shortest |
+| (stray click) which movie name s the longest | **Jeans** | exit 0, 765 ms, 40 rows read |
+
+The rendered code on the working slide is the proof that matters:
+
+```
+df = pd.read_csv('/home/daytona/clean-45c436….csv')
+m['duration_amount'] = pd.to_numeric(m['duration_amount'], errors='coerce')
+```
+
+It reads the **prepared** file, and it uses `duration_amount` — a column that did not exist in the
+upload. Every remaining P0 unknown falls out of that one screen:
+
+- the widened transforms really execute in pandas, not just in tests
+- the audit reports usable counts after two columns are added: `40 rows in · 40 out · 0 exact
+  duplicates removed · 40 values cleaned`. It does not go dark
+- codegen sees and uses the derived columns
+- prep memoisation by content hash works — the clean path hash matches the one from
+  `tests/live-prep.test.ts`
+
+Chips on the ready screen were all Netflix-specific and jargon-free.
+
+### Found by looking, not yet fixed
+
+1. **`0 Support · 0 Contradict · 40 rows read · 0 rows that agree`** on the closing slide, under a
+   number that verified and rendered. On stage that reads as "nothing agrees with this". Seen on
+   both answers, on the prepared-file path. Unknown whether Superstore does the same.
+2. **`POST /api/speak 429`** mid-deck on the second question, single local session. The rate
+   limiter now interrupts narration, not just a click. `definition-of-done.md` §10.
+3. **Follow-ups degrade to nonsense on an arbitrary file** — "Which country had the highest release
+   year?", "What share of release year came from the top rating?". P1 showing up on a presentation
+   surface.
+
+### Money
+
+2 Fireworks prep calls (Step A) + 1 prep + 2 analyses + ~11 narration calls. One sandbox created,
+deleted, and **polled until it was gone from the list**. The five `stopped` sandboxes from 07-24
+remain untouched — still the builder's call.
+
+### Next
+
+P0 is done and it did what it was supposed to do: it defined the phase. The queue is now the three
+defects above plus P1's profile-derived concept map, which defect 3 makes urgent.

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   DeckPlayer,
   DeckSlide,
+  needsFallbackPacing,
   presenterPosition,
 } from "@/components/vera/deck-player";
 import { buildDeck } from "@/lib/deck";
@@ -49,6 +50,7 @@ const finding: Extract<Finding, { verdict: "verified" }> = {
     stdout: "143787.36",
     stderr: "",
     value: 143787.36,
+    contextValues: {},
     durationMs: 828,
   },
   grounding: {
@@ -69,6 +71,8 @@ const finding: Extract<Finding, { verdict: "verified" }> = {
       },
     ],
   },
+  context: [],
+  valence: "neutral",
   attempts: 1,
 };
 
@@ -79,7 +83,71 @@ const benchmark = {
   baselineMisses: ["What was total profit?"],
 };
 
+/**
+ * The same rule `tests/deck-voice.test.ts` applies to narration, applied to what
+ * a person actually sees. The snake_case clause is deliberately not anchored on
+ * a word boundary: a leaked identifier arrives as `date_added`, and `\b_` never
+ * matches in the middle of a token.
+ */
+const JARGON =
+  /\b(column|pandas|python|dd\/mm|mm\/dd|day.first|month.first|format|parse[sd]?|dtype|csv)\b|[a-z0-9]+_[a-z0-9]+/i;
+
+/** What the slide reads as out loud to someone looking at it — text, never attributes. */
+function renderedText(markup: string): string {
+  return markup
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&#x27;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 describe("deck slide presentation", () => {
+  /*
+   * 328 tests passed while `date_added is DD/MM/YYYY` sat on the final slide,
+   * because every one of them asserted against `slide.spoken` and never against
+   * a rendered slide. This asserts the rendered text.
+   */
+  it("renders no code jargon on any narrated slide", () => {
+    const contextFinding: Extract<Finding, { verdict: "verified" }> = {
+      ...finding,
+      context: [
+        {
+          name: "prior_period",
+          description: "the same quarter a year earlier",
+          value: 121004.2,
+          columnsUsed: ["OrderDate", "Sales"],
+        },
+      ],
+    };
+    const deck = buildDeck("What were sales in Q3 2018?", contextFinding, profile);
+
+    for (const slide of deck.slides) {
+      if (slide.kind === "working") continue;
+      const markup = renderToStaticMarkup(
+        createElement(DeckSlide, {
+          slide,
+          finding: contextFinding,
+          dataset,
+          benchmark,
+          activeFocus: slide.beats[0]?.focus ?? null,
+        }),
+      );
+
+      expect(renderedText(markup), `${slide.id} rendered jargon`).not.toMatch(JARGON);
+    }
+  });
+
+  it("paces a silent working slide even when voice is otherwise available", () => {
+    const working = buildDeck("What were sales in Q3 2018?", finding, profile).slides.find(
+      (slide) => slide.kind === "working",
+    );
+    expect(working).toBeDefined();
+    expect(needsFallbackPacing(working!, true)).toBe(true);
+  });
+
   it("keeps the presenter clear of a focused figure when there is room beside it", () => {
     const position = presenterPosition(
       { left: 0, top: 0, width: 1440, height: 708 },
@@ -176,7 +244,7 @@ describe("deck slide presentation", () => {
     expect(markup).toContain("computed and traceable");
   });
 
-  it("never renders an unproven fact when trap numbering skips it", () => {
+  it("keeps only proven technical evidence on the working slide", () => {
     const mixedFinding: Extract<Finding, { verdict: "verified" }> = {
       ...finding,
       grounding: {
@@ -193,21 +261,122 @@ describe("deck slide presentation", () => {
         ],
       },
     };
-    const trap = buildDeck("What were sales in Q3 2018?", mixedFinding, profile).slides.find(
-      (slide) => slide.kind === "trap",
+    const working = buildDeck("What were sales in Q3 2018?", mixedFinding, profile).slides.find(
+      (slide) => slide.kind === "working",
     );
-    expect(trap).toBeDefined();
+    expect(working).toBeDefined();
 
     const markup = renderToStaticMarkup(
       createElement(DeckSlide, {
-        slide: trap!,
+        slide: working!,
         finding: mixedFinding,
         dataset,
-        activeFocus: "claim",
+        activeFocus: null,
       }),
     );
 
-    expect(markup).toContain("The dates were day-first.");
+    expect(markup).toContain("OrderDate is DD/MM/YYYY");
     expect(markup).not.toContain("The first format guess");
+  });
+
+  it("renders every analyst slide kind with its existing presentation language", () => {
+    const contextFinding: Extract<Finding, { verdict: "verified" }> = {
+      ...finding,
+      context: [
+        {
+          name: "prior_period",
+          description: "the same quarter a year earlier",
+          value: 121004.2,
+          columnsUsed: ["OrderDate", "Sales"],
+        },
+      ],
+    };
+    const deck = buildDeck("What were sales in Q3 2018?", contextFinding, profile);
+
+    expect(deck.slides.map((slide) => slide.kind)).toEqual([
+      "opener",
+      "finding",
+      "meaning",
+      "caveat",
+      "working",
+      "summary",
+    ]);
+
+    for (const slide of deck.slides) {
+      const markup = renderToStaticMarkup(
+        createElement(DeckSlide, {
+          slide,
+          finding: contextFinding,
+          dataset,
+          benchmark,
+          activeFocus: slide.beats[0]?.focus ?? null,
+        }),
+      );
+      expect(markup).toContain(`data-kind="${slide.kind}"`);
+    }
+  });
+
+  /*
+   * Found in the 2026-07-26 live run on an uploaded file. Schema evidence only
+   * exists for a column carrying a proven deterministic inference — a date order,
+   * a cross-check. A question that reads no such column has no evidence, which is
+   * normal and honest. The summary slide rendered it as `0 Support · 0 Contradict
+   * · 0 rows that agree` beneath a verified figure, which reads as "nothing in the
+   * data agrees with this number" — the opposite of the claim being made.
+   *
+   * Same rule as the context figures: grounded or absent, never a hedge and never
+   * a zero standing in for "not applicable".
+   */
+  it("shows no agreement counts when the answer rests on no proven schema claim", () => {
+    const noEvidence: typeof finding = {
+      ...finding,
+      grounding: { ...finding.grounding, schemaEvidence: [] },
+    };
+    const summary = buildDeck(
+      "What is the average duration in minutes for movies?",
+      noEvidence,
+      profile,
+    ).slides.find((slide) => slide.kind === "summary");
+    expect(summary).toBeDefined();
+
+    const text = renderedText(
+      renderToStaticMarkup(
+        createElement(DeckSlide, {
+          slide: summary!,
+          finding: noEvidence,
+          dataset,
+          benchmark,
+          activeFocus: "proof",
+        }),
+      ),
+    );
+
+    expect(text).not.toMatch(/rows that agree/i);
+    expect(text).not.toMatch(/support/i);
+    expect(text).not.toMatch(/contradict/i);
+    // What is real still shows.
+    expect(text).toMatch(/rows read/i);
+  });
+
+  it("still shows agreement counts when a proven schema claim backs the answer", () => {
+    const summary = buildDeck(
+      "What were sales in Q3 2018?",
+      finding,
+      profile,
+    ).slides.find((slide) => slide.kind === "summary");
+    const text = renderedText(
+      renderToStaticMarkup(
+        createElement(DeckSlide, {
+          slide: summary!,
+          finding,
+          dataset,
+          benchmark,
+          activeFocus: "proof",
+        }),
+      ),
+    );
+
+    expect(text).toMatch(/rows that agree/i);
+    expect(text).toMatch(/5,952/);
   });
 });

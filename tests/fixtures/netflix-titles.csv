@@ -1,0 +1,41 @@
+show_id,type,title,country,date_added,release_year,rating,duration,listed_in
+s1,Movie,Dick Johnson Is Dead,United States,25/09/2021,2020,PG-13,90 min,Documentaries
+s2,TV Show,Blood & Water,South Africa,24/09/2021,2021,TV-MA,2 Seasons,"International TV Shows, TV Dramas"
+s3,TV Show,Ganglands,France,24/09/2021,2021,TV-MA,1 Season,"Crime TV Shows, International TV Shows"
+s4,TV Show,Jailbirds New Orleans,United States,24/09/2021,2021,TV-MA,1 Season,"Docuseries, Reality TV"
+s5,TV Show,Kota Factory,India,24/09/2021,2021,TV-MA,2 Seasons,"International TV Shows, Romantic TV Shows"
+s6,Movie,Intrusion,United States,22/09/2021,2021,TV-14,94 min,Thrillers
+s7,Movie,Jeans,India,21/09/2021,1998,TV-14,166 min,"Comedies, International Movies"
+s8,Movie,Grown Ups,United States,20/09/2021,2010,PG-13,102 min,Comedies
+s9,TV Show,Dark Skies,United Kingdom,19/09/2021,2020,TV-MA,3 Seasons,"British TV Shows, TV Dramas"
+s10,Movie,The Stronghold,France,18/09/2021,2020,TV-MA,116 min,"Action & Adventure, Dramas"
+s11,Movie,Birth of the Dragon,Canada,17/09/2021,2016,TV-14,96 min,"Action & Adventure, Dramas"
+s12,TV Show,Sex Education,United Kingdom,17/09/2021,2021,TV-MA,3 Seasons,"British TV Shows, TV Comedies"
+s13,Movie,Nightbooks,United States,15/09/2021,2021,TV-PG,103 min,"Children & Family Movies, Horror Movies"
+s14,Movie,Schumacher,Germany,15/09/2021,2021,TV-MA,113 min,Documentaries
+s15,TV Show,Titletown High,United States,27/08/2021,2021,TV-14,1 Season,"Docuseries, Reality TV"
+s16,Movie,Really Love,United States,25/08/2021,2020,TV-MA,96 min,"Dramas, Independent Movies"
+s17,TV Show,Bangkok Breaking,Thailand,23/09/2021,2021,TV-MA,1 Season,"Crime TV Shows, International TV Shows"
+s18,Movie,Chicago Party Aunt,United States,22/09/2021,2021,TV-MA,88 min,Comedies
+s19,Movie,Confessions of an Invisible Girl,Brazil,22/09/2021,2021,TV-PG,91 min,"Children & Family Movies, Comedies"
+s20,TV Show,Squid Game,South Korea,17/09/2021,2021,TV-MA,1 Season,"International TV Shows, TV Dramas"
+s21,Movie,Aftermath,United States,04/08/2021,2021,TV-MA,114 min,Thrillers
+s22,TV Show,The Chestnut Man,Denmark,29/09/2021,2021,TV-MA,1 Season,"Crime TV Shows, International TV Shows"
+s23,Movie,Malcolm & Marie,United States,05/02/2021,2021,R,106 min,"Dramas, Independent Movies"
+s24,Movie,The Dig,United Kingdom,29/01/2021,2021,PG-13,112 min,"Dramas, Independent Movies"
+s25,TV Show,Lupin,France,08/01/2021,2021,TV-MA,2 Seasons,"Crime TV Shows, International TV Shows"
+s26,Movie,Outside the Wire,United States,15/01/2021,2021,R,115 min,"Action & Adventure, Sci-Fi"
+s27,TV Show,Fate: The Winx Saga,United Kingdom,22/01/2021,2021,TV-MA,1 Season,"British TV Shows, TV Dramas"
+s28,Movie,Penguin Bloom,Australia,27/01/2021,2020,TV-14,95 min,Dramas
+s29,TV Show,Bridgerton,United States,25/12/2020,2020,TV-MA,1 Season,"Romantic TV Shows, TV Dramas"
+s30,Movie,The Midnight Sky,United States,23/12/2020,2020,PG-13,118 min,"Dramas, Sci-Fi"
+s31,Movie,We Can Be Heroes,United States,25/12/2020,2020,PG,97 min,"Children & Family Movies, Sci-Fi"
+s32,TV Show,The Queen's Gambit,United States,23/10/2020,2020,TV-MA,1 Season,"Dramas, TV Dramas"
+s33,Movie,Enola Holmes,United Kingdom,23/09/2020,2020,PG-13,123 min,"Children & Family Movies, Dramas"
+s34,TV Show,Emily in Paris,United States,02/10/2020,2020,TV-MA,1 Season,"Romantic TV Shows, TV Comedies"
+s35,Movie,The Trial of the Chicago 7,United States,16/10/2020,2020,R,130 min,Dramas
+s36,TV Show,Ratched,United States,18/09/2020,2020,TV-MA,1 Season,"TV Dramas, TV Thrillers"
+s37,Movie,Project Power,United States,14/08/2020,2020,R,113 min,"Action & Adventure, Sci-Fi"
+s38,TV Show,Cobra Kai,United States,28/08/2020,2020,TV-14,3 Seasons,"Action & Adventure, TV Comedies"
+s39,Movie,Extraction,United States,24/04/2020,2020,R,117 min,Action & Adventure
+s40,TV Show,Never Have I Ever,United States,27/04/2020,2020,TV-14,2 Seasons,"Romantic TV Shows, TV Comedies"

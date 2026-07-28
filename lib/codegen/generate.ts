@@ -5,7 +5,7 @@ import {
   type FireworksChatResult,
   type FireworksClient,
 } from "../fireworks/client";
-import type { DatasetProfile } from "../types";
+import type { DatasetProfile, Valence } from "../types";
 import { validatePythonPolicy } from "./python-policy";
 
 export interface CodegenRequest {
@@ -27,6 +27,13 @@ export interface CodegenOutput {
   /** One sentence a business person would say. No column names, no code terms. */
   headline: string;
   columnsUsed: string[];
+  /** Declared before execution. Empty is legal and common. */
+  context: Array<{
+    name: string;
+    description: string;
+    columnsUsed: string[];
+  }>;
+  valence: Valence;
 }
 
 interface GenerateDependencies {
@@ -45,6 +52,21 @@ const CODEGEN_JSON_SCHEMA = {
       items: { type: "string" },
       uniqueItems: true,
     },
+    context: {
+      type: "array",
+      maxItems: 3,
+      items: {
+        type: "object",
+        properties: {
+          name: { type: "string", minLength: 1 },
+          description: { type: "string", minLength: 1 },
+          columnsUsed: { type: "array", items: { type: "string" } },
+        },
+        required: ["name", "description", "columnsUsed"],
+        additionalProperties: false,
+      },
+    },
+    valence: { type: "string", enum: ["good", "bad", "neutral"] },
   },
   required: ["code", "explanation", "headline", "columnsUsed"],
   additionalProperties: false,
@@ -59,6 +81,17 @@ const codegenSchema = z
       (columns) => new Set(columns).size === columns.length,
       "columnsUsed must not contain duplicates",
     ),
+    context: z
+      .array(
+        z.object({
+          name: z.string().min(1).max(64),
+          description: z.string().min(1).max(160),
+          columnsUsed: z.array(z.string().max(200)).max(20),
+        }),
+      )
+      .max(3)
+      .default([]),
+    valence: z.enum(["good", "bad", "neutral"]).default("neutral"),
   })
   .strict();
 
@@ -95,8 +128,32 @@ Rules:
 - Print exactly one output line: VERA_RESULT:<JSON value>. Use json.dumps so strings are machine-parseable.
 - "headline": ONE short sentence stating the answer the way a business analyst would say it out loud to a colleague. Plain English. NEVER mention column names, date formats, pandas, parsing, filtering, or any code concept. Say what it MEANS, not how it was computed.
 - The headline MUST contain the literal placeholder {value} exactly where the answer belongs, and MUST NOT contain the figure itself. You have not run the code yet, so any number you write there would be a guess, and a guessed figure is the one thing this system exists to prevent. Good: "Sales in the third quarter of 2018 came to {value} dollars." Bad: "Sales in the third quarter of 2018 came to 143,787 dollars." Bad: "Parsed OrderDate as DD/MM/YYYY, filtered to Q3 2018, and summed Sales."
+- The headline states the answer only. The comparison belongs in the context figures, not in this sentence.
 - "explanation": the technical one-liner for the code panel. Column names and formats belong HERE, not in the headline.
-- That JSON value MUST be a bare number or a bare string — the single figure that answers the question. Never an object, list, or dict. Do not label it; the label belongs in the explanation field.
+- The printed JSON value MUST be either the bare figure, or an object of exactly this shape:
+  {"value": <the figure>, "context": {"<name>": <figure>, ...}}. Nothing else. Still ONE print.
+- "context" is optional and holds at most three EXTRA figures the same program already has the
+  data to compute, and which a business person would want alongside the answer: the same measure
+  for the previous comparable period, this slice's share of the whole, or the largest single
+  contributor. Every context figure must be a bare number or bare string. Compute them, never
+  estimate them. If nothing genuinely informative is available, return no context at all.
+- One context figure MAY be the change against a comparable — a percentage change or a difference
+  against the previous period, the rest of the file, or the rest of the group. If you want that
+  change spoken, compute it in the program and print it as its own context entry.
+  Never state a change you did not compute: the reader gets the figure your code produced, or none.
+- Express a percentage change as a string with the sign already in it, rounded to at most one
+  decimal place — "19%", "-4.2%" — and put the direction in the description, not the number.
+- The "context" field in the JSON you return declares those same figures in the SAME ORDER, with
+  a "description" written the way you would say it out loud — "the same quarter a year earlier",
+  never "prior_period" and never a column name.
+- Write a change figure's description so the figure reads in front of it, because that is how it
+  will be spoken: "higher than the same quarter a year earlier" becomes "That is 19% higher than
+  the same quarter a year earlier". Good: "down on the month before". Bad: "the percentage change
+  versus prior_period". Bad: "19% higher than last year" — the figure belongs in the value, never
+  in the description.
+- "valence": "good" if this finding is welcome news for the business, "bad" if it is unwelcome,
+  "neutral" otherwise. It selects a tone of voice only. It MUST NOT contain a number, and it MUST
+  be exactly one of those three words.
 - Do not print debugging text, tables, labels, markdown, or any other line.
 - columnsUsed must list every CSV column read by the computation.
 - max_tokens is bounded, so keep the program compact.
@@ -139,6 +196,16 @@ function assertSafeCode(
         format: column.dateFormat,
       })),
   });
+
+  const known = new Set(profile.columns.map((column) => column.name));
+  for (const figure of output.context) {
+    const unknown = figure.columnsUsed.filter((column) => !known.has(column));
+    if (unknown.length > 0) {
+      throw new Error(
+        `Context figure "${figure.name}" claims columns this file does not have: ${unknown.join(", ")}.`,
+      );
+    }
+  }
 }
 
 export function parseCodegenResponse(
@@ -191,8 +258,8 @@ function mockResponse(request: CodegenRequest): string {
   }
   lines.push(
     numericColumn
-      ? `result = round(float(df[${JSON.stringify(numericColumn.name)}].sum()), 2)`
-      : "result = int(len(df))",
+      ? `result = {"value": round(float(df[${JSON.stringify(numericColumn.name)}].sum()), 2), "context": {"row_count": int(len(df))}}`
+      : 'result = {"value": int(len(df)), "context": {}}',
     'print("VERA_RESULT:" + json.dumps(result, separators=(",", ":")))',
   );
 
@@ -205,6 +272,16 @@ function mockResponse(request: CodegenRequest): string {
       ? `The total ${numericColumn.name.toLowerCase()} across the file is {value}.`
       : "The file holds {value} records.",
     columnsUsed,
+    context: numericColumn
+      ? [
+          {
+            name: "row_count",
+            description: "the number of records behind it",
+            columnsUsed,
+          },
+        ]
+      : [],
+    valence: "neutral",
   });
 }
 

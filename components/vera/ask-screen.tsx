@@ -5,13 +5,20 @@ import { ArrowUp } from "lucide-react";
 import type { DatasetSummary } from "@/lib/types";
 import { formatBytes, formatCount } from "./format";
 import { MicButton, MicStatus } from "./mic-button";
+import { PrepScreen } from "./prep-screen";
 import { useMicrophone } from "./use-microphone";
+import type { PrepState } from "./use-prep";
 import { useReducedMotion } from "./use-reduced-motion";
+import { UploadButton, UploadDropzone } from "./upload-dropzone";
 
 /**
  * Screen 1 — Ask. Calm and near-empty (DESIGN.md v3 "Layout"). One question box,
- * chips drawn from the benchmark set, one quiet line naming the file on record.
- * Nothing else: this screen should feel like it is waiting, not loading.
+ * chips, one quiet line naming the file on record. Nothing else: this screen
+ * should feel like it is waiting, not loading.
+ *
+ * It is also the front door. A CSV can be dropped anywhere on this column, or
+ * picked from the line naming the file on record. While that file is being
+ * prepared the box stays live — the file already on record remains askable.
  */
 export function AskScreen({
   question,
@@ -20,6 +27,8 @@ export function AskScreen({
   onAsk,
   suggestions,
   dataset,
+  prep,
+  onFile,
 }: {
   question: string;
   onQuestionChange: (value: string) => void;
@@ -28,6 +37,8 @@ export function AskScreen({
   onAsk: (value: string) => void;
   suggestions: string[];
   dataset: DatasetSummary;
+  prep: PrepState;
+  onFile: (file: File) => void;
 }) {
   const boxRef = useRef<HTMLTextAreaElement>(null);
   const ready = question.trim().length > 0;
@@ -53,7 +64,8 @@ export function AskScreen({
   const mic = useMicrophone(acceptTranscript);
 
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center px-6 pb-24">
+    <UploadDropzone onFile={onFile} busy={prep.isPreparing}>
+      <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center px-6 pb-24">
       <h1
         className="v-reveal text-title font-medium text-balance text-ink"
         style={{ ["--step" as string]: 0 }}
@@ -110,23 +122,42 @@ export function AskScreen({
         </div>
       </form>
 
-      <div className="v-reveal mt-6 flex flex-wrap gap-2" style={{ ["--step" as string]: 3 }}>
-        {suggestions.map((suggestion) => (
-          <button
-            key={suggestion}
-            type="button"
-            onClick={() => onAsk(suggestion)}
-            className="rounded-full border border-line bg-surface px-3.5 py-2 text-left text-small text-ink-muted transition-[color,border-color,background-color] duration-150 hover:border-line-strong hover:bg-sunk hover:text-ink"
-          >
-            {suggestion}
-          </button>
-        ))}
-      </div>
+      {suggestions.length > 0 && (
+        <div className="v-reveal mt-6 flex flex-wrap gap-2" style={{ ["--step" as string]: 3 }}>
+          {suggestions.map((suggestion) => (
+            <button
+              key={suggestion}
+              type="button"
+              onClick={() => onAsk(suggestion)}
+              className="rounded-full border border-line bg-surface px-3.5 py-2 text-left text-small text-ink-muted transition-[color,border-color,background-color] duration-150 hover:border-line-strong hover:bg-sunk hover:text-ink"
+            >
+              {suggestion}
+            </button>
+          ))}
+        </div>
+      )}
 
-      <p className="v-reveal mt-10 text-micro text-ink-muted" style={{ ["--step" as string]: 4 }}>
-        <span className="font-mono">{dataset.filename}</span> · {formatCount(dataset.rowCount)} rows
-        · {dataset.columns.length} columns · {formatBytes(dataset.sizeBytes)}, held on the server
-      </p>
-    </div>
+      {prep.filename && (
+        <PrepScreen
+          filename={prep.filename}
+          messages={prep.messages}
+          report={prep.report}
+          error={prep.error}
+        />
+      )}
+
+      <div
+        className="v-reveal mt-10 flex flex-wrap items-center gap-x-4 gap-y-3"
+        style={{ ["--step" as string]: 4 }}
+      >
+        <p className="text-micro text-ink-muted">
+          <span className="font-mono">{dataset.filename}</span> · {formatCount(dataset.rowCount)}{" "}
+          rows · {dataset.columns.length} columns · {formatBytes(dataset.sizeBytes)}, held on the
+          server
+        </p>
+        <UploadButton onFile={onFile} busy={prep.isPreparing} />
+      </div>
+      </div>
+    </UploadDropzone>
   );
 }

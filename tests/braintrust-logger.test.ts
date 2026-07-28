@@ -46,6 +46,7 @@ const verifiedFinding: Finding = {
     stdout: "100",
     stderr: "",
     value: 100,
+    contextValues: {},
     durationMs: 12,
   },
   grounding: {
@@ -55,6 +56,8 @@ const verifiedFinding: Finding = {
     sampleCells: [{ row: 0, column: "revenue", value: "100" }],
     schemaEvidence: [],
   },
+  context: [],
+  valence: "neutral",
   attempts: 1,
 };
 
